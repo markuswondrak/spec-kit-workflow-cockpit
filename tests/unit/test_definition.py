@@ -70,15 +70,14 @@ class DefinitionTests(unittest.TestCase):
                     "id": "extra",
                     "extends": "demo",
                     "priority": 10,
-                    "edits": [
-                        {"insert_after": "prepare", "step": {"id": "lint", "command": "demo.lint"}}
-                    ],
+                    "edits": [{"insert_after": "prepare", "step": {"id": "lint", "command": "demo.lint"}}],
                 }
             ),
             encoding="utf-8",
         )
         definition = self.resolver.resolve("demo")
         self.assertEqual([step.id for step in definition.steps], ["prepare", "lint", "review", "finish"])
+        self.assertEqual([step["id"] for step in definition.effective_steps], ["prepare", "lint", "review", "finish"])
 
     def test_overlay_replace(self):
         overlay_dir = self.root / ".specify" / "workflows" / "overlays" / "demo"
@@ -88,9 +87,7 @@ class DefinitionTests(unittest.TestCase):
                 {
                     "id": "replace",
                     "extends": "demo",
-                    "edits": [
-                        {"replace": "finish", "step": {"id": "finish", "command": "demo.done"}}
-                    ],
+                    "edits": [{"replace": "finish", "step": {"id": "finish", "command": "demo.done"}}],
                 }
             ),
             encoding="utf-8",
@@ -154,9 +151,7 @@ class ValidationTests(unittest.TestCase):
         self.assertIs(resolved["publish"], False)
 
     def test_enum_rejected(self):
-        _resolved, errors = validate_inputs(
-            self.definition, {"spec": "search", "profile": "nope"}
-        )
+        _resolved, errors = validate_inputs(self.definition, {"spec": "search", "profile": "nope"})
         self.assertIn("profile", errors)
 
     def test_inputs_to_argv(self):

@@ -50,9 +50,7 @@ class SessionTests(unittest.TestCase):
         session.select("demo")
         snapshot = session.start({"spec": "search"})
         self.assertTrue(snapshot.run_id.startswith("cockpit-"))
-        self.assertFalse(
-            (self.root / ".specify" / "workflows" / "runs" / snapshot.run_id).exists()
-        )
+        self.assertFalse((self.root / ".specify" / "workflows" / "runs" / snapshot.run_id).exists())
         self.assertIn("workflow", self.supervisor.started_argv)
         self.assertIn("demo", self.supervisor.started_argv)
 
@@ -145,6 +143,17 @@ class SessionTests(unittest.TestCase):
         self.assertIsNotNone(final.outcome)
         self.assertEqual(final.outcome.kind.value, "failure")
         self.assertEqual(self.supervisor.abort_calls, 1)
+
+    def test_branch_refreshes_without_changing_baseline(self):
+        git = FakeGit(branch_value="main")
+        session = self.make_session(git=git)
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        write_run(self.root, snapshot.run_id, status="running")
+        git.branch_value = "feature/runway"
+        refreshed = session.snapshot()
+        self.assertEqual(refreshed.branch, "feature/runway")
+        self.assertEqual(refreshed.baseline_commit, "a" * 40)
 
 
 if __name__ == "__main__":

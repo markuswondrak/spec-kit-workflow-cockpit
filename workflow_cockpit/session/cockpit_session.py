@@ -21,6 +21,9 @@ from ..services.definition import (
     validate_inputs,
 )
 from ..services.git import GitService
+from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser
+from ..services.log_aggregator import RunLogAggregator
+from ..services.projection import GraphProjector
 from ..services.registry import WorkflowEntry, WorkflowRegistry
 from ..services.run_state import RunStateReader
 from ..services.snapshot import Outcome, OutcomeKind, RunSnapshot
@@ -59,9 +62,7 @@ class CockpitSession:
         self.resolver = resolver or WorkflowDefinitionResolver(self.project_root)
         self.git = git or GitService(self.project_root)
         self._clock = clock
-        self._supervisor = supervisor or EngineSupervisor(
-            compatibility.executable, self.project_root
-        )
+        self._supervisor = supervisor or EngineSupervisor(compatibility.executable, self.project_root)
         self._definition: WorkflowDefinition | None = None
         self._reader: RunStateReader | None = None
         self._baseline: str | None = None
@@ -69,6 +70,9 @@ class CockpitSession:
         self._ended_at: float | None = None
         self._branch: str | None = None
         self._contract_error: str | None = None
+        self._graph: ControlFlowGraph | None = None
+        self._projector = GraphProjector()
+        self._log_aggregator: RunLogAggregator | None = None
 
     @property
     def run_id(self) -> str | None:
@@ -88,6 +92,8 @@ class CockpitSession:
     def select(self, workflow_id: str) -> WorkflowDefinition:
         definition = self.resolver.resolve(workflow_id)
         self._definition = definition
+        self._graph = WorkflowDefinitionParser().parse(definition.effective_steps)
+        self._log_aggregator = RunLogAggregator(self._graph.declared_ids)
         return definition
 
     def validate(self, values: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
@@ -152,9 +158,7 @@ class CockpitSession:
         if not isinstance(data, dict):
             return
         if normalized_signature(data) != definition_signature(self._definition):
-            self._contract_error = (
-                "The persisted workflow definition does not match the launch model."
-            )
+            self._contract_error = "The persisted workflow definition does not match the launch model."
             self._supervisor.abort()
 
     def _outcome(self, condition_reaped: bool) -> Outcome | None:
@@ -202,6 +206,8 @@ class CockpitSession:
         if not self._started:
             return RunSnapshot(run_id=run_id, baseline_commit=self._baseline)
 
+        self._branch = self.git.branch()
+
         state = self._reader.read() if self._reader else None
         persisted = state.status if state else "initializing"
         if self._supervisor.abort_requested:
@@ -219,6 +225,12 @@ class CockpitSession:
 
         workflow_name = self._definition.name if self._definition else ""
         inputs_tuple = tuple(state.inputs.items()) if state else ()
+        timings = {}
+        if self._log_aggregator is not None and self.run_id:
+            timings = self._log_aggregator.update(self.runs_dir / self.run_id / "log.jsonl")
+        projection = (
+            self._projector.project(self._graph, state, timings, lifecycle_status=status) if self._graph else None
+        )
         return RunSnapshot(
             run_id=run_id,
             workflow_id=self._definition.id if self._definition else "",
@@ -230,11 +242,13 @@ class CockpitSession:
             elapsed_seconds=elapsed,
             output_tail=tuple(self._supervisor.output_lines),
             partial_line=self._supervisor.partial_line,
+            output_emitted=self._supervisor.output_emitted,
             process_live=condition.live,
             engine_status=persisted,
             engine_error=state.error if state else None,
             outcome=outcome,
             inputs=inputs_tuple,
+            graph_projection=projection,
         )
 
     def close(self) -> None:

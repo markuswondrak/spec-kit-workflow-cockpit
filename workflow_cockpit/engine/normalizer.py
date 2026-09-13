@@ -27,10 +27,16 @@ class OutputNormalizer:
         self._partial = ""
         self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.truncated = False
+        self._emitted = 0
 
     @property
     def partial(self) -> str:
         return self._partial
+
+    @property
+    def emitted(self) -> int:
+        """Total completed lines ever emitted, independent of the bounded tail."""
+        return self._emitted
 
     @property
     def lines(self) -> list[str]:
@@ -61,4 +67,5 @@ class OutputNormalizer:
             if len(self._lines) == self.max_lines:
                 self.truncated = True
             self._lines.append(line)
+        self._emitted += len(completed)
         return completed

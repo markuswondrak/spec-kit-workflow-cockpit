@@ -1,5 +1,5 @@
 """Textual presentation layer for the Cockpit."""
 
-from .view_model import build_step_rows, format_elapsed, header_fields, state_grammar
+from .view_model import default_focus_mode, format_elapsed, header_fields, render_runway, state_grammar
 
-__all__ = ["build_step_rows", "format_elapsed", "header_fields", "state_grammar"]
+__all__ = ["default_focus_mode", "format_elapsed", "header_fields", "render_runway", "state_grammar"]

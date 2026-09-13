@@ -17,6 +17,9 @@ from workflow_cockpit.services.definition import (
     StepSpec,
     WorkflowDefinition,
 )
+from workflow_cockpit.services.graph import WorkflowDefinitionParser
+from workflow_cockpit.services.projection import GraphProjector
+from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import RunSnapshot
 
 STYLES = Path(__file__).resolve().parents[1] / "workflow_cockpit" / "ui" / "styles.tcss"
@@ -30,6 +33,7 @@ class StyledApp(App):
     """
 
     CSS_PATH = str(STYLES)
+
 
 LINEAR_WORKFLOW = {
     "schema_version": "1.0",
@@ -107,13 +111,9 @@ def write_run(
         "updated_at": "2026-09-13T00:00:00+00:00",
     }
     (run_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
-    (run_dir / "inputs.json").write_text(
-        json.dumps({"inputs": inputs or {"spec": "search"}}), encoding="utf-8"
-    )
+    (run_dir / "inputs.json").write_text(json.dumps({"inputs": inputs or {"spec": "search"}}), encoding="utf-8")
     if log_lines:
-        (run_dir / "log.jsonl").write_text(
-            "".join(json.dumps(entry) + "\n" for entry in log_lines), encoding="utf-8"
-        )
+        (run_dir / "log.jsonl").write_text("".join(json.dumps(entry) + "\n" for entry in log_lines), encoding="utf-8")
     return run_dir
 
 
@@ -155,6 +155,7 @@ class FakeSupervisor:
         self.started_at: float | None = None
         self.output_lines: list[str] = ["starting demo"]
         self.partial_line = ""
+        self.output_emitted = len(self.output_lines)
         self.exit_code = exit_code
         self.abort_requested = False
         self.abort_calls = 0
@@ -227,7 +228,20 @@ class FakeSession:
         self.started = False
         self.aborted = False
         self.started_values: dict[str, Any] | None = None
-        self._output_written = 0
+        self.output_lines: list[str] = ["starting demo", "preparing"]
+        self.output_emitted: int | None = None
+        self._graph = WorkflowDefinitionParser().parse(
+            (
+                {"id": "prepare", "command": "demo.prepare"},
+                {
+                    "id": "review",
+                    "type": "gate",
+                    "message": "Review it",
+                    "options": ["approve", "reject"],
+                },
+                {"id": "finish", "command": "demo.finish"},
+            )
+        )
 
     def list_workflows(self):
         @dataclass
@@ -280,8 +294,19 @@ class FakeSession:
             branch="main",
             baseline_commit="a" * 40,
             elapsed_seconds=12,
-            output_tail=("starting demo", "preparing"),
+            output_tail=tuple(self.output_lines),
+            output_emitted=(
+                self.output_emitted if self.output_emitted is not None else len(self.output_lines)
+            ),
             process_live=self.status == "running",
             engine_status=self.status,
             outcome=outcome,
+            graph_projection=GraphProjector().project(
+                self._graph,
+                RunStateData(
+                    status="completed" if self.status == "success" else self.status,
+                    current_step_id="prepare",
+                    step_results={"prepare": {"status": "completed"}} if self.status != "running" else {},
+                ),
+            ),
         )

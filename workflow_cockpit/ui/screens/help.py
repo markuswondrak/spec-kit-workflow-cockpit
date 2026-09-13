@@ -1,4 +1,4 @@
-"""Contextual help limited to actions implemented in S01."""
+"""Contextual help for the implemented Cockpit controls."""
 
 from __future__ import annotations
 
@@ -23,17 +23,19 @@ class HelpScreen(ModalScreen):
             yield Static(
                 Text.assemble(
                     ("NAVIGATE\n", HOLD),
-                    "j / k or arrows  Move in the step list\n",
+                    "j / k or arrows  Move in the Runway\n",
+                    "Tab  Move between Runway and Focus\n",
+                    "s  Show state     g  Show paused gate\n",
                     "l  Expand Engine Output / return to live tail\n",
                     "e  Collapse Engine Output        End  Output tail\n\n",
                     ("ACT\n", HOLD),
                     "enter  Configure, start, or acknowledge an outcome\n",
                     "esc    Go back\n",
                     "x / q  Confirm abort while a run is active\n\n",
-                    ("S01 SCOPE\n", COLD),
+                    ("S02 SCOPE\n", COLD),
+                    "Runway status, attempts, and per-step timing are live.\n",
                     "Gate decisions, Worktree Changes, and the Cockpit skill\n",
-                    "arrive in later stories. This build owns one run and\n",
-                    "its Abort lifecycle only.\n\n",
+                    "arrive in later stories.\n\n",
                     ("EXTERNAL AGENT\n", HOLD),
                     "Cockpit alone starts, decides, and aborts the run.\n"
                     "Check live engine state before editing files.\n",

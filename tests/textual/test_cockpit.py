@@ -1,15 +1,13 @@
 import unittest
 
-from textual.app import App
-
 from tests.support import FakeSession, StyledApp
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
+from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, EngineOutput
 
 
 class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.app = App()
-        self.app.CSS_PATH = "workflow_cockpit/ui/styles.tcss"
+        self.app = StyledApp()
 
     async def test_running_state_and_output_render(self):
         session = FakeSession(status="running")
@@ -54,6 +52,78 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("PAUSED", str(screen.query_one("#view-label").render()))
             commands = screen.query_one("#commands").render()
             self.assertIn("abort", str(commands).lower())
+
+    async def test_runway_selection_and_focus_mode_survive_refresh(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            screen = self.app.screen
+            runway = screen.query_one("#runway-graph")
+            runway.focus()
+            await pilot.press("j")
+            await pilot.pause()
+            self.assertEqual(screen._selected_node_id, "review")
+            screen._refresh()
+            self.assertEqual(screen._selected_node_id, "review")
+            session.status = "paused"
+            screen._refresh()
+            self.assertIn("GATE", str(screen.query_one("#view-label").render()))
+            self.assertTrue(screen.query_one("#overview").display)
+            session.status = "success"
+            screen._refresh()
+            self.assertIn("RUN COMPLETE", str(screen.query_one("#view-label").render()))
+
+    async def test_output_keeps_appending_after_tail_saturates(self):
+        session = FakeSession(status="running")
+        session.output_lines = ["a", "b"]
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            log = self.app.screen.query_one("#engine")
+            self.assertEqual(len(log.lines), 2)
+            # The bounded tail stays the same length while a new line emits.
+            session.output_lines = ["b", "c"]
+            session.output_emitted = 3
+            self.app.screen._refresh()
+            await pilot.pause()
+            self.assertEqual(len(log.lines), 3)
+            self.assertIn("c", str(log.lines[-1]))
+
+    async def test_output_shows_truncation_marker_after_dropped_lines(self):
+        session = FakeSession(status="running")
+        session.output_lines = ["kept"]
+        session.output_emitted = 5
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            rendered = "\n".join(str(line) for line in self.app.screen.query_one("#engine").lines)
+            self.assertIn(TRUNCATION_MARKER, rendered)
+            self.assertIn("kept", rendered)
+
+    async def test_output_scroll_survives_refresh_when_not_at_tail(self):
+        session = FakeSession(status="running")
+        session.output_lines = [f"line {index}" for index in range(200)]
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            log = self.app.screen.query_one(EngineOutput).log()
+            log.scroll_home(animate=False)
+            await pilot.pause()
+            before = log.scroll_y
+            session.output_lines = [*session.output_lines, "appended"]
+            self.app.screen._refresh()
+            await pilot.pause()
+            self.assertEqual(log.scroll_y, before)
+
+    async def test_runway_uses_compact_strip_at_narrow_supported_width(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(100, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            runway = self.app.screen.query_one("#runway")
+            self.assertEqual(runway.region.height, 4)
+            self.assertGreater(self.app.screen.query_one("#runway-graph").option_count, 0)
 
     async def test_help_overlay(self):
         session = FakeSession(status="running")

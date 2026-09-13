@@ -10,7 +10,7 @@ from textual.widgets import Button, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 from ...services.snapshot import RunSnapshot
-from ..view_model import state_grammar
+from ..view_model import render_runway, state_grammar
 
 INK = "#101312"
 DECK = "#171C19"
@@ -25,8 +25,10 @@ COLD = "#A1BFCE"
 
 STATUS_STYLES = {
     "running": SIGNAL,
-    "gate": HOLD,
-    "done": SIGNAL,
+    "paused": HOLD,
+    "completed": SIGNAL,
+    "skipped": FOG,
+    "aborted": FAULT,
     "failed": FAULT,
     "pending": FOG,
 }
@@ -90,29 +92,41 @@ def _elapsed(snapshot: RunSnapshot) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
-class StepRail(OptionList):
-    """Low-fidelity step list replaced by the S02 Runway."""
+class Runway(OptionList):
+    """Scrollable declared graph that retains node selection across refreshes."""
 
     BINDINGS = [
         Binding("j", "cursor_down", show=False),
         Binding("k", "cursor_up", show=False),
     ]
 
-    def update_steps(self, rows, current: int | None) -> None:
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.selected_node_id: str | None = None
+
+    def update_projection(self, projection, selected_id: str | None = None) -> None:
+        scroll_y = self.scroll_y
+        # Capture the live highlight before rebuilding; a rebuild must not
+        # discard a selection the user just made, even if the highlight event
+        # has not been processed yet.
+        live = self.highlighted_option
+        live_id = str(live.id) if live is not None and live.id is not None else None
+        rows = render_runway(projection, width=max(12, self.size.width or 29))
         options: list[Option] = []
         for row in rows:
             tone = STATUS_STYLES.get(row.status, FOG)
             label_style = PAPER if row.status != "pending" else FOG
-            options.append(
-                Option(_text((f"{row.marker} ", tone), (row.label, label_style)), id=row.label)
-            )
+            options.append(Option(_text((row.text, tone if row.active else label_style)), id=row.id))
         self.clear_options()
         self.add_options(options)
         if options:
-            if current is not None and 0 <= current < len(options):
-                self.highlighted = current
-            elif self.highlighted is None:
-                self.highlighted = 0
+            index_by_id = {str(option.id): index for index, option in enumerate(options)}
+            current = projection.current_node_id if projection is not None else None
+            preferred = live_id or selected_id or self.selected_node_id or current
+            self.highlighted = index_by_id.get(preferred or "", 0)
+            option = options[self.highlighted]
+            self.selected_node_id = str(option.id)
+            self.scroll_to(y=scroll_y, animate=False)
 
 
 class EngineOutput(Vertical):
@@ -131,9 +145,7 @@ class EngineOutput(Vertical):
             label, tone = "PAUSED [!]", HOLD
         else:
             label, tone = "STOPPED", FOG
-        self.query_one("#output-title", Static).update(
-            _text(("ENGINE OUTPUT", FOG), (f"  /  {label}", tone))
-        )
+        self.query_one("#output-title", Static).update(_text(("ENGINE OUTPUT", FOG), (f"  /  {label}", tone)))
         self.set_class(expanded, "expanded")
 
     def log(self) -> RichLog:
@@ -141,11 +153,14 @@ class EngineOutput(Vertical):
 
     def append_lines(self, lines: list[str], reset: bool = False) -> None:
         log = self.log()
+        at_tail = log.scroll_y >= max(0, log.virtual_size.height - log.size.height)
         if reset:
             log.clear()
+        # RichLog.write auto-scrolls by default; suppress it so a reader who has
+        # scrolled up keeps their place, then follow the tail explicitly.
         for line in lines:
-            log.write(Text(line, style=FOG))
-        if lines:
+            log.write(Text(line, style=FOG), scroll_end=False)
+        if lines and at_tail:
             log.scroll_end(animate=False)
 
 

@@ -42,6 +42,12 @@ class NormalizerTests(unittest.TestCase):
         normalizer.feed("1\n2\n3\n")
         self.assertTrue(normalizer.truncated)
 
+    def test_emitted_counts_past_bounded_tail(self):
+        normalizer = OutputNormalizer(max_lines=1)
+        normalizer.feed("1\n2\n3\n")
+        self.assertEqual(normalizer.lines, ["3"])
+        self.assertEqual(normalizer.emitted, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

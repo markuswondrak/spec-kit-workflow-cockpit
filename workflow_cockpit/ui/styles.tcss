@@ -78,7 +78,7 @@ Checkbox > .toggle--button { color: $signal; background: $raised; }
 #runway { width: 29; padding: 1 1 0 1; border-right: solid $rail; }
 #workflow-name { text-style: bold; margin-bottom: 1; }
 #run-progress { height: 1; margin-bottom: 1; }
-#steps { height: 1fr; }
+#runway-graph { height: 1fr; }
 OptionList { background: transparent; border: none; padding: 0; }
 OptionList > .option-list--option { padding: 0 1; }
 OptionList > .option-list--option-highlighted { background: $raised; color: $paper; }
@@ -87,9 +87,11 @@ OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color
 #view-tabs { height: 2; border-bottom: solid $rail; padding: 0 2; }
 #view-label { height: 1; }
 #overview { height: 1fr; padding: 1 2; }
+#overview.compact-summary { height: 4; padding: 0 2; }
 #overview-content { margin-bottom: 1; }
 #output { height: 5; border-top: solid $rail; background: $ink; }
 #output.expanded { height: 45%; min-height: 6; }
+#output.full-canvas { height: 1fr; }
 #output-heading { height: 1; padding: 0 2; }
 #output-title { width: 1fr; }
 #output-hint { width: auto; color: $fog; }
@@ -105,7 +107,7 @@ OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color
 .compact #runway .section-label { display: none; }
 .compact #workflow-name { width: 22; height: 3; content-align: left middle; }
 .compact #run-progress { display: none; }
-.compact #steps { width: 1fr; height: 3; }
+.compact #runway-graph { width: 1fr; height: 3; }
 .short #view-tabs { height: 1; }
 .short #output { height: 3; }
 .short #output.expanded { height: 6; }

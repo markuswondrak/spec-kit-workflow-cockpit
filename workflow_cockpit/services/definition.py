@@ -55,6 +55,7 @@ class WorkflowDefinition:
     steps: tuple[StepSpec, ...]
     source: Path | None = None
     raw: dict[str, Any] | None = None
+    effective_steps: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,11 +141,7 @@ def _iter_step_dicts(steps: list[Any]):
 
 
 def _all_step_ids(steps: list[Any]) -> set[str]:
-    return {
-        step["id"]
-        for step in _iter_step_dicts(steps)
-        if isinstance(step.get("id"), str)
-    }
+    return {step["id"] for step in _iter_step_dicts(steps) if isinstance(step.get("id"), str)}
 
 
 def _descendant_ids(step: dict[str, Any]) -> set[str]:
@@ -241,9 +238,7 @@ def _parse_overlay(path: Path, workflow_id: str) -> tuple[OverlayLayer | None, l
     if not isinstance(extends, str) or not extends:
         return None, [f"Invalid overlay {path}: missing 'extends'."]
     if extends != workflow_id:
-        return None, [
-            f"Overlay {path} extends {extends!r}, but is stored under workflow {workflow_id!r}."
-        ]
+        return None, [f"Overlay {path} extends {extends!r}, but is stored under workflow {workflow_id!r}."]
     if data.get("enabled", True) is False:
         return None, []
     priority = data.get("priority", 10)
@@ -287,8 +282,7 @@ def _apply_overlays(base_data: dict[str, Any], layers: list[OverlayLayer]) -> li
         for idx, edit in enumerate(layer.edits):
             if edit.anchor not in base_ids:
                 errors.append(
-                    f"Overlay '{layer.id}' edit {idx}: anchor '{edit.anchor}' "
-                    "does not match any base step id."
+                    f"Overlay '{layer.id}' edit {idx}: anchor '{edit.anchor}' does not match any base step id."
                 )
     if errors:
         raise DefinitionError("; ".join(errors))
@@ -361,9 +355,7 @@ class WorkflowDefinitionResolver:
         workflow = data.get("workflow")
         workflow = workflow if isinstance(workflow, dict) else {}
         step_specs = tuple(
-            _step_from_dict(step, index)
-            for index, step in enumerate(composed_steps)
-            if isinstance(step, dict)
+            _step_from_dict(step, index) for index, step in enumerate(composed_steps) if isinstance(step, dict)
         )
         return WorkflowDefinition(
             id=str(workflow.get("id") or workflow_id),
@@ -374,6 +366,7 @@ class WorkflowDefinitionResolver:
             steps=step_specs,
             source=path,
             raw=data,
+            effective_steps=tuple(composed_steps),
         )
 
 
@@ -406,15 +399,11 @@ def coerce_input_value(name: str, value: Any, spec: InputSpec) -> Any:
         coerced = value
 
     if spec.enum is not None and coerced not in spec.enum:
-        raise ValueError(
-            f"Input {name!r} value {coerced!r} not in allowed values: {list(spec.enum)}."
-        )
+        raise ValueError(f"Input {name!r} value {coerced!r} not in allowed values: {list(spec.enum)}.")
     return coerced
 
 
-def validate_inputs(
-    definition: WorkflowDefinition, provided: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, str]]:
+def validate_inputs(definition: WorkflowDefinition, provided: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
     """Return (resolved_values, field_errors) for a schema-driven form."""
     resolved: dict[str, Any] = {}
     errors: dict[str, str] = {}
@@ -454,9 +443,7 @@ def normalized_signature(data: dict[str, Any]) -> tuple[tuple[str, ...], tuple[t
     if not isinstance(data, dict):
         return ((), ())
     steps = tuple(
-        step["id"]
-        for step in _top_level_steps(data)
-        if isinstance(step, dict) and isinstance(step.get("id"), str)
+        step["id"] for step in _top_level_steps(data) if isinstance(step, dict) and isinstance(step.get("id"), str)
     )
     raw_inputs = data.get("inputs")
     inputs: tuple[tuple[str, str], ...] = ()

@@ -91,6 +91,10 @@ class EngineSupervisor:
     def partial_line(self) -> str:
         return self.normalizer.partial
 
+    @property
+    def output_emitted(self) -> int:
+        return self.normalizer.emitted
+
     def _run_dir(self, run_id: str) -> Path:
         return self.project_root / ".specify" / "workflows" / "runs" / run_id
 
