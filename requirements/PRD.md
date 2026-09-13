@@ -192,6 +192,17 @@ a status dashboard.
 - Handle success, failure, and abort according to section 6.5.
 - Persist no Cockpit history outside engine run metadata.
 
+### FR-7 - Agent-matched styling templates
+
+- Ship selectable styling templates, including a neutral default and one per supported coding
+  agent integration (for example `opencode`).
+- Select the active template from the project's default integration, with an explicit override.
+- Fall back to the default template when the integration or template is unknown or malformed,
+  without failing the run.
+- Keep layout, wording, controls, and behavior identical across templates; templates change
+  only visual tokens.
+- Keep text and focus states legible under every shipped template.
+
 ## 8. Quality requirements
 
 - The UI remains responsive during process execution, polling, diffing, and large-file

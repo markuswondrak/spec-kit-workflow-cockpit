@@ -17,14 +17,16 @@ application; external agents remain independent.
 | S4 | Decide interactive gates | FR-5 | [S04](S04-interactive-gates.md) |
 | S5 | Cockpit skill and run context | FR-4 | [S05](S05-cockpit-skill.md) |
 | S6 | Resilient operation | FR-6, NFRs | [S06](S06-resilience.md) |
+| S7 | Agent-matched styling templates | FR-7 | [S07](S07-agent-styling-templates.md) |
 
-Dependencies: S1 -> S2 -> S3 -> S4; S5 depends on S1; S6 depends on S1-S5.
+Dependencies: S1 -> S2 -> S3 -> S4; S5 depends on S1; S6 depends on S1-S5; S7 depends on S1 and
+themes the S2-S6 surfaces.
 
 ## First-release boundary
 
 S1-S6 deliver workflow selection and inputs, owned process lifecycle, integrated output, the
 workflow graph, Worktree Changes, both gate paths, the external-agent context bridge, and robust
-shutdown behavior.
+shutdown behavior. S7 is a cross-cutting presentation slice layered over the core loop.
 
 ## Global definition of done
 
