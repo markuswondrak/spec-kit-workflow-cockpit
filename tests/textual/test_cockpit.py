@@ -1,6 +1,8 @@
+import asyncio
 import unittest
 
 from tests.support import FakeSession, StyledApp
+from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
 from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, EngineOutput
 
@@ -20,8 +22,9 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(len(log.lines), 0)
             self.assertTrue(screen.query_one("#overview").has_class("compact-summary"))
 
-    async def test_abort_requires_confirmation(self):
+    async def test_abort_requires_confirmation_then_closes(self):
         session = FakeSession(status="running")
+        session.abort_delay = 0.2
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(CockpitScreen(session))
             await pilot.pause()
@@ -30,8 +33,29 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(session.aborted)
             await pilot.press("enter")
             await pilot.pause()
+            self.assertIsInstance(self.app.screen, AbortingScreen)
+            for _ in range(200):
+                if not self.app.is_running:
+                    break
+                await asyncio.sleep(0.01)
             self.assertTrue(session.aborted)
-            self.assertEqual(session.status, "aborted")
+            self.assertFalse(self.app.is_running)
+
+    async def test_activity_indicator_tracks_live_state(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            activity = self.app.screen.query_one("#activity")
+            self.assertTrue(activity.display)
+            session.status = "paused"
+            self.app.screen._refresh()
+            await pilot.pause()
+            self.assertFalse(activity.display)
+            session.status = "success"
+            self.app.screen._refresh()
+            await pilot.pause()
+            self.assertFalse(activity.display)
 
     async def test_outcome_acknowledged_with_enter(self):
         session = FakeSession(status="success")

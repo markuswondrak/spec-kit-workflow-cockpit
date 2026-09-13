@@ -28,7 +28,8 @@ This plan realizes S01 against the real engine in `../spec-kit`. Product contrac
 - Basic run state, current step, branch, baseline commit, elapsed time (<= 500 ms).
 - Confirmed Abort: signal a verified live owned group only; if a paused command has exited,
   record the Cockpit-owned abort without signaling a stale process-group ID.
-- Success, failure, and Cockpit-owned abort outcomes that require acknowledgment to exit.
+- Success and failure outcomes that require acknowledgment to exit; a confirmed Abort shows a
+  blocking Aborting sheet and exits once the process group is reaped.
 - Resize guard below the minimum size.
 
 ### Out (later stories)
@@ -243,14 +244,15 @@ design reference and is not imported by production code.
   confirmed Abort (`q`/`x`); HelpScreen; resize guard.
 - Minimal paused surface in S01: paused step/message as read-only text and Abort only. No disabled
   decision controls, CONTEXT path, or Worktree Changes; those arrive in S03/S05.
-- Outcome surfaces: success, failure, and Cockpit-owned abort; each requires acknowledgment
-  (`enter`) to exit.
+- Outcome surfaces: success and failure require acknowledgment (`enter`) to exit; a
+  Cockpit-owned abort closes the app after a blocking Aborting sheet and process cleanup.
 - `CockpitViewModel`: map `RunSnapshot` to widgets, preserving focus, selection, and scroll.
 - S01-specific Help and command rails advertise only actions implemented in S01.
 - Tests (`App.run_test()`): selection and configuration across all supported input types,
   required/whitespace/default/enum validation, dirty
   confirmation, Start transition, live state updates, output behavior, abort confirmation and
-  outcome, acknowledgment exit via Enter (and `q` only where explicitly shown), contextual help,
+  direct close after cleanup, outcome acknowledgment exit via Enter (and `q` only where explicitly
+  shown), contextual help,
   resize guard below 88 x 36, and state preservation after resizing back.
 
 ### Phase 6 - Integration and end-to-end
@@ -261,7 +263,8 @@ design reference and is not imported by production code.
 - Mandatory pinned real-`specify` tests use tiny deterministic workflows for linear success,
   non-TTY gate pause, failure, overlays, and abort. They never depend on ambient PATH or external
   agent integrations.
-- Assert exact run identity, live state/output, outcome acknowledgment, and no leftover group.
+- Assert exact run identity, live state/output, outcome acknowledgment, Abort close after
+  cleanup, and no leftover group.
 - Run the full unit + Textual + contract + PTY suites.
 
 ## 7. Acceptance mapping
@@ -277,13 +280,14 @@ design reference and is not imported by production code.
 | Read-only bounded normalized Engine Output | 3/5 - OutputNormalizer, EngineOutput |
 | State/step/branch/baseline/elapsed within 500 ms | 2/4/5 - RunStateReader, PollingLoop, HeaderRail |
 | Confirmed Abort + bounded cleanup/no stale signal | 3/4 - EngineSupervisor abort paths |
-| Outcomes visible until acknowledgment | 5 - outcome surfaces |
+| Success/failure outcomes visible until acknowledgment; Abort closes after cleanup | 5 - outcome surfaces |
 | Unit / Textual / contract / PTY tests | 0-6 |
 
 The test suite must additionally assert: baseline capture occurs after dirty confirmation and
 immediately before spawn; a second Start cannot spawn; ordinary keys never reach child stdin;
 another process creating a run cannot change Cockpit's owned ID; state, branch, step, and elapsed
-changes appear within 500 ms; and every outcome remains until explicit acknowledgment.
+changes appear within 500 ms; success and failure outcomes remain until explicit acknowledgment; and
+a confirmed Abort closes only after the process group is reaped.
 
 ## 8. Deferred / assumptions
 

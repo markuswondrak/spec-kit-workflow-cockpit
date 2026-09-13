@@ -6,7 +6,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, OptionList, RichLog, Static
+from textual.widgets import Button, LoadingIndicator, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 from ...services.snapshot import RunSnapshot
@@ -138,6 +138,7 @@ class EngineOutput(Vertical):
     def compose(self) -> ComposeResult:
         with Horizontal(id="output-heading"):
             yield Static(id="output-title")
+            yield LoadingIndicator(id="activity")
             yield Static("[e] collapse  [l] tail  [end] tail", id="output-hint")
         yield RichLog(id="engine", highlight=False, markup=False, wrap=True, max_lines=2000)
 
@@ -149,6 +150,8 @@ class EngineOutput(Vertical):
         else:
             label, tone = "STOPPED", FOG
         self.query_one("#output-title", Static).update(_text(("ENGINE OUTPUT", FOG), (f"  /  {label}", tone)))
+        active = status in ("running", "initializing", "aborting")
+        self.query_one("#activity", LoadingIndicator).display = active
         self.set_class(expanded, "expanded")
 
     def log(self) -> RichLog:

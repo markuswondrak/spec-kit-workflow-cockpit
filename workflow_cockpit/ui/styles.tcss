@@ -108,6 +108,7 @@ OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color
 #output.full-canvas { height: 1fr; }
 #output-heading { height: 1; padding: 0 2; }
 #output-title { width: 1fr; }
+#activity { width: auto; height: 1; padding: 0 1; color: $signal; }
 #output-hint { width: auto; color: $fog; }
 #engine { padding: 0 2; background: $ink; color: $fog; height: 1fr; }
 #command-rail { height: 2; border-top: solid $rail; background: $deck; padding: 0 1; }
@@ -128,9 +129,12 @@ OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color
 .compact #output { height: 3; }
 .compact #output.expanded { height: 6; }
 
-/* Confirmation and help sheets */
-ConfirmScreen, HelpScreen { align: center middle; background: $ink 80%; }
-#confirm-sheet, #help-sheet { width: 64; height: auto; max-height: 95%; padding: 1 3; background: $deck; border-top: heavy $hold; border-bottom: solid $rail; }
+/* Confirmation, abort, and help sheets */
+ConfirmScreen, AbortingScreen, HelpScreen { align: center middle; background: $ink 80%; }
+#confirm-sheet, #abort-sheet, #help-sheet { width: 64; height: auto; max-height: 95%; padding: 1 3; background: $deck; border-top: heavy $hold; border-bottom: solid $rail; }
+#abort-sheet { border-top: heavy $fault; }
+#abort-heading { text-style: bold; margin: 1 0; }
+#abort-activity { width: auto; height: 1; color: $fault; }
 #confirm-sheet.danger { border-top: heavy $fault; }
 #confirm-heading { text-style: bold; margin: 1 0; }
 #confirm-effect { margin-bottom: 1; }

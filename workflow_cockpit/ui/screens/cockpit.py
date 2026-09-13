@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from rich.text import Text
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -25,6 +26,7 @@ from ..widgets import (
     ReviewDocumentView,
     Runway,
 )
+from .aborting import AbortingScreen
 from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
 from .help import HelpScreen
@@ -387,8 +389,15 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
     def _after_abort(self, confirmed: bool | None) -> None:
         if not confirmed:
             return
-        self.session.abort()
-        self._refresh()
+        self.app.push_screen(AbortingScreen())
+        self._run_abort()
+
+    @work(thread=True)
+    def _run_abort(self) -> None:
+        try:
+            self.session.abort()
+        finally:
+            self.app.call_from_thread(self.app.exit)
 
     def action_quit(self) -> None:
         if self.is_small() or self._snapshot_now().terminal:

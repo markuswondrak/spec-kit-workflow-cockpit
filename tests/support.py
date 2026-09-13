@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -261,6 +262,7 @@ class FakeSession:
         self.status = status
         self.started = False
         self.aborted = False
+        self.abort_delay = 0.0
         self.started_values: dict[str, Any] | None = None
         self.output_lines: list[str] = ["starting demo", "preparing"]
         self.output_emitted: int | None = None
@@ -315,6 +317,8 @@ class FakeSession:
     def abort(self):
         self.aborted = True
         self.status = "aborted"
+        if self.abort_delay:
+            time.sleep(self.abort_delay)
         return self.snapshot()
 
     def decide(self, choice):

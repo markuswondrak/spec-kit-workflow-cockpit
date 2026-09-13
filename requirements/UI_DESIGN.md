@@ -256,7 +256,9 @@ Engine Output behavior:
 - ANSI and terminal control sequences are stripped.
 - Output history is bounded and old lines are discarded with an explicit truncation marker.
 
-The elapsed-time display updates without decorative animation.
+The elapsed-time display updates without decorative animation. A compact `LoadingIndicator`
+trails the Output heading while the engine process is running so a silent output gap still reads as
+activity; it is absent while paused or stopped.
 
 ## 6. Gate review
 
@@ -362,7 +364,9 @@ Changes mode is available whenever useful; editor actions appear only at a pause
 
 ### Abort
 
-Show the abort result and source when known. Await acknowledgment before exiting Textual.
+A confirmed Abort shows a blocking `ABORTING` sheet while the engine process group is interrupted
+and reaped, then exits Textual directly. Success and failure outcomes still await acknowledgment via
+Enter.
 
 ## 9. Keyboard model
 
