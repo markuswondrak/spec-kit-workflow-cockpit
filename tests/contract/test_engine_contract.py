@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from tests.support import FakeGit, compatibility_result, write_registry, write_workflow
+from tests.support import FakeGit, compatibility_result, write_registry, write_run, write_workflow
 from workflow_cockpit.bootstrap.compatibility import Compatibility
 from workflow_cockpit.engine.supervisor import EngineSupervisor
 from workflow_cockpit.services.definition import WorkflowDefinitionResolver
@@ -78,6 +78,56 @@ class EngineContractTests(unittest.TestCase):
         self.assertTrue((run_dir / "state.json").is_file())
         self.assertIsNotNone(final.outcome)
         self.assertEqual(final.outcome.kind.value, "success")
+
+
+    def test_structured_resume_uses_exact_argv(self):
+        record = self.root / "resume-record.json"
+        supervisor = EngineSupervisor(self.fake, self.root)
+        result = replace(compatibility_result(), executable=self.fake)
+        env = {
+            "COCKPIT_TEST_RECORD": str(record),
+            "PATH": os.environ.get("PATH", ""),
+        }
+        with mock.patch.dict(os.environ, env, clear=False):
+            session = CockpitSession(
+                self.root,
+                result,
+                registry=WorkflowRegistry(self.root),
+                resolver=WorkflowDefinitionResolver(self.root),
+                git=FakeGit(),
+                supervisor=supervisor,
+            )
+            session.select("demo")
+            started = session.start({"spec": "indexed search"})
+            self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+            write_run(
+                self.root,
+                started.run_id,
+                status="paused",
+                current_step_id="review",
+                step_results={
+                    "review": {
+                        "type": "gate",
+                        "output": {
+                            "message": "Review it",
+                            "options": ["approve", "reject"],
+                            "on_reject": "retry",
+                        },
+                    }
+                },
+            )
+            self.assertTrue(session.snapshot().gate.structured)
+            session.decide("approve")
+            self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+            final = session.snapshot()
+
+        payload = json.loads(record.read_text(encoding="utf-8"))
+        self.assertEqual(payload["argv"][:3], ["workflow", "resume", started.run_id])
+        self.assertIn("spec=approve", payload["argv"])
+        self.assertIn("--json", payload["argv"])
+        self.assertEqual(payload["run_id"], started.run_id)
+        self.assertEqual(payload["init_dir"], str(self.root))
+        self.assertEqual(final.engine_status, "completed")
 
 
 if __name__ == "__main__":

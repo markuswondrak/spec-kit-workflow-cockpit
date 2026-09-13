@@ -18,6 +18,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("RUNNING", str(screen.query_one("#run-status").render()))
             log = screen.query_one("#engine")
             self.assertGreater(len(log.lines), 0)
+            self.assertTrue(screen.query_one("#overview").has_class("compact-summary"))
 
     async def test_abort_requires_confirmation(self):
         session = FakeSession(status="running")

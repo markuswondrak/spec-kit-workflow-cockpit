@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | Implemented |
-| Story | [S02 - Workflow runway](S02-workflow-runway.md) |
+| Story | S02 - Workflow runway (implemented) |
 | Requirements | FR-2 |
 | Dependencies | S01 (implemented) |
 | Baseline | `PRD.md`, `TUI_DESIGN.md`, `UI_DESIGN.md`, `ARCHITECTURE.md`, `engine-contract.md` |

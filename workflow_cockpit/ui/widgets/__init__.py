@@ -10,18 +10,21 @@ from textual.widgets import Button, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 from ...services.snapshot import RunSnapshot
+from ..palette import FAULT, FOG, HOLD, PAPER, SIGNAL
 from ..view_model import render_runway, state_grammar
+from .review import ChangedFileList, GateOptions, ReviewDocumentView
 
-INK = "#101312"
-DECK = "#171C19"
-RAISED = "#202821"
-RAIL = "#303B34"
-FOG = "#94A399"
-PAPER = "#E5E9DF"
-SIGNAL = "#9CD6AD"
-HOLD = "#E8BD79"
-FAULT = "#EF9387"
-COLD = "#A1BFCE"
+__all__ = [
+    "TRUNCATION_MARKER",
+    "ChangedFileList",
+    "CommandRail",
+    "EngineOutput",
+    "GateOptions",
+    "HeaderRail",
+    "ResizeGuard",
+    "ReviewDocumentView",
+    "Runway",
+]
 
 STATUS_STYLES = {
     "running": SIGNAL,

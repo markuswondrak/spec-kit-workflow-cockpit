@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Status | Recorded from `../spec-kit` source at `1.0.6.dev0`; live PTY spikes noted as pending |
-| Story | [S01 - Own one workflow run](S01-owned-run.md) |
+| Status | Recorded from `../spec-kit` source at `1.0.6.dev0`; S03 structured-gate behavior confirmed live |
+| Story | S01 - Own one workflow run (implemented) |
 | Plan | [S01 - Implementation Plan](S01-implementation-plan.md) |
 | Sources | `src/specify_cli/workflows/_commands.py`, `engine.py`, `catalog.py`, `overlays/` |
 
@@ -68,14 +68,18 @@ only Phase 0 work that needs a live spike.
 - Cockpit reimplements resolution (no engine imports) in `services/definition.py`; tested in
   `tests/unit/test_definition.py`.
 
-## 6. Transport (PTY, non-TTY stdin)
+## 6. Transport (PTY output, non-TTY stdin)
 
-- Every output-producing command runs under an internal PTY; stdin is the PTY slave but Cockpit
-  never writes user keystrokes to it.
+- Every output-producing command runs with stdout/stderr on an internal PTY. stdin is
+  `/dev/null`, not the PTY slave, so `sys.stdin.isatty()` is false: a `gate` step without an
+  available verdict therefore pauses (PAUSED) instead of blocking on an interactive prompt.
 - Output is decoded incrementally (UTF-8, replacement on error), CR/LF normalized, ANSI/OSC/C0
   controls stripped, and retained as complete lines plus the current partial line, bounded with
   one truncation marker. Implemented in `engine/normalizer.py`; tested in
   `tests/unit/test_normalizer.py` and through a real PTY in `tests/pty/test_pty.py`.
+- Confirmed live against `1.0.6.dev0`: a `verdict_input` gate pauses after the initial `run`
+  child exits, and each `resume` child re-executes the gate. Asserted by
+  `tests/contract/test_real_engine.py`.
 
 ## 7. Abort
 
@@ -95,9 +99,30 @@ this environment; they remain the only Phase 0 follow-ups:
 
 1. Raw ANSI/CR output and prompt behavior of each step type through the real CLI.
 2. Exact persisted state after SIGINT during command, prompt, shell, and gate steps.
-3. Real gate pause/exit behavior with and without a bound `verdict_input` under non-TTY stdin.
+3. ~~Real gate pause/exit behavior with and without a bound `verdict_input` under non-TTY stdin.~~
+   Resolved for the structured path in section 9; interactive-prompt behavior remains S04.
 4. Confirmation that the final fixed SIGINT/TERM/KILL grace bounds are comfortable on the
    supported hardware.
 
 Cockpit's outcome model does not depend on any single one of these: it treats `state.json` as
 authoritative evidence and always owns its own abort outcome.
+
+## 9. Structured gates and resume (S03, confirmed live)
+
+- A non-TTY paused gate records `state.json.step_results[<current_step_id>]` with `type: "gate"`,
+  `status: "paused"`, and `output = {message, options, on_reject, show_file, choice}`. The options
+  are the post-expression resolved values in declared order; `verdict_input` is not copied into
+  the result and must come from the workflow definition.
+- The engine's own `workflow resume <run_id>` parses repeated `-i key=value` pairs, merges them
+  over persisted inputs, sets the run back to running, and re-executes from `current_step_index`.
+  Cockpit uses `specify workflow resume <run_id> -i <verdict_input>=<choice> --json`.
+- A verdict value is matched to a declared option case-insensitively. When it matches a value
+  that the gate treats as a rejection (`reject`/`abort`), `on_reject` decides the outcome:
+  `abort` marks the run aborted, `skip` completes the gate and continues, and `retry` clears the
+  bound verdict input and pauses the gate again.
+- The resume child's exit code is diagnostic only; Cockpit re-reads `state.json` before choosing
+  the next presentation state. A failed resume leaves the persisted paused state authoritative.
+- Asserted end-to-end against `1.0.6.dev0` in `tests/contract/test_real_engine.py` (continue,
+  reject-to-retry then approve, reject-to-skip, and reject-to-abort) and deterministically against
+  the fake executable in `tests/contract/test_engine_contract.py`. Cockpit-side extraction is
+  tested in `tests/unit/test_gate.py`.

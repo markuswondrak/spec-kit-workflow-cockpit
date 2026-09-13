@@ -11,9 +11,9 @@ application; external agents remain independent.
 
 | # | Vertical slice | Requirements | File |
 |---|---|---|---|
-| S1 | Own one workflow run | FR-1, FR-2 basic, FR-6 basic | [S01](S01-owned-run.md) |
-| S2 | Workflow runway | FR-2 | [S02](S02-workflow-runway.md) |
-| S3 | Review and decide a structured gate | FR-3, FR-5 | [S03](S03-gate-review.md) |
+| S1 | Own one workflow run | FR-1, FR-2 basic, FR-6 basic | [Implementation plan](S01-implementation-plan.md) |
+| S2 | Workflow runway | FR-2 | [Implementation plan](S02-implementation-plan.md) |
+| S3 | Review and decide a structured gate | FR-3, FR-5 | [Implementation plan](S03-implementation-plan.md) |
 | S4 | Decide interactive gates | FR-5 | [S04](S04-interactive-gates.md) |
 | S5 | Cockpit skill and run context | FR-4 | [S05](S05-cockpit-skill.md) |
 | S6 | Resilient operation | FR-6, NFRs | [S06](S06-resilience.md) |

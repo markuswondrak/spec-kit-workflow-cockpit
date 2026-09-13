@@ -33,6 +33,21 @@ def build_run_argv(
     return [str(executable), "workflow", "run", workflow_id, *input_argv]
 
 
+def build_resume_argv(
+    executable: Path, run_id: str, verdict_input: str, choice: str
+) -> list[str]:
+    """Structured resume: one verdict input, JSON outcome on stderr if needed."""
+    return [
+        str(executable),
+        "workflow",
+        "resume",
+        run_id,
+        "-i",
+        f"{verdict_input}={choice}",
+        "--json",
+    ]
+
+
 class EngineSupervisor:
     """Own one engine child under a PTY and its own process group."""
 
@@ -66,6 +81,8 @@ class EngineSupervisor:
         self._exit_code: int | None = None
         self._abort_requested = False
         self._started_at: float | None = None
+        self._command_kind: str | None = None
+        self._last_reaped_command: str | None = None
 
     @property
     def run_id(self) -> str | None:
@@ -82,6 +99,10 @@ class EngineSupervisor:
     @property
     def abort_requested(self) -> bool:
         return self._abort_requested
+
+    @property
+    def last_reaped_command(self) -> str | None:
+        return self._last_reaped_command
 
     @property
     def output_lines(self) -> list[str]:
@@ -114,41 +135,96 @@ class EngineSupervisor:
                 raise SupervisorError(
                     f"Run directory already exists for {run_id!r}; refusing to reuse it."
                 )
-            master_fd, slave_fd = os.openpty()
-            child_env = dict(os.environ if env is None else env)
-            child_env["SPECIFY_INIT_DIR"] = str(self.project_root)
-            child_env["SPECKIT_WORKFLOW_RUN_ID"] = run_id
-            try:
-                proc = self._spawner(
-                    list(argv),
-                    cwd=str(self.project_root),
-                    env=child_env,
-                    stdin=slave_fd,
-                    stdout=slave_fd,
-                    stderr=slave_fd,
-                    start_new_session=True,
-                    close_fds=True,
-                )
-            except BaseException:
-                os.close(master_fd)
-                os.close(slave_fd)
-                raise
+            self._spawn(run_id, argv, env, command_kind="run")
+
+    def resume(
+        self,
+        run_id: str,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+    ) -> None:
+        """Spawn a structured resume for the already-owned run.
+
+        Only one child may be owned at a time; the previous child must have
+        been reaped. The normalizer's output history is preserved.
+        """
+        with self._lock:
+            if self._run_id is None:
+                raise SupervisorError("No run has been started to resume.")
+            if self._abort_requested:
+                raise SupervisorError("This supervisor aborted the run and cannot resume it.")
+            if run_id != self._run_id:
+                raise SupervisorError("Refusing to resume a run this supervisor does not own.")
+            if self._proc is not None and not self._reaped_event.is_set():
+                raise SupervisorError("An engine process is already active.")
+            if not self._reaped_event.is_set():
+                raise SupervisorError("The previous engine process has not exited.")
+            self._reset_for_spawn()
+            self._spawn(run_id, argv, env, command_kind="resume")
+
+    def _reset_for_spawn(self) -> None:
+        if self._pty is not None:
+            self._pty.close()
+            self._pty = None
+        self._proc = None
+        self._pgid = None
+        self._exit_code = None
+        self._reaped_event = threading.Event()
+
+    def _spawn(
+        self,
+        run_id: str,
+        argv: Sequence[str],
+        env: Mapping[str, str] | None,
+        *,
+        command_kind: str,
+    ) -> None:
+        master_fd, slave_fd = os.openpty()
+        # stdin is deliberately not a TTY: Cockpit is a read-only observer in
+        # S03, and the engine pauses a gate instead of prompting when stdin is
+        # not a TTY. stdout/stderr stay on the PTY for normalized output.
+        stdin_fd = os.open(os.devnull, os.O_RDONLY)
+        child_env = dict(os.environ if env is None else env)
+        child_env["SPECIFY_INIT_DIR"] = str(self.project_root)
+        child_env["SPECKIT_WORKFLOW_RUN_ID"] = run_id
+        try:
+            proc = self._spawner(
+                list(argv),
+                cwd=str(self.project_root),
+                env=child_env,
+                stdin=stdin_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                start_new_session=True,
+                close_fds=True,
+            )
+        except BaseException:
+            os.close(master_fd)
             os.close(slave_fd)
-            self._proc = proc
-            self._run_id = run_id
-            self._pgid = os.getpgid(proc.pid)
+            os.close(stdin_fd)
+            raise
+        os.close(slave_fd)
+        os.close(stdin_fd)
+        self._proc = proc
+        self._run_id = run_id
+        self._pgid = os.getpgid(proc.pid)
+        self._command_kind = command_kind
+        if self._started_at is None:
             self._started_at = self._clock()
-            self._pty = PtySession(master_fd, self.normalizer.feed)
-            self._pty.start()
-            threading.Thread(target=self._reap, name="cockpit-reap", daemon=True).start()
+        self._pty = PtySession(master_fd, self.normalizer.feed)
+        self._pty.start()
+        threading.Thread(target=self._reap, name="cockpit-reap", daemon=True).start()
 
     def _reap(self) -> None:
         proc = self._proc
+        command_kind = self._command_kind
         if proc is None:
             return
         code = proc.wait()
         with self._lock:
             self._exit_code = code
+            self._last_reaped_command = command_kind
             self._reaped_event.set()
             if self._pty is not None:
                 self._pty.close()

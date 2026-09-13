@@ -1,4 +1,4 @@
-"""The run cockpit: Runway, state-driven Focus, engine output, command rail."""
+"""The run cockpit: Runway, state-driven Focus, review, output, command rail."""
 
 from __future__ import annotations
 
@@ -6,25 +6,32 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import OptionList, Static
+from textual.widgets import Input, Static
 
+from ...services.review import ReviewDocument
 from ...services.snapshot import OutcomeKind
 from ...session.polling import PollingLoop
+from ..editor import default_editor_launcher, editor_environment
+from ..palette import COLD, FAULT, FOG, PAPER, SIGNAL
 from ..view_model import default_focus_mode, format_elapsed
-from ..widgets import TRUNCATION_MARKER, CommandRail, EngineOutput, HeaderRail, ResizeGuard, Runway
+from ..widgets import (
+    TRUNCATION_MARKER,
+    ChangedFileList,
+    CommandRail,
+    EngineOutput,
+    GateOptions,
+    HeaderRail,
+    ResizeGuard,
+    ReviewDocumentView,
+    Runway,
+)
 from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
 from .help import HelpScreen
-
-FOG = "#94A399"
-PAPER = "#E5E9DF"
-SIGNAL = "#9CD6AD"
-FAULT = "#EF9387"
-COLD = "#A1BFCE"
-HOLD = "#E8BD79"
+from .review_mixin import ReviewMixin
 
 
-class CockpitScreen(AdaptiveScreen):
+class CockpitScreen(ReviewMixin, AdaptiveScreen):
     BINDINGS = [
         Binding("x", "abort", "Abort"),
         Binding("q", "quit", "Exit"),
@@ -32,22 +39,43 @@ class CockpitScreen(AdaptiveScreen):
         Binding("e", "collapse_output", "Collapse", show=False),
         Binding("s", "state", "State"),
         Binding("g", "gate", "Gate", show=False),
+        Binding("c", "changes", "Changes", show=False),
+        Binding("d", "diff_view", show=False),
+        Binding("r", "rendered_view", show=False),
+        Binding("o", "open_editor", show=False),
+        Binding("f", "full_file", show=False),
+        Binding("slash", "filter", show=False),
+        *[Binding(str(number), f"choose({number})", show=False) for number in range(1, 10)],
         Binding("end", "tail", show=False),
         Binding("enter", "acknowledge", show=False, priority=True),
         Binding("question_mark", "help", "Help"),
     ]
 
-    def __init__(self, session) -> None:
+    def __init__(self, session, *, editor_launcher=None, editor_env=None) -> None:
         super().__init__()
         self.session = session
         self._loop = PollingLoop(session)
         self._snapshot = None
+        self._editor_launcher = editor_launcher or default_editor_launcher
+        self._editor_env = editor_env or editor_environment
         self._written = 0
         self._output_expanded = False
         self._held_mode: str | None = None
+        self._focus_mode: str | None = None
         self._last_default_mode: str | None = None
         self._selected_node_id: str | None = None
         self._selected_review_path: str | None = None
+        self._review_view = "diff"
+        self._view_overridden = False
+        self._filter = ""
+        self._review_loaded = False
+        self._review_tick = 0
+        self._review_pending = False
+        self._full_file = False
+        self._current_document: ReviewDocument | None = None
+        self._document_key: tuple | None = None
+        self._document_pending_key: tuple | None = None
+        self._diagnostic = ""
 
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):
@@ -61,8 +89,19 @@ class CockpitScreen(AdaptiveScreen):
                 with Vertical(id="focus"):
                     with Horizontal(id="view-tabs"):
                         yield Static(id="view-label")
+                        yield Static(id="review-status")
                     with VerticalScroll(id="overview"):
                         yield Static(id="overview-content")
+                    with Horizontal(id="review-panel"):
+                        with Vertical(id="review-index"):
+                            yield Input(placeholder="filter paths", id="review-filter")
+                            yield ChangedFileList(id="changed-files")
+                        with VerticalScroll(id="review-scroll"):
+                            yield ReviewDocumentView(id="review-document")
+                    with Horizontal(id="decide-bar"):
+                        yield Static("DECIDE", id="decide-label")
+                        yield GateOptions(id="gate-options")
+                        yield Static(id="decide-hint")
                     yield EngineOutput(id="output")
             yield CommandRail(id="command-rail")
         yield ResizeGuard(id="resize-guard")
@@ -91,14 +130,13 @@ class CockpitScreen(AdaptiveScreen):
         done = sum(1 for node in projection.nodes if node.status == "completed") if projection else 0
         total = len(projection.nodes) if projection else len(definition.steps) if definition else 0
         self.query_one("#run-progress", Static).update(Text.assemble((f"{done}/{total} complete", FOG)))
+        self._maybe_load_review(snapshot)
         self._update_output(snapshot)
         self._update_focus(snapshot)
 
     def _update_output(self, snapshot) -> None:
         output = self.query_one(EngineOutput)
         output.set_state(snapshot.status, self._output_expanded)
-        # Track an absolute emitted count, not the bounded tail length, so
-        # output keeps flowing after the retained tail saturates.
         emitted = snapshot.output_emitted
         delta = emitted - self._written
         if delta <= 0:
@@ -115,70 +153,66 @@ class CockpitScreen(AdaptiveScreen):
         if default_mode != self._last_default_mode:
             self._held_mode = None
             self._output_expanded = False
+            self._full_file = False
             self._last_default_mode = default_mode
         mode = self._held_mode or default_mode
+        self._focus_mode = mode
         self._set_focus_mode(mode)
         step_label = self._step_label(snapshot, definition)
         if mode == "outcome":
             self._render_outcome(snapshot)
-            return
-        if mode == "gate":
-            step = next(
-                (s for s in (definition.steps if definition else ()) if s.id == snapshot.current_step_id),
-                None,
-            )
-            message = step.message if step else "The engine is paused."
-            self.query_one("#view-label", Static).update(Text.assemble(("GATE / PAUSED", f"bold {HOLD}")))
-            self.query_one("#overview-content", Static).update(
-                Text.assemble(
-                    (f"{step_label}   /   attempt 1   /   engine paused\n\n", PAPER),
-                    (message + "\n\n", HOLD),
-                    ("Worktree changes and gate decisions arrive in S03/S04.\n", FOG),
-                    ("Only Abort is available for this paused run in S01.", FOG),
-                )
-            )
+        elif mode == "gate":
+            self._render_gate(snapshot, step_label)
+        elif mode == "changes":
+            self._render_changes(snapshot)
         elif mode == "state":
-            self.query_one("#view-label", Static).update(Text.assemble(("STATE", f"bold {PAPER}")))
-            self.query_one("#overview-content", Static).update(
-                Text.assemble(
-                    (f"{step_label}\n\n", f"bold {PAPER}"),
-                    (f"workflow {snapshot.workflow_name or snapshot.workflow_id}\n", FOG),
-                    (f"run {snapshot.run_id}\n", COLD),
-                    (f"status {snapshot.status}\n", FOG),
-                )
-            )
+            self._render_state(snapshot, step_label)
         else:
-            self.query_one("#view-label", Static).update(Text.assemble(("OUTPUT / RUNNING", f"bold {PAPER}")))
-            phase = "STARTING" if snapshot.status == "initializing" else "RUNNING"
-            attempt = self._attempt(snapshot, self._selected_node_id or snapshot.current_step_id)
-            next_step = self._next_step(snapshot)
-            self.query_one("#overview-content", Static).update(
-                Text.assemble(
-                    (f"{phase}\n", FOG),
-                    (
-                        f"NOW {step_label}  attempt {attempt}  {format_elapsed(snapshot.elapsed_seconds)}\n",
-                        f"bold {PAPER}",
-                    ),
-                    (f"NEXT {next_step}\n", FOG),
-                )
-            )
+            self._render_output_mode(snapshot, step_label)
         self._update_commands(snapshot)
 
     def _set_focus_mode(self, mode: str) -> None:
         overview = self.query_one("#overview", VerticalScroll)
+        review = self.query_one("#review-panel")
+        decide = self.query_one("#decide-bar")
         output = self.query_one(EngineOutput)
         output.display = True
-        output.set_class(mode == "output" or self._output_expanded, "full-canvas")
+        output.set_class(mode == "output", "full-canvas")
+        overview.display = mode != "changes"
         overview.set_class(mode == "output", "compact-summary")
+        overview.set_class(mode == "gate", "gate-summary")
+        review.display = mode in ("gate", "changes")
+        decide.display = mode == "gate" and not self._snapshot_now().process_live
         if mode == "output":
-            overview.display = True
-            output.set_state(self._snapshot_now().status, True)
-        elif self._output_expanded:
-            overview.display = False
             output.set_state(self._snapshot_now().status, True)
         else:
-            overview.display = True
-            output.set_state(self._snapshot_now().status, False)
+            output.set_state(self._snapshot_now().status, self._output_expanded)
+
+    def _render_state(self, snapshot, step_label) -> None:
+        self.query_one("#review-status", Static).update("")
+        self.query_one("#view-label", Static).update(Text.assemble(("STATE", f"bold {PAPER}")))
+        self.query_one("#overview-content", Static).update(
+            Text.assemble(
+                (f"{step_label}\n\n", f"bold {PAPER}"),
+                (f"workflow {snapshot.workflow_name or snapshot.workflow_id}\n", FOG),
+                (f"run {snapshot.run_id}\n", COLD),
+                (f"status {snapshot.status}\n", FOG),
+            )
+        )
+
+    def _render_output_mode(self, snapshot, step_label) -> None:
+        self.query_one("#review-status", Static).update("")
+        self.query_one("#view-label", Static).update(Text.assemble(("OUTPUT / RUNNING", f"bold {PAPER}")))
+        phase = "STARTING" if snapshot.status == "initializing" else "RUNNING"
+        attempt = self._attempt(snapshot, self._selected_node_id or snapshot.current_step_id)
+        next_step = self._next_step(snapshot)
+        self.query_one("#overview-content", Static).update(
+            Text.assemble(
+                (f"{phase}\n", FOG),
+                (f"NOW {step_label}  attempt {attempt}  {format_elapsed(snapshot.elapsed_seconds)}\n", f"bold {PAPER}"),
+                (f"NEXT {next_step}\n", FOG),
+            )
+        )
 
     def _step_label(self, snapshot, definition) -> str:
         selected = self._selected_node_id or snapshot.current_step_id
@@ -209,6 +243,7 @@ class CockpitScreen(AdaptiveScreen):
         return node.label if node else "—"
 
     def _render_outcome(self, snapshot) -> None:
+        self.query_one("#review-status", Static).update("")
         outcome = snapshot.outcome
         if outcome.kind is OutcomeKind.SUCCESS:
             marker, tone, heading = "[x]", SIGNAL, "RUN COMPLETE"
@@ -234,21 +269,27 @@ class CockpitScreen(AdaptiveScreen):
         rail = self.query_one(CommandRail)
         if snapshot.terminal:
             rail.set_actions("  enter  close", None)
-        elif snapshot.status == "paused":
-            rail.set_actions("  l  output     x  abort run     ?  help", "x  Abort run")
+        elif snapshot.status == "paused" and not snapshot.process_live:
+            gate = snapshot.gate
+            if gate is not None and gate.structured:
+                digits = " ".join(str(index) for index in range(1, min(9, len(gate.options)) + 1))
+                rail.set_actions(f"  {digits}  decide     c  changes     s  state     x  abort", "x  Abort run")
+            else:
+                rail.set_actions("  c  changes     s  state     x  abort run", "x  Abort run")
         else:
             rail.set_actions("  l  output     x  abort run     ?  help", "x  Abort run")
 
     def action_expand_output(self) -> None:
         self._output_expanded = True
         self._held_mode = "output"
+        self._focus_mode = "output"
         self._set_focus_mode("output")
         self.query_one(EngineOutput).log().scroll_end(animate=False)
 
     def action_collapse_output(self) -> None:
         self._output_expanded = False
         self._held_mode = None
-        self._set_focus_mode(default_focus_mode(self._snapshot_now()))
+        self._update_focus(self._snapshot_now())
 
     def action_tail(self) -> None:
         self.query_one(EngineOutput).log().scroll_end(animate=False)
@@ -262,11 +303,70 @@ class CockpitScreen(AdaptiveScreen):
             self._held_mode = "gate"
             self._update_focus(self._snapshot_now())
 
-    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
-        if event.option_list.id == "runway-graph" and event.option.id is not None:
+    def action_changes(self) -> None:
+        snapshot = self._snapshot_now()
+        if snapshot.status != "paused" and snapshot.review is None:
+            return
+        self._held_mode = "changes"
+        if snapshot.status == "paused":
+            self._reload_review()
+        self._update_focus(snapshot)
+
+    def action_choose(self, index: str | None = None) -> None:
+        snapshot = self._snapshot_now()
+        gate = snapshot.gate
+        if self._focus_mode != "gate" or snapshot.process_live or gate is None or not gate.structured:
+            return
+        if index is not None:
+            try:
+                number = int(index)
+            except (TypeError, ValueError):
+                return
+            if not 1 <= number <= len(gate.options):
+                return
+            self._confirm_choice(gate.options[number - 1])
+            return
+        selected = self.query_one(GateOptions).selected_option()
+        if selected is not None:
+            self._confirm_choice(selected)
+
+    def _confirm_choice(self, choice: str) -> None:
+        gate = self._snapshot_now().gate
+        effect = "The engine resumes and re-executes this gate with your choice."
+        if gate is not None and gate.on_reject and choice.lower() in ("reject", "abort"):
+            effect = f"This gate declares on_reject: {gate.on_reject}. " + effect
+        self.app.push_screen(
+            ConfirmScreen(
+                f"Submit {choice!r}?",
+                effect,
+                confirm_label=choice,
+                note="Persisted engine state stays authoritative after submission.",
+            ),
+            lambda confirmed: self._after_choice(choice, confirmed),
+        )
+
+    def _after_choice(self, choice: str, confirmed: bool | None) -> None:
+        if not confirmed:
+            return
+        try:
+            self.session.decide(choice)
+        except Exception as exc:  # noqa: BLE001 - CLI failures stay diagnostic
+            self._diagnostic = str(exc)
+        self._review_loaded = False
+        self._refresh()
+
+    def on_option_list_option_highlighted(self, event) -> None:
+        if event.option.id is None:
+            return
+        if event.option_list.id == "runway-graph":
             self._selected_node_id = str(event.option.id)
             self.query_one(Runway).selected_node_id = self._selected_node_id
             self._update_focus(self._snapshot_now())
+            event.stop()
+        elif event.option_list.id == "changed-files":
+            self._selected_review_path = str(event.option.id)
+            self._full_file = False
+            self._load_document(self._selected_review_path)
             event.stop()
 
     def action_abort(self) -> None:
@@ -297,8 +397,19 @@ class CockpitScreen(AdaptiveScreen):
         self.action_abort()
 
     def action_acknowledge(self) -> None:
-        if self._snapshot_now().terminal:
+        snapshot = self._snapshot_now()
+        if snapshot.terminal:
             self.app.exit()
+            return
+        if (
+            self._focus_mode == "gate"
+            and not snapshot.process_live
+            and snapshot.gate is not None
+            and snapshot.gate.structured
+        ):
+            selected = self.query_one(GateOptions).selected_option()
+            if selected is not None:
+                self._confirm_choice(selected)
 
     def action_help(self) -> None:
         self.app.push_screen(HelpScreen())

@@ -22,6 +22,13 @@ class RunStateData:
     log_tail: tuple[dict[str, Any], ...] = ()
     complete: bool = False
 
+    def current_result(self) -> dict[str, Any] | None:
+        """The recorded result mapping for the current runtime step, if any."""
+        if not self.current_step_id:
+            return None
+        result = self.step_results.get(self.current_step_id)
+        return result if isinstance(result, dict) else None
+
 
 @dataclass
 class _CacheEntry:

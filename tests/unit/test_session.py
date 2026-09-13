@@ -144,6 +144,90 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(final.outcome.kind.value, "failure")
         self.assertEqual(self.supervisor.abort_calls, 1)
 
+    def _paused_gate(self, session, run_id, output=None):
+        write_run(
+            self.root,
+            run_id,
+            status="paused",
+            current_step_id="review",
+            step_results={
+                "review": {
+                    "type": "gate",
+                    "output": output
+                    or {"message": "Review it", "options": ["approve", "reject"], "on_reject": "retry"},
+                }
+            },
+        )
+        self.supervisor.finish(exit_code=0)
+        return session.snapshot()
+
+    def test_decide_builds_structured_resume_argv(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        final = self._paused_gate(session, snapshot.run_id)
+        self.assertTrue(final.gate.structured)
+        session.decide("reject")
+        run_id, argv = self.supervisor.resume_calls[-1]
+        self.assertEqual(run_id, snapshot.run_id)
+        self.assertEqual(argv[1:4], ["workflow", "resume", snapshot.run_id])
+        self.assertIn("spec=reject", argv)
+        self.assertIn("--json", argv)
+
+    def test_decide_rejects_unknown_option(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        self._paused_gate(session, snapshot.run_id)
+        with self.assertRaises(SessionError):
+            session.decide("maybe")
+
+    def test_decide_rejects_while_process_live(self):
+        session = self.make_session()
+        session.select("demo")
+        session.start({"spec": "search"})
+        with self.assertRaises(SessionError):
+            session.decide("approve")
+
+    def test_decide_rejects_malformed_gate(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        self._paused_gate(session, snapshot.run_id, output={"message": "Review"})
+        with self.assertRaises(SessionError):
+            session.decide("approve")
+
+    def test_decide_rejects_after_abort(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        self._paused_gate(session, snapshot.run_id)
+        session.abort()
+        with self.assertRaisesRegex(SessionError, "aborted"):
+            session.decide("approve")
+
+    def test_failed_resume_keeps_paused_gate_and_reports_diagnostic(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        self._paused_gate(session, snapshot.run_id)
+        session.decide("approve")
+        self.supervisor.finish(exit_code=3)
+        final = session.snapshot()
+        self.assertEqual(final.status, "paused")
+        self.assertIsNotNone(final.gate)
+        self.assertIn("exited with code 3", final.diagnostic)
+
+    def test_refresh_review_caches_and_increments_revision(self):
+        session = self.make_session()
+        session.select("demo")
+        session.start({"spec": "search"})
+        first = session.refresh_review()
+        second = session.refresh_review()
+        self.assertEqual(first.revision, 0)
+        self.assertEqual(second.revision, 1)
+        self.assertIs(session.snapshot().review, second)
+
     def test_branch_refreshes_without_changing_baseline(self):
         git = FakeGit(branch_value="main")
         session = self.make_session(git=git)

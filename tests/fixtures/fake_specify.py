@@ -32,6 +32,27 @@ def main() -> int:
     if args[:3] == ["workflow", "run", "--help"]:
         print("Usage: run [OPTIONS] --input -i --json")
         return 0
+    if args[:2] == ["workflow", "resume"]:
+        run_id = args[2] if len(args) > 2 else os.environ.get("SPECKIT_WORKFLOW_RUN_ID", "unknown")
+        run_dir = os.path.join(os.getcwd(), ".specify", "workflows", "runs", run_id)
+        os.makedirs(run_dir, exist_ok=True)
+        decision = None
+        if "-i" in args:
+            index = args.index("-i")
+            if index + 1 < len(args):
+                _, _, decision = args[index + 1].partition("=")
+        state = {
+            "run_id": run_id,
+            "workflow_id": "demo",
+            "status": "completed",
+            "current_step_id": "finish",
+            "resume_decision": decision,
+        }
+        with open(os.path.join(run_dir, "state.json"), "w", encoding="utf-8") as handle:
+            json.dump(state, handle)
+        sys.stdout.write("resumed\n")
+        sys.stdout.flush()
+        return 0
     if args[:2] == ["workflow", "run"]:
         run_id = os.environ.get("SPECKIT_WORKFLOW_RUN_ID", "unknown")
         run_dir = os.path.join(os.getcwd(), ".specify", "workflows", "runs", run_id)

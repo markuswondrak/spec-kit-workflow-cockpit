@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import secrets
+import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from ..bootstrap.compatibility import CompatibilityResult
-from ..engine.supervisor import EngineSupervisor, build_run_argv
+from ..engine.supervisor import EngineSupervisor, SupervisorError, build_resume_argv, build_run_argv
 from ..services.definition import (
     WorkflowDefinition,
     WorkflowDefinitionResolver,
@@ -21,12 +23,13 @@ from ..services.definition import (
     validate_inputs,
 )
 from ..services.git import GitService
-from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser
+from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser, resolve_declared_id
 from ..services.log_aggregator import RunLogAggregator
 from ..services.projection import GraphProjector
 from ..services.registry import WorkflowEntry, WorkflowRegistry
+from ..services.review import ChangedFile, ChangeKind, ReviewDocument, ReviewSnapshot
 from ..services.run_state import RunStateReader
-from ..services.snapshot import Outcome, OutcomeKind, RunSnapshot
+from ..services.snapshot import GateSnapshot, Outcome, OutcomeKind, RunSnapshot, extract_gate
 
 
 class SessionError(Exception):
@@ -73,6 +76,10 @@ class CockpitSession:
         self._graph: ControlFlowGraph | None = None
         self._projector = GraphProjector()
         self._log_aggregator: RunLogAggregator | None = None
+        self._review: ReviewSnapshot | None = None
+        self._review_lock = threading.Lock()
+        self._reviewing = False
+        self._diagnostic = ""
 
     @property
     def run_id(self) -> str | None:
@@ -128,6 +135,86 @@ class CockpitSession:
             raise SessionError("No active run to abort.")
         self._supervisor.abort()
         return self.snapshot()
+
+    def _declared_node(self, runtime_id: str | None):
+        if self._graph is None or not runtime_id:
+            return None
+        declared_id = resolve_declared_id(runtime_id, self._graph.declared_ids)
+        return self._graph.by_id.get(declared_id) if declared_id else None
+
+    def current_gate(self) -> GateSnapshot | None:
+        """The paused declared gate from the latest persisted state, if any."""
+        if not self._started or self._reader is None:
+            return None
+        state = self._reader.read()
+        node = self._declared_node(state.current_step_id if state else None)
+        return extract_gate(state, node)
+
+    def decide(self, choice: str) -> RunSnapshot:
+        """Submit one confirmed declared gate option via a structured resume."""
+        if not self._started:
+            raise SessionError("No active run to decide.")
+        if self._supervisor.abort_requested:
+            raise SessionError("This run was aborted and cannot resume in this session.")
+        if self._supervisor.condition().live:
+            raise SessionError("The engine is still running; wait for the gate to pause.")
+        gate = self.current_gate()
+        if gate is None or not gate.structured:
+            raise SessionError("The run is not paused at a structured gate.")
+        if choice not in gate.options:
+            raise SessionError(f"{choice!r} is not one of the declared gate options.")
+        argv = build_resume_argv(
+            self.compatibility.executable,
+            self.run_id or "",
+            gate.verdict_input or "",
+            choice,
+        )
+        try:
+            self._supervisor.resume(self.run_id or "", argv)
+        except SupervisorError as exc:
+            self._diagnostic = str(exc)
+            raise SessionError(str(exc)) from exc
+        self._diagnostic = ""
+        self._ended_at = None
+        return self.snapshot()
+
+    def refresh_review(self) -> ReviewSnapshot:
+        """Reload Worktree Changes; keep the last usable set on failure."""
+        baseline = self._baseline
+        self._reviewing = True
+        try:
+            snapshot = self.git.worktree_changes(baseline)
+        except Exception as exc:  # noqa: BLE001 - any Git failure is surfaced, not fatal
+            snapshot = ReviewSnapshot(baseline=baseline, status="error", error=str(exc))
+        finally:
+            self._reviewing = False
+        with self._review_lock:
+            previous = self._review
+            if snapshot.status == "error" and previous is not None:
+                snapshot = replace(previous, status="error", error=snapshot.error)
+            elif previous is not None:
+                snapshot = replace(snapshot, revision=previous.revision + 1)
+            self._review = snapshot
+        return snapshot
+
+    @property
+    def review(self) -> ReviewSnapshot | None:
+        return self._review
+
+    def resolve_path(self, path: str | None) -> Path | None:
+        """Resolve a worktree-relative path that stays inside the project."""
+        if not path:
+            return None
+        return self.git.resolve_path(path)
+
+    def review_document(self, path: str, view: str = "diff", *, full: bool = False) -> ReviewDocument:
+        if self._review is not None:
+            changed = next((item for item in self._review.files if item.path == path), None)
+        else:
+            changed = None
+        if changed is None:
+            changed = ChangedFile(path=path, kind=ChangeKind.MODIFIED)
+        return self.git.document(changed, view, full=full, baseline=self._baseline)
 
     def status(self) -> str:
         if not self._started:
@@ -212,11 +299,27 @@ class CockpitSession:
         persisted = state.status if state else "initializing"
         if self._supervisor.abort_requested:
             status = "aborting" if not condition.reaped else "aborted"
+        elif condition.live and persisted == "paused":
+            # A structured resume has started but the engine has not replaced
+            # the previous paused state file yet.
+            status = "running"
         else:
             status = persisted
         outcome = self._outcome(condition.reaped)
         if outcome is not None:
             status = outcome.kind.value
+
+        if (
+            condition.reaped
+            and self._supervisor.last_reaped_command == "resume"
+            and condition.exit_code not in (None, 0)
+            and persisted == "paused"
+        ):
+            self._diagnostic = (
+                f"Structured resume exited with code {condition.exit_code}; the persisted gate remains paused."
+            )
+        elif persisted != "paused":
+            self._diagnostic = ""
 
         elapsed = 0.0
         if self._supervisor.started_at is not None:
@@ -231,6 +334,8 @@ class CockpitSession:
         projection = (
             self._projector.project(self._graph, state, timings, lifecycle_status=status) if self._graph else None
         )
+        node = self._declared_node(state.current_step_id if state else None)
+        gate = extract_gate(state, node)
         return RunSnapshot(
             run_id=run_id,
             workflow_id=self._definition.id if self._definition else "",
@@ -249,6 +354,10 @@ class CockpitSession:
             outcome=outcome,
             inputs=inputs_tuple,
             graph_projection=projection,
+            gate=gate,
+            review=self._review,
+            reviewing=self._reviewing,
+            diagnostic=self._diagnostic,
         )
 
     def close(self) -> None:

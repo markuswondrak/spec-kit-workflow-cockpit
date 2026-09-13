@@ -19,6 +19,8 @@ class GraphNode:
     order: int
     gate: bool = False
     options: tuple[str, ...] = ()
+    verdict_input: str | None = None
+    on_reject: str | None = None
     max_iterations: int | None = None
     is_template: bool = False
 
@@ -109,6 +111,10 @@ class WorkflowDefinitionParser:
                         order=len(nodes),
                         gate=step_type == "gate",
                         options=tuple(str(item) for item in options) if isinstance(options, list) else (),
+                        verdict_input=(
+                            str(raw["verdict_input"]) if raw.get("verdict_input") else None
+                        ),
+                        on_reject=(str(raw["on_reject"]) if raw.get("on_reject") else None),
                         max_iterations=max_iterations if isinstance(max_iterations, int) else None,
                         is_template=template,
                     )

@@ -73,6 +73,31 @@ class RealEngineTests(unittest.TestCase):
         wf_dir.mkdir(parents=True, exist_ok=True)
         (wf_dir / "workflow.yml").write_text(yaml.safe_dump(_workflow(steps)), encoding="utf-8")
 
+    def _install_gate(self, on_reject="retry"):
+        wf_dir = self.root / ".specify" / "workflows" / "demo"
+        wf_dir.mkdir(parents=True, exist_ok=True)
+        definition = {
+            "schema_version": "1.0",
+            "workflow": {"id": "demo", "name": "Demo", "version": "1.0.0", "description": "demo"},
+            "inputs": {
+                "spec": {"type": "string", "required": True},
+                "decision": {"type": "string", "default": ""},
+            },
+            "steps": [
+                {"id": "prep", "type": "shell", "run": "echo prep"},
+                {
+                    "id": "review",
+                    "type": "gate",
+                    "message": "Approve?",
+                    "options": ["approve", "reject"],
+                    "verdict_input": "decision",
+                    "on_reject": on_reject,
+                },
+                {"id": "finish", "type": "shell", "run": "echo finish"},
+            ],
+        }
+        (wf_dir / "workflow.yml").write_text(yaml.safe_dump(definition), encoding="utf-8")
+
     def _session(self):
         self.session = CockpitSession(
             self.root,
@@ -84,13 +109,23 @@ class RealEngineTests(unittest.TestCase):
         self.session.select("demo")
         return self.session
 
-    def _until_terminal(self, session, timeout=30.0):
+    def _until(self, session, predicate, timeout=30.0):
         deadline = time.monotonic() + timeout
         snapshot = session.snapshot()
-        while time.monotonic() < deadline and not snapshot.terminal:
+        while time.monotonic() < deadline and not predicate(snapshot):
             time.sleep(0.1)
             snapshot = session.snapshot()
         return snapshot
+
+    def _until_terminal(self, session, timeout=30.0):
+        return self._until(session, lambda snapshot: snapshot.terminal, timeout)
+
+    def _until_paused(self, session, timeout=30.0):
+        return self._until(
+            session,
+            lambda snapshot: snapshot.status == "paused" and not snapshot.process_live,
+            timeout,
+        )
 
     def test_linear_shell_workflow_succeeds(self):
         self._install(
@@ -118,6 +153,47 @@ class RealEngineTests(unittest.TestCase):
         final = self._until_terminal(session, timeout=15.0)
         self.assertEqual(final.outcome.kind.value, "abort")
         self.assertFalse(final.process_live)
+
+    def test_structured_gate_retry_then_approve(self):
+        self._install_gate(on_reject="retry")
+        session = self._session()
+        session.start({"spec": "world"})
+        paused = self._until_paused(session)
+        self.assertIsNotNone(paused.gate)
+        self.assertTrue(paused.gate.structured)
+        self.assertEqual(paused.gate.options, ("approve", "reject"))
+        self.assertEqual(paused.gate.verdict_input, "decision")
+
+        session.decide("reject")
+        retried = self._until_paused(session)
+        self.assertEqual(retried.status, "paused")
+        self.assertIsNotNone(retried.gate)
+        self.assertTrue(retried.gate.structured)
+
+        session.decide("approve")
+        final = self._until_terminal(session)
+        self.assertEqual(final.outcome.kind.value, "success")
+        self.assertEqual(final.engine_status, "completed")
+
+    def test_structured_gate_reject_skip_completes(self):
+        self._install_gate(on_reject="skip")
+        session = self._session()
+        session.start({"spec": "world"})
+        self._until_paused(session)
+        session.decide("reject")
+        final = self._until_terminal(session)
+        self.assertEqual(final.outcome.kind.value, "success")
+        self.assertEqual(final.engine_status, "completed")
+
+    def test_structured_gate_reject_abort(self):
+        self._install_gate(on_reject="abort")
+        session = self._session()
+        session.start({"spec": "world"})
+        self._until_paused(session)
+        session.decide("reject")
+        final = self._until_terminal(session)
+        self.assertIsNotNone(final.outcome)
+        self.assertEqual(final.engine_status, "aborted")
 
 
 if __name__ == "__main__":

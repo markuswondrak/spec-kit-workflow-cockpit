@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | Implemented; live PTY/SIGINT spikes remain per `engine-contract.md` §8 |
-| Story | [S01 - Own one workflow run](S01-owned-run.md) |
+| Story | S01 - Own one workflow run (implemented) |
 | Requirements | FR-1, FR-2 (basic), FR-6 (basic) |
 | Baseline | `PRD.md`, `TUI_DESIGN.md`, `UI_DESIGN.md`, `ARCHITECTURE.md`, `prototype/` |
 | Package | Top-level `workflow_cockpit/` (standalone distribution exposing `workflow-cockpit`) |

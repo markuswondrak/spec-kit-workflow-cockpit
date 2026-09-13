@@ -54,7 +54,14 @@ LINEAR_WORKFLOW = {
     },
     "steps": [
         {"id": "prepare", "command": "demo.prepare"},
-        {"id": "review", "type": "gate", "message": "Review it", "options": ["approve", "reject"]},
+        {
+            "id": "review",
+            "type": "gate",
+            "message": "Review it",
+            "options": ["approve", "reject"],
+            "verdict_input": "spec",
+            "on_reject": "retry",
+        },
         {"id": "finish", "command": "demo.finish"},
     ],
 }
@@ -97,6 +104,7 @@ def write_run(
     error: str | None = None,
     inputs: dict[str, Any] | None = None,
     log_lines: list[dict[str, Any]] | None = None,
+    step_results: dict[str, Any] | None = None,
 ) -> Path:
     run_dir = root / ".specify" / "workflows" / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -106,7 +114,7 @@ def write_run(
         "status": status,
         "current_step_index": 0,
         "current_step_id": current_step_id,
-        "step_results": {},
+        "step_results": step_results or {},
         "error": error,
         "updated_at": "2026-09-13T00:00:00+00:00",
     }
@@ -133,6 +141,7 @@ class FakeGit:
     head_value: str | None = "a" * 40
     branch_value: str | None = "main"
     dirty_value: bool = False
+    review_files: tuple = ()
 
     def head(self):
         return self.head_value
@@ -146,6 +155,17 @@ class FakeGit:
     def is_worktree(self):
         return True
 
+    def worktree_changes(self, baseline):
+        from workflow_cockpit.services.review import ReviewSnapshot
+
+        return ReviewSnapshot(baseline=baseline, files=self.review_files)
+
+    def document(self, changed, view="diff", *, full=False, baseline=None):
+        from workflow_cockpit.services.review import ReviewDocument
+
+        text = "diff --git a/x b/x\n+change" if view == "diff" else "rendered content"
+        return ReviewDocument(path=changed.path, view=view, kind=changed.kind, text=text)
+
 
 class FakeSupervisor:
     """Supervisor double that never spawns a real process."""
@@ -157,9 +177,12 @@ class FakeSupervisor:
         self.partial_line = ""
         self.output_emitted = len(self.output_lines)
         self.exit_code = exit_code
+        self.last_reaped_command: str | None = None
         self.abort_requested = False
         self.abort_calls = 0
         self.started_argv: list[str] | None = None
+        self.resume_calls: list[tuple[str, list[str]]] = []
+        self._active_command: str | None = None
         self._live = live
 
     def start(self, run_id: str, argv, *, env=None) -> None:
@@ -167,6 +190,16 @@ class FakeSupervisor:
         self.started_argv = list(argv)
         self.started_at = 0.0
         self._live = True
+        self._active_command = "run"
+
+    def resume(self, run_id: str, argv, *, env=None) -> None:
+        if self.run_id is None:
+            raise RuntimeError("No run has been started to resume.")
+        self.resume_calls.append((run_id, list(argv)))
+        self.started_argv = list(argv)
+        self._live = True
+        self.last_reaped_command = None
+        self._active_command = "resume"
 
     def condition(self) -> ProcessCondition:
         return ProcessCondition(
@@ -190,6 +223,7 @@ class FakeSupervisor:
     def finish(self, exit_code: int = 0) -> None:
         self.exit_code = exit_code
         self._live = False
+        self.last_reaped_command = self._active_command
 
     def close(self) -> None:
         pass
@@ -230,6 +264,15 @@ class FakeSession:
         self.started_values: dict[str, Any] | None = None
         self.output_lines: list[str] = ["starting demo", "preparing"]
         self.output_emitted: int | None = None
+        self.gate = None
+        self.review = None
+        self.reviewing = False
+        self.process_live_override: bool | None = None
+        self.diagnostic = ""
+        self.decisions: list[str] = []
+        self.refreshed = 0
+        self.editor_launches: list[str] = []
+        self.editor = "/usr/bin/true"
         self._graph = WorkflowDefinitionParser().parse(
             (
                 {"id": "prepare", "command": "demo.prepare"},
@@ -274,6 +317,28 @@ class FakeSession:
         self.status = "aborted"
         return self.snapshot()
 
+    def decide(self, choice):
+        self.decisions.append(choice)
+        if self.gate is not None and not self.gate.malformed:
+            self.status = "running"
+            self.gate = None
+        return self.snapshot()
+
+    def refresh_review(self):
+        self.refreshed += 1
+        return self.review
+
+    def review_document(self, path, view="diff", *, full=False):
+        from workflow_cockpit.services.review import ChangeKind, ReviewDocument
+
+        text = "diff --git a/x b/x\n+change" if view == "diff" else "rendered content"
+        return ReviewDocument(path=path, view=view, kind=ChangeKind.MODIFIED, text=text)
+
+    def resolve_path(self, path):
+        if not path:
+            return None
+        return Path(self.project_root) / path
+
     def snapshot(self) -> RunSnapshot:
         from workflow_cockpit.services.snapshot import Outcome, OutcomeKind
 
@@ -298,9 +363,17 @@ class FakeSession:
             output_emitted=(
                 self.output_emitted if self.output_emitted is not None else len(self.output_lines)
             ),
-            process_live=self.status == "running",
+            process_live=(
+                self.process_live_override
+                if self.process_live_override is not None
+                else self.status == "running"
+            ),
             engine_status=self.status,
             outcome=outcome,
+            gate=self.gate,
+            review=self.review,
+            reviewing=self.reviewing,
+            diagnostic=self.diagnostic,
             graph_projection=GraphProjector().project(
                 self._graph,
                 RunStateData(

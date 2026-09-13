@@ -85,10 +85,24 @@ OptionList > .option-list--option-highlighted { background: $raised; color: $pap
 OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color: $paper; }
 #focus { width: 1fr; }
 #view-tabs { height: 2; border-bottom: solid $rail; padding: 0 2; }
-#view-label { height: 1; }
+#view-label { width: 1fr; height: 1; }
+#review-status { width: auto; height: 1; color: $fog; text-align: right; }
 #overview { height: 1fr; padding: 1 2; }
 #overview.compact-summary { height: 4; padding: 0 2; }
 #overview-content { margin-bottom: 1; }
+#overview.gate-summary { height: auto; max-height: 9; }
+#review-panel { display: none; height: 1fr; }
+#review-index { width: 42; height: 1fr; border-right: solid $rail; }
+#review-filter { border: none; background: $ink; height: 1; padding: 0 1; }
+#changed-files { width: 100%; height: 1fr; padding: 0 1; }
+#review-scroll { width: 1fr; height: 1fr; }
+#review-document { padding: 1 2; }
+#decide-bar { display: none; height: auto; max-height: 10; border-top: solid $rail; padding: 0 2; }
+#decide-label { width: 9; height: 1; color: $fog; }
+#gate-options { width: 1fr; height: auto; max-height: 9; }
+#gate-options > .option-list--option { padding: 0 1; }
+#decide-hint { width: auto; height: 1; color: $fog; text-align: right; padding-right: 1; }
+.compact #review-index { width: 28; }
 #output { height: 5; border-top: solid $rail; background: $ink; }
 #output.expanded { height: 45%; min-height: 6; }
 #output.full-canvas { height: 1fr; }
