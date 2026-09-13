@@ -15,7 +15,7 @@ def gate(**kwargs) -> GateSnapshot:
         "step_id": "review",
         "message": "Approve the plan?",
         "options": ("approve", "reject"),
-        "verdict_input": "spec",
+        "verdict_input": "review_verdict",
         "on_reject": "retry",
     }
     defaults.update(kwargs)

@@ -57,9 +57,15 @@ class DefinitionTests(unittest.TestCase):
     def test_parses_inputs(self):
         definition = self.resolver.resolve("demo")
         names = [spec.name for spec in definition.inputs]
-        self.assertEqual(names, ["spec", "profile", "publish"])
+        self.assertEqual(names, ["spec", "profile", "publish", "review_verdict"])
         self.assertTrue(definition.inputs[0].required)
         self.assertEqual(definition.inputs[1].enum, ("standard", "extended"))
+
+    def test_presented_inputs_hides_verdict_binding(self):
+        definition = self.resolver.resolve("demo")
+        presented = [spec.name for spec in definition.presented_inputs]
+        self.assertEqual(presented, ["spec", "profile", "publish"])
+        self.assertIn("review_verdict", [spec.name for spec in definition.inputs])
 
     def test_overlay_insert_after(self):
         overlay_dir = self.root / ".specify" / "workflows" / "overlays" / "demo"
@@ -153,6 +159,23 @@ class ValidationTests(unittest.TestCase):
     def test_enum_rejected(self):
         _resolved, errors = validate_inputs(self.definition, {"spec": "search", "profile": "nope"})
         self.assertIn("profile", errors)
+
+    def test_verdict_input_is_not_required_at_launch(self):
+        workflow = {
+            "workflow": {"id": "demo", "name": "Demo", "version": "1", "description": "d"},
+            "inputs": {
+                "spec": {"type": "string", "required": True},
+                "verdict": {"type": "string", "required": True},
+            },
+            "steps": [
+                {"id": "g", "type": "gate", "message": "m", "options": ["a"], "verdict_input": "verdict"},
+            ],
+        }
+        write_workflow(self.root, workflow)
+        definition = WorkflowDefinitionResolver(self.root).resolve("demo")
+        resolved, errors = validate_inputs(definition, {"spec": "x"})
+        self.assertEqual(errors, {})
+        self.assertNotIn("verdict", resolved)
 
     def test_inputs_to_argv(self):
         argv = inputs_to_argv({"spec": "a b", "publish": True})

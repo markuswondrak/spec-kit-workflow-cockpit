@@ -174,7 +174,7 @@ class SessionTests(unittest.TestCase):
         run_id, argv = self.supervisor.resume_calls[-1]
         self.assertEqual(run_id, snapshot.run_id)
         self.assertEqual(argv[1:4], ["workflow", "resume", snapshot.run_id])
-        self.assertIn("spec=reject", argv)
+        self.assertIn("review_verdict=reject", argv)
         self.assertIn("--json", argv)
 
     def test_decide_rejects_unknown_option(self):

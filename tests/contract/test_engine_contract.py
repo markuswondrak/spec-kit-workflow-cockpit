@@ -123,7 +123,7 @@ class EngineContractTests(unittest.TestCase):
 
         payload = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual(payload["argv"][:3], ["workflow", "resume", started.run_id])
-        self.assertIn("spec=approve", payload["argv"])
+        self.assertIn("review_verdict=approve", payload["argv"])
         self.assertIn("--json", payload["argv"])
         self.assertEqual(payload["run_id"], started.run_id)
         self.assertEqual(payload["init_dir"], str(self.root))

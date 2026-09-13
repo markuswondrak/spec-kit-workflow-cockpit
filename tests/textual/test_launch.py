@@ -1,6 +1,7 @@
 import unittest
 
 from textual.app import App
+from textual.css.query import NoMatches
 from textual.widgets import Input, OptionList
 
 from tests.support import FakeSession
@@ -78,7 +79,18 @@ class LaunchScreenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertTrue(session.started)
             self.assertEqual(session.started_values.get("spec"), "search")
+            self.assertNotIn("review_verdict", session.started_values)
             self.assertIsInstance(self.app.screen, CockpitScreen)
+
+    async def test_verdict_input_not_shown_in_vars_form(self):
+        session = FakeSession()
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            screen = LaunchScreen(session)
+            self.app.push_screen(screen)
+            await pilot.pause()
+            await screen.configure()
+            with self.assertRaises(NoMatches):
+                screen.query_one("#input-review_verdict")
 
     async def test_dirty_worktree_requires_one_confirmation(self):
         session = FakeSession(dirty=True)

@@ -182,7 +182,7 @@ class LaunchScreen(AdaptiveScreen):
         self.query_one("#workflow-picker").display = not self.configuring
         self.query_one("#launch-detail").display = self.configuring
         self.query_one("#launch-content").set_class(self.configuring, "configuring")
-        await self._build_form(definition.inputs)
+        await self._build_form(definition.presented_inputs)
         self._render_state()
         self._render_commands()
 
@@ -223,7 +223,7 @@ class LaunchScreen(AdaptiveScreen):
         if definition is None:
             return values
         form = self.query_one("#config-form", Vertical)
-        for spec in definition.inputs:
+        for spec in definition.presented_inputs:
             try:
                 widget = form.query_one(f"#input-{spec.name}")
             except NoMatches:
@@ -254,7 +254,7 @@ class LaunchScreen(AdaptiveScreen):
 
     def _first_field_focus(self) -> None:
         form = self.query_one("#config-form", Vertical)
-        for spec in self._definition.inputs if self._definition else ():
+        for spec in self._definition.presented_inputs if self._definition else ():
             try:
                 form.query_one(f"#input-{spec.name}").focus()
                 return

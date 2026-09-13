@@ -52,6 +52,7 @@ LINEAR_WORKFLOW = {
             "enum": ["standard", "extended"],
         },
         "publish": {"type": "boolean", "default": True},
+        "review_verdict": {"type": "string"},
     },
     "steps": [
         {"id": "prepare", "command": "demo.prepare"},
@@ -60,7 +61,7 @@ LINEAR_WORKFLOW = {
             "type": "gate",
             "message": "Review it",
             "options": ["approve", "reject"],
-            "verdict_input": "spec",
+            "verdict_input": "review_verdict",
             "on_reject": "retry",
         },
         {"id": "finish", "command": "demo.finish"},
@@ -259,10 +260,17 @@ class FakeSession:
                     enum=("standard", "extended"),
                 ),
                 InputSpec(name="publish", type="boolean", has_default=True, default=True),
+                InputSpec(name="review_verdict", type="string"),
             ),
             steps=(
                 StepSpec(id="prepare", label="prepare"),
-                StepSpec(id="review", label="review", gate=True, options=("approve", "reject")),
+                StepSpec(
+                    id="review",
+                    label="review",
+                    gate=True,
+                    options=("approve", "reject"),
+                    verdict_input="review_verdict",
+                ),
                 StepSpec(id="finish", label="finish"),
             ),
         )

@@ -25,6 +25,10 @@ inputs:
     type: string
     default: "auto"
     prompt: "Integration to use ('auto' uses the project's initialized integration)"
+  review_spec_verdict:
+    type: string
+  review_plan_verdict:
+    type: string
 
 steps:
   - id: specify
@@ -37,6 +41,7 @@ steps:
     type: gate
     message: "Review the generated spec before planning."
     options: [approve, reject]
+    verdict_input: review_spec_verdict
     on_reject: abort
 
   - id: plan
@@ -49,6 +54,7 @@ steps:
     type: gate
     message: "Review the plan before generating tasks."
     options: [approve, reject]
+    verdict_input: review_plan_verdict
     on_reject: abort
 
   - id: tasks

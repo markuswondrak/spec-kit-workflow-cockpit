@@ -57,6 +57,17 @@ class WorkflowDefinition:
     raw: dict[str, Any] | None = None
     effective_steps: tuple[dict[str, Any], ...] = ()
 
+    @property
+    def presented_inputs(self) -> tuple[InputSpec, ...]:
+        """User-configurable inputs, excluding gate verdict bindings.
+
+        A ``verdict_input`` names an input the engine owns as a gate's decision
+        channel, so it is never offered as a launch-time variable.
+        """
+        hidden = {step.verdict_input for step in self.steps if step.verdict_input}
+        hidden |= verdict_input_names(self.effective_steps)
+        return tuple(spec for spec in self.inputs if spec.name not in hidden)
+
 
 @dataclass(frozen=True)
 class OverlayEdit:
@@ -138,6 +149,18 @@ def _iter_step_dicts(steps: list[Any]):
             for case_steps in cases.values():
                 if isinstance(case_steps, list):
                     yield from _iter_step_dicts(case_steps)
+
+
+def verdict_input_names(steps: Any) -> set[str]:
+    """Names bound as a gate ``verdict_input`` anywhere in the step tree."""
+    names: set[str] = set()
+    if not isinstance(steps, (list, tuple)):
+        return names
+    for step in _iter_step_dicts(list(steps)):
+        name = step.get("verdict_input")
+        if isinstance(name, str) and name:
+            names.add(name)
+    return names
 
 
 def _all_step_ids(steps: list[Any]) -> set[str]:
@@ -407,7 +430,7 @@ def validate_inputs(definition: WorkflowDefinition, provided: dict[str, Any]) ->
     """Return (resolved_values, field_errors) for a schema-driven form."""
     resolved: dict[str, Any] = {}
     errors: dict[str, str] = {}
-    for spec in definition.inputs:
+    for spec in definition.presented_inputs:
         raw = provided.get(spec.name)
         blank = raw is None or (isinstance(raw, str) and raw.strip() == "")
         if not blank:
