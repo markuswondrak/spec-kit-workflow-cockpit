@@ -136,10 +136,10 @@ class EngineOutput(Vertical):
         with Horizontal(id="output-heading"):
             yield Static(id="output-title")
             yield LoadingIndicator(id="activity")
-            yield Static("[e] collapse  [l] tail  [end] tail", id="output-hint")
+            yield Static(id="output-hint")
         yield RichLog(id="engine", highlight=False, markup=False, wrap=True, max_lines=2000)
 
-    def set_state(self, status: str, expanded: bool) -> None:
+    def set_state(self, status: str, expanded: bool, full: bool = False) -> None:
         if status == "running" or status == "initializing":
             label, tone = "LIVE [>]", SIGNAL
         elif status == "paused":
@@ -150,6 +150,18 @@ class EngineOutput(Vertical):
         active = status in ("running", "initializing", "aborting")
         self.query_one("#activity", LoadingIndicator).display = active
         self.set_class(expanded, "expanded")
+        self.set_class(full, "full-canvas")
+        self.query_one("#output-hint", Static).update(_text((self._hint(status, expanded, full), FOG)))
+
+    @staticmethod
+    def _hint(status: str, expanded: bool, full: bool) -> str:
+        if full:
+            if status in ("running", "initializing", "aborting"):
+                return "[end] tail"
+            return "[l] close  [end] tail"
+        if expanded:
+            return "[l] full  [e] collapse  [end] tail"
+        return "[l] open  [end] tail"
 
     def log(self) -> RichLog:
         return self.query_one("#engine", RichLog)

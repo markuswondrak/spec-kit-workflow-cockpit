@@ -134,7 +134,6 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
 
     def _update_output(self, snapshot) -> None:
         output = self.query_one(EngineOutput)
-        output.set_state(snapshot.status, self._output_expanded)
         emitted = snapshot.output_emitted
         delta = emitted - self._written
         if delta <= 0:
@@ -170,21 +169,19 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         self._update_commands(snapshot)
 
     def _set_focus_mode(self, mode: str) -> None:
+        snapshot = self._snapshot_now()
         overview = self.query_one("#overview", VerticalScroll)
         review = self.query_one("#review-panel")
         decide = self.query_one("#decide-bar")
         output = self.query_one(EngineOutput)
+        full = mode == "output"
         output.display = True
-        output.set_class(mode == "output", "full-canvas")
+        output.set_state(snapshot.status, expanded=full or self._output_expanded, full=full)
         overview.display = mode != "changes"
         overview.set_class(mode == "output", "compact-summary")
         overview.set_class(mode == "gate", "gate-summary")
         review.display = mode in ("gate", "changes")
-        decide.display = mode == "gate" and not self._snapshot_now().process_live
-        if mode == "output":
-            output.set_state(self._snapshot_now().status, True)
-        else:
-            output.set_state(self._snapshot_now().status, self._output_expanded)
+        decide.display = mode == "gate" and not snapshot.process_live
 
     def _render_state(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")
@@ -278,16 +275,28 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
             rail.set_actions("  l  output     x  abort run     ?  help", "x  Abort run")
 
     def action_expand_output(self) -> None:
-        self._output_expanded = True
-        self._held_mode = "output"
-        self._focus_mode = "output"
-        self._set_focus_mode("output")
+        snapshot = self._snapshot_now()
+        at_gate = snapshot.status == "paused" and not snapshot.process_live and snapshot.gate is not None
+        if at_gate:
+            if not self._output_expanded:
+                self._output_expanded = True
+                self._held_mode = "gate"
+            elif self._held_mode != "output":
+                self._held_mode = "output"
+            else:
+                self._output_expanded = False
+                self._held_mode = "gate"
+        else:
+            self._output_expanded = True
+            self._held_mode = "output"
+        self._update_focus(snapshot)
         self.query_one(EngineOutput).log().scroll_end(animate=False)
 
     def action_collapse_output(self) -> None:
+        snapshot = self._snapshot_now()
         self._output_expanded = False
-        self._held_mode = None
-        self._update_focus(self._snapshot_now())
+        self._held_mode = "gate" if snapshot.status == "paused" else None
+        self._update_focus(snapshot)
 
     def action_tail(self) -> None:
         self.query_one(EngineOutput).log().scroll_end(animate=False)

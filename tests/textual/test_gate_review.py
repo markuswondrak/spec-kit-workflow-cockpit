@@ -97,6 +97,44 @@ class GateDecisionTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("missing options", rendered)
             self.assertEqual(self.app.screen.query_one("#gate-options").option_count, 0)
 
+    async def test_output_drawer_splits_at_gate_without_hiding_decisions(self):
+        session = await self._paused()
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            screen = self.app.screen
+            output = screen.query_one("#output")
+            self.assertTrue(screen.query_one("#decide-bar").display)
+
+            screen.action_expand_output()
+            await pilot.pause()
+            self.assertTrue(output.has_class("expanded"))
+            self.assertFalse(output.has_class("full-canvas"))
+            self.assertTrue(screen.query_one("#decide-bar").display)
+            self.assertTrue(screen.query_one("#review-panel").display)
+            self.assertIn("[l] full", str(screen.query_one("#output-hint").render()))
+
+            screen.action_expand_output()
+            await pilot.pause()
+            self.assertTrue(output.has_class("full-canvas"))
+            self.assertFalse(screen.query_one("#decide-bar").display)
+
+            screen.action_expand_output()
+            await pilot.pause()
+            self.assertFalse(output.has_class("expanded"))
+            self.assertFalse(output.has_class("full-canvas"))
+            self.assertTrue(screen.query_one("#decide-bar").display)
+
+    async def test_output_hint_shows_readable_shortcuts(self):
+        session = await self._paused()
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            hint = str(self.app.screen.query_one("#output-hint").render())
+            self.assertIn("[l] open", hint)
+            self.assertIn("[end] tail", hint)
+            self.assertNotIn("tail  tail", hint)
+
     async def test_resume_live_blocks_decisions_and_editor(self):
         session = await self._paused()
         session.process_live_override = True

@@ -26,7 +26,7 @@ class HelpScreen(ModalScreen):
                     "j / k or arrows  Move in the Runway or review list\n",
                     "Tab  Move between Runway and Focus\n",
                     "s  Show state     g  Show paused gate     c  Show Feature Files\n",
-                    "l  Expand Engine Output / return to live tail\n",
+                    "l  Cycle Engine Output at a gate (tail / split / full)\n",
                     "e  Collapse Engine Output        End  Output tail\n",
                     "f  Full file\n",
                     "/  Filter feature paths     o  Open selected file in $EDITOR\n\n",
