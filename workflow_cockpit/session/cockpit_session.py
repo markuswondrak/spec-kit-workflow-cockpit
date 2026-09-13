@@ -22,12 +22,13 @@ from ..services.definition import (
     normalized_signature,
     validate_inputs,
 )
+from ..services.feature_review import FeatureReviewService
 from ..services.git import GitService
 from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser, resolve_declared_id
 from ..services.log_aggregator import RunLogAggregator
 from ..services.projection import GraphProjector
 from ..services.registry import WorkflowEntry, WorkflowRegistry
-from ..services.review import ChangedFile, ChangeKind, ReviewDocument, ReviewSnapshot
+from ..services.review import ReviewDocument, ReviewSnapshot
 from ..services.run_state import RunStateReader
 from ..services.snapshot import GateSnapshot, Outcome, OutcomeKind, RunSnapshot, extract_gate
 
@@ -56,6 +57,7 @@ class CockpitSession:
         registry: WorkflowRegistry | None = None,
         resolver: WorkflowDefinitionResolver | None = None,
         git: GitService | None = None,
+        review_source: FeatureReviewService | None = None,
         supervisor: EngineSupervisor | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -64,11 +66,11 @@ class CockpitSession:
         self.registry = registry or WorkflowRegistry(self.project_root)
         self.resolver = resolver or WorkflowDefinitionResolver(self.project_root)
         self.git = git or GitService(self.project_root)
+        self.review_source = review_source or FeatureReviewService(self.project_root)
         self._clock = clock
         self._supervisor = supervisor or EngineSupervisor(compatibility.executable, self.project_root)
         self._definition: WorkflowDefinition | None = None
         self._reader: RunStateReader | None = None
-        self._baseline: str | None = None
         self._started = False
         self._ended_at: float | None = None
         self._branch: str | None = None
@@ -117,7 +119,6 @@ class CockpitSession:
         if errors:
             raise SessionError("Inputs are not valid: " + "; ".join(errors.values()))
 
-        self._baseline = self.git.head()
         self._branch = self.git.branch()
         run_id = generate_run_id(self.runs_dir)
         argv = build_run_argv(
@@ -179,13 +180,12 @@ class CockpitSession:
         return self.snapshot()
 
     def refresh_review(self) -> ReviewSnapshot:
-        """Reload Worktree Changes; keep the last usable set on failure."""
-        baseline = self._baseline
+        """Reload Feature Files; keep the last usable set on failure."""
         self._reviewing = True
         try:
-            snapshot = self.git.worktree_changes(baseline)
-        except Exception as exc:  # noqa: BLE001 - any Git failure is surfaced, not fatal
-            snapshot = ReviewSnapshot(baseline=baseline, status="error", error=str(exc))
+            snapshot = self.review_source.refresh()
+        except Exception as exc:  # noqa: BLE001 - any read failure is surfaced, not fatal
+            snapshot = ReviewSnapshot(status="error", error=str(exc))
         finally:
             self._reviewing = False
         with self._review_lock:
@@ -202,19 +202,13 @@ class CockpitSession:
         return self._review
 
     def resolve_path(self, path: str | None) -> Path | None:
-        """Resolve a worktree-relative path that stays inside the project."""
+        """Resolve a project-relative path that stays inside the project."""
         if not path:
             return None
-        return self.git.resolve_path(path)
+        return self.review_source.resolve_path(path)
 
-    def review_document(self, path: str, view: str = "diff", *, full: bool = False) -> ReviewDocument:
-        if self._review is not None:
-            changed = next((item for item in self._review.files if item.path == path), None)
-        else:
-            changed = None
-        if changed is None:
-            changed = ChangedFile(path=path, kind=ChangeKind.MODIFIED)
-        return self.git.document(changed, view, full=full, baseline=self._baseline)
+    def review_document(self, path: str, *, full: bool = False) -> ReviewDocument:
+        return self.review_source.document(path, full=full)
 
     def status(self) -> str:
         if not self._started:
@@ -291,7 +285,7 @@ class CockpitSession:
             self._ended_at = self._clock()
         run_id = self._supervisor.run_id or ""
         if not self._started:
-            return RunSnapshot(run_id=run_id, baseline_commit=self._baseline)
+            return RunSnapshot(run_id=run_id)
 
         self._branch = self.git.branch()
 
@@ -343,7 +337,6 @@ class CockpitSession:
             status=status,
             current_step_id=state.current_step_id if state else None,
             branch=self._branch,
-            baseline_commit=self._baseline,
             elapsed_seconds=elapsed,
             output_tail=tuple(self._supervisor.output_lines),
             partial_line=self._supervisor.partial_line,

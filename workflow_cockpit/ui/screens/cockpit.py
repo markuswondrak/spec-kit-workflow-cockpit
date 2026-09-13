@@ -17,9 +17,9 @@ from ..palette import COLD, FAULT, FOG, PAPER, SIGNAL
 from ..view_model import default_focus_mode, format_elapsed
 from ..widgets import (
     TRUNCATION_MARKER,
-    ChangedFileList,
     CommandRail,
     EngineOutput,
+    FeatureFileList,
     GateOptions,
     HeaderRail,
     ResizeGuard,
@@ -41,9 +41,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         Binding("e", "collapse_output", "Collapse", show=False),
         Binding("s", "state", "State"),
         Binding("g", "gate", "Gate", show=False),
-        Binding("c", "changes", "Changes", show=False),
-        Binding("d", "diff_view", show=False),
-        Binding("r", "rendered_view", show=False),
+        Binding("c", "changes", "Files", show=False),
         Binding("o", "open_editor", show=False),
         Binding("f", "full_file", show=False),
         Binding("slash", "filter", show=False),
@@ -67,8 +65,6 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         self._last_default_mode: str | None = None
         self._selected_node_id: str | None = None
         self._selected_review_path: str | None = None
-        self._review_view = "diff"
-        self._view_overridden = False
         self._filter = ""
         self._review_loaded = False
         self._review_tick = 0
@@ -97,7 +93,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
                     with Horizontal(id="review-panel"):
                         with Vertical(id="review-index"):
                             yield Input(placeholder="filter paths", id="review-filter")
-                            yield ChangedFileList(id="changed-files")
+                            yield FeatureFileList(id="feature-files")
                         with VerticalScroll(id="review-scroll"):
                             yield ReviewDocumentView(id="review-document")
                     with Horizontal(id="decide-bar"):

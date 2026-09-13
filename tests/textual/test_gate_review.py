@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from tests.support import FakeSession, StyledApp
-from workflow_cockpit.services.review import ChangedFile, ChangeKind, ReviewDocument, ReviewSnapshot
+from workflow_cockpit.services.review import FeatureFile, ReviewDocument, ReviewSnapshot
 from workflow_cockpit.services.snapshot import GateSnapshot
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
 from workflow_cockpit.ui.screens.confirm import ConfirmScreen
@@ -24,8 +24,8 @@ def gate(**kwargs) -> GateSnapshot:
 
 def review() -> ReviewSnapshot:
     return ReviewSnapshot(
-        baseline="a" * 40,
-        files=(ChangedFile(path="a.txt", kind=ChangeKind.MODIFIED),),
+        feature_dir="specs/demo",
+        files=(FeatureFile(path="a.txt"),),
     )
 
 
@@ -50,7 +50,7 @@ class GateDecisionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(screen.query_one("#gate-options").option_count, 2)
             self.assertTrue(screen.query_one("#review-panel").display)
             self.assertTrue(screen.query_one("#decide-bar").display)
-            self.assertEqual(screen.query_one("#changed-files").option_count, 1)
+            self.assertEqual(screen.query_one("#feature-files").option_count, 1)
 
     async def test_digit_choice_requires_confirmation_then_decides(self):
         session = await self._paused()
@@ -146,25 +146,8 @@ class ReviewSurfaceTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             screen = self.app.screen
             self.assertTrue(screen.query_one("#review-panel").display)
-            self.assertEqual(screen.query_one("#changed-files").option_count, 1)
-            self.assertIn("change", str(screen.query_one("#review-document").render()))
-
-    async def test_diff_and_rendered_views_switch(self):
-        session = FakeSession(status="paused")
-        session.gate = gate()
-        session.review = review()
-        session.project_root = self.root
-        async with self.app.run_test(size=(120, 40)) as pilot:
-            self.app.push_screen(self._screen(session))
-            await pilot.pause()
-            await pilot.press("c")
-            await pilot.pause()
-            await pilot.press("r")
-            await pilot.pause()
-            self.assertIn("rendered content", str(self.app.screen.query_one("#review-document").render()))
-            await pilot.press("d")
-            await pilot.pause()
-            self.assertIn("change", str(self.app.screen.query_one("#review-document").render()))
+            self.assertEqual(screen.query_one("#feature-files").option_count, 1)
+            self.assertIn("file content", str(screen.query_one("#review-document").render()))
 
     async def test_open_editor_launches_with_suspended_app(self):
         session = FakeSession(status="paused")
@@ -214,25 +197,25 @@ class ReviewSurfaceTests(unittest.IsolatedAsyncioTestCase):
     async def test_empty_review_shows_empty_state(self):
         session = FakeSession(status="paused")
         session.gate = gate()
-        session.review = ReviewSnapshot(baseline="a" * 40, files=())
+        session.review = ReviewSnapshot(feature_dir="specs/demo", files=())
         session.project_root = self.root
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(self._screen(session))
             await pilot.pause()
             await pilot.press("c")
             await pilot.pause()
-            self.assertIn("No Worktree Changes", str(self.app.screen.query_one("#review-document").render()))
+            self.assertIn("No feature files", str(self.app.screen.query_one("#review-document").render()))
 
-    async def test_editor_rejects_deleted_document(self):
+    async def test_editor_rejects_binary_document(self):
         session = FakeSession(status="paused")
         session.gate = gate()
         session.review = review()
         session.project_root = self.root
 
-        def deleted_document(path, view="diff", *, full=False):
-            return ReviewDocument(path=path, view=view, kind=ChangeKind.DELETED, text="gone")
+        def binary_document(path, *, full=False):
+            return ReviewDocument(path=path, binary=True, note="Binary file")
 
-        session.review_document = deleted_document
+        session.review_document = binary_document
         async with self.app.run_test(size=(120, 40)) as pilot:
             screen = self._screen(session)
             self.app.push_screen(screen)
@@ -247,10 +230,10 @@ class ReviewSurfaceTests(unittest.IsolatedAsyncioTestCase):
         session = FakeSession(status="paused")
         session.gate = gate()
         session.review = ReviewSnapshot(
-            baseline="a" * 40,
+            feature_dir="specs/demo",
             files=(
-                ChangedFile(path="a.txt", kind=ChangeKind.MODIFIED),
-                ChangedFile(path="b.txt", kind=ChangeKind.ADDED),
+                FeatureFile(path="a.txt"),
+                FeatureFile(path="b.txt"),
             ),
         )
         session.project_root = self.root
@@ -262,16 +245,16 @@ class ReviewSurfaceTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("slash")
             await pilot.press("b")
             await pilot.pause()
-            self.assertEqual(self.app.screen.query_one("#changed-files").option_count, 1)
+            self.assertEqual(self.app.screen.query_one("#feature-files").option_count, 1)
 
     async def test_selection_survives_refresh(self):
         session = FakeSession(status="paused")
         session.gate = gate()
         session.review = ReviewSnapshot(
-            baseline="a" * 40,
+            feature_dir="specs/demo",
             files=(
-                ChangedFile(path="a.txt", kind=ChangeKind.MODIFIED),
-                ChangedFile(path="b.txt", kind=ChangeKind.ADDED),
+                FeatureFile(path="a.txt"),
+                FeatureFile(path="b.txt"),
             ),
         )
         session.project_root = self.root
@@ -281,7 +264,7 @@ class ReviewSurfaceTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("c")
             await pilot.pause()
             screen = self.app.screen
-            screen.query_one("#changed-files").focus()
+            screen.query_one("#feature-files").focus()
             await pilot.press("j")
             await pilot.pause()
             # b.txt is not on disk, so the mock still renders its document.

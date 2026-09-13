@@ -84,13 +84,13 @@ a status dashboard.
 
 ### 6.2 Execute and observe
 
-1. At Start, the Cockpit records the checked-out Git commit as a fixed comparison baseline.
+1. At Start, the Cockpit resolves the feature directory declared in `.specify/feature.json` as
+   the file review root.
 2. One Engine Supervisor starts the workflow in an internally managed PTY and streams readable
    output into a read-only Textual log component.
-3. The Cockpit shows overall status, active branch, baseline commit, workflow graph, current
-   path, node status and attempt count, total elapsed time, and per-step elapsed time.
-4. The UI follows branch changes automatically while retaining the fixed start commit as the
-   Worktree Changes baseline.
+3. The Cockpit shows overall status, active branch, workflow graph, current path, node status
+   and attempt count, total elapsed time, and per-step elapsed time.
+4. The UI follows branch changes automatically.
 5. The Cockpit polls the current run state frequently enough that updates appear within 500 ms.
 6. While automated steps run, Engine Output is the primary workspace. The review surface appears
    as the primary workspace only when the engine pauses at a gate, and the outcome summary only
@@ -104,16 +104,16 @@ a status dashboard.
    the displayed context-file path. Cockpit does not launch or manage that agent.
 3. The context and skill state that Cockpit alone controls the run, current engine status must
    be checked before acting, and repository edits should only be made while paused at a gate.
-4. The Cockpit presents Worktree Changes against the fixed start commit. This intentionally
-   includes changes that existed before Start, because dirty worktrees are allowed.
-5. Created, modified, deleted, and renamed files are included. `.specify/` and Git-ignored
-   files are excluded. No change-source attribution is attempted.
-6. Text files offer both a diff and rendered/current-file view. Binary files show metadata
-   only. Large text files show a bounded preview with an explicit full-open action.
-7. Changes refresh automatically while paused. The user may open an existing selected file in
+4. The Cockpit presents Feature Files: every file under the declared feature directory,
+   including files that existed before Start.
+5. Files are listed by project-relative path. Nothing under the feature directory is excluded
+   and no change-source attribution is attempted.
+6. Text files show their current content. Binary files show metadata only. Large text files show
+   a bounded preview with an explicit full-open action.
+7. Files refresh automatically while paused. The user may open an existing selected file in
    `$EDITOR` by suspending Textual and restoring it when the editor exits. Editor actions are
-   disabled while automated steps run and for deleted files.
-8. A gate with no reviewable changes shows a clear empty state and remains decidable.
+   disabled while automated steps run and for binary files.
+8. A feature directory with no files shows a clear empty state and the gate remains decidable.
 
 ### 6.4 Decide
 
@@ -135,7 +135,7 @@ a status dashboard.
 
 ### 6.5 Finish
 
-- Success: show the final result, graph, timings, and Worktree Changes summary, then close
+- Success: show the final result, graph, timings, and Feature Files summary, then close
   after user acknowledgment.
 - Failure: show the failed node and cause and keep Engine Output visible until acknowledgment.
   The failed run cannot restart or resume in that session; another attempt requires a new
@@ -164,13 +164,13 @@ a status dashboard.
   engine input inaccessible to the user.
 - Render the workflow definition as a graph with active path, runtime node status, and attempt
   count.
-- Show run and step timings, errors, current branch, and fixed baseline commit.
+- Show run and step timings, errors, and current branch.
 - Poll the current run asynchronously at an interval of at most 500 ms.
 
 ### FR-3 - Gate review
 
 - Detect gates and display their message and exact declared options.
-- Show Worktree Changes as diffs and rendered files before a decision.
+- Show the declared feature directory's files before a decision.
 - Refresh review content live and support an optional `$EDITOR` fallback.
 
 ### FR-4 - Cockpit skill and context
@@ -222,11 +222,11 @@ a status dashboard.
 ## 9. Success criteria
 
 - An existing Spec Kit user completes the full single-run loop without another terminal.
-- The user can always identify the active branch, baseline commit, current workflow node,
-  engine status, and available gate action.
+- The user can always identify the active branch, current workflow node, engine status, and
+  available gate action.
 - Every installed compatible workflow can be started, and every declared gate can be
   submitted through the Cockpit.
-- The user can inspect Worktree Changes at gates and use the optional Cockpit skill in an
+- The user can inspect Feature Files at gates and use the optional Cockpit skill in an
   independently started agent.
 - Normal exit and supported termination signals do not leave a Cockpit-owned workflow process
   running unattended.

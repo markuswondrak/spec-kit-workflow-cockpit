@@ -6,14 +6,14 @@ from rich.text import Text
 from textual import work
 from textual.widgets import Input, Static
 
-from ...services.review import ChangeKind, ReviewDocument
+from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
 from ..palette import FAULT, FOG, HOLD, PAPER
-from ..widgets import ChangedFileList, GateOptions, ReviewDocumentView
+from ..widgets import FeatureFileList, GateOptions, ReviewDocumentView
 
 
 class ReviewMixin:
-    """Worktree Changes and structured-gate rendering and actions.
+    """Feature Files and structured-gate rendering and actions.
 
     The host screen owns the composed cockpit widgets, the ``session``, the
     ``_snapshot_now`` accessor, and the selection/focus attributes.
@@ -98,7 +98,7 @@ class ReviewMixin:
         self._render_review_files(snapshot)
 
     def _render_changes(self, snapshot) -> None:
-        self.query_one("#view-label", Static).update(Text.assemble(("WORKTREE CHANGES", f"bold {PAPER}")))
+        self.query_one("#view-label", Static).update(Text.assemble(("FEATURE FILES", f"bold {PAPER}")))
         self._render_review_status(snapshot)
         self._render_review_files(snapshot)
 
@@ -109,8 +109,8 @@ class ReviewMixin:
             text = "refreshing" if self._review_pending else "no review data"
             tone = FOG
         else:
-            baseline = (review.baseline or "start")[:7]
-            text = f"{review.count} file(s) vs {baseline}"
+            where = review.feature_dir or "feature folder"
+            text = f"{review.count} file(s) in {where}"
             tone = FOG
             if review.status == "error":
                 text += "  /  refresh failed"
@@ -129,7 +129,7 @@ class ReviewMixin:
 
     def _render_review_files(self, snapshot) -> None:
         files = self._visible_files(snapshot)
-        file_list = self.query_one(ChangedFileList)
+        file_list = self.query_one(FeatureFileList)
         if not files:
             file_list.update_files(())
             self._selected_review_path = None
@@ -137,10 +137,8 @@ class ReviewMixin:
             if snapshot.review is not None and snapshot.review.status == "error":
                 self.query_one(ReviewDocumentView).show(
                     ReviewDocument(
-                        path="Worktree Changes",
-                        view="review",
-                        kind=ChangeKind.MODIFIED,
-                        error=snapshot.review.error or "Unable to refresh Worktree Changes.",
+                        path="Feature Files",
+                        error=snapshot.review.error or "Unable to refresh Feature Files.",
                     )
                 )
             else:
@@ -161,25 +159,24 @@ class ReviewMixin:
             self._current_document = None
             self.query_one(ReviewDocumentView).show(None)
             return
-        view = self._effective_view(path)
         review = self._snapshot_now().review
         revision = review.revision if review is not None else -1
-        key = (self._snapshot_now().run_id, path, view, self._full_file, revision)
+        key = (self._snapshot_now().run_id, path, self._full_file, revision)
         if key == self._document_key or key == self._document_pending_key:
             return
         self._document_pending_key = key
         self._load_document_worker(*key)
 
     @work(thread=True, group="review-document", exclusive=True)
-    def _load_document_worker(self, run_id: str, path: str, view: str, full: bool, revision: int) -> None:
+    def _load_document_worker(self, run_id: str, path: str, full: bool, revision: int) -> None:
         try:
-            document = self.session.review_document(path, view, full=full)
+            document = self.session.review_document(path, full=full)
         except Exception as exc:
-            document = ReviewDocument(path=path, view=view, kind=ChangeKind.MODIFIED, error=str(exc))
-        self.app.call_from_thread(self._apply_document, run_id, path, view, full, revision, document)
+            document = ReviewDocument(path=path, error=str(exc))
+        self.app.call_from_thread(self._apply_document, run_id, path, full, revision, document)
 
-    def _apply_document(self, run_id: str, path: str, view: str, full: bool, revision: int, document) -> None:
-        key = (run_id, path, view, full, revision)
+    def _apply_document(self, run_id: str, path: str, full: bool, revision: int, document) -> None:
+        key = (run_id, path, full, revision)
         if self._document_pending_key == key:
             self._document_pending_key = None
         snapshot = self._snapshot_now()
@@ -188,7 +185,6 @@ class ReviewMixin:
         if (
             snapshot.run_id != run_id
             or self._selected_review_path != path
-            or self._effective_view(path) != view
             or self._full_file != full
             or current_revision != revision
         ):
@@ -197,31 +193,7 @@ class ReviewMixin:
         self._document_key = key
         self.query_one(ReviewDocumentView).show(document)
 
-    # -- view switching ------------------------------------------------
-
-    def _set_review_view(self, view: str) -> None:
-        if self._focus_mode not in ("changes", "gate"):
-            return
-        self._review_view = view
-        self._view_overridden = True
-        self._full_file = False
-        if self._selected_review_path:
-            self._load_document(self._selected_review_path)
-
-    def _effective_view(self, path: str) -> str:
-        if self._view_overridden:
-            return self._review_view
-        review = self._snapshot_now().review
-        changed = next((item for item in (review.files if review else ()) if item.path == path), None)
-        if changed is not None and changed.kind is ChangeKind.ADDED and path.lower().endswith(".md"):
-            return "rendered"
-        return self._review_view
-
-    def action_diff_view(self) -> None:
-        self._set_review_view("diff")
-
-    def action_rendered_view(self) -> None:
-        self._set_review_view("rendered")
+    # -- view actions --------------------------------------------------
 
     def action_full_file(self) -> None:
         if self._focus_mode not in ("gate", "changes") or not self._selected_review_path:
@@ -270,7 +242,7 @@ class ReviewMixin:
             or self._focus_mode not in ("gate", "changes")
         ):
             return False
-        if document is None or document.kind is ChangeKind.DELETED or document.binary or document.error:
+        if document is None or document.binary or document.error:
             return False
         if not self._editor_env():
             return False

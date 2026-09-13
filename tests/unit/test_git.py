@@ -56,18 +56,6 @@ class GitTests(unittest.TestCase):
         runner = FakeRunner({("rev-parse", "HEAD"): Output("", returncode=128)})
         self.assertIsNone(GitService(self.root, runner=runner).head())
 
-    def test_untracked_discovery_failure_is_an_error(self):
-        baseline = "a" * 40
-        runner = FakeRunner(
-            {
-                ("diff", "--no-ext-diff", "--find-renames", "--name-status", "-z", baseline): Output(),
-                ("ls-files", "--others", "--exclude-standard", "-z"): Output("broken", returncode=2),
-            }
-        )
-        review = GitService(self.root, runner=runner).worktree_changes(baseline)
-        self.assertEqual(review.status, "error")
-        self.assertIn("broken", review.error)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -127,7 +127,6 @@ class RunSnapshot:
     status: str = "initializing"
     current_step_id: str | None = None
     branch: str | None = None
-    baseline_commit: str | None = None
     elapsed_seconds: float = 0.0
     output_tail: tuple[str, ...] = ()
     partial_line: str = ""

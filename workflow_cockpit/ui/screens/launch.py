@@ -281,8 +281,7 @@ class LaunchScreen(AdaptiveScreen):
             self.app.push_screen(
                 ConfirmScreen(
                     "Start on a dirty worktree?",
-                    "The worktree has uncommitted changes. They are allowed and become part of "
-                    "the review baseline.",
+                    "The worktree has uncommitted changes. They are allowed and do not block the run.",
                     confirm_label="Start anyway",
                     note="Start is not blocked. One confirmation only.",
                 ),

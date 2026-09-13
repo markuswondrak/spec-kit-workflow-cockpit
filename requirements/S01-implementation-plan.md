@@ -22,10 +22,10 @@ This plan realizes S01 against the real engine in `../spec-kit`. Product contrac
 - Workflow selection, effective summary and step list after enabled overlays, schema-driven
   input form, and required/type validation.
 - Dirty-worktree warning plus one confirmation; Start is never blocked.
-- Start records `HEAD`, preallocates the run ID, and lets one `EngineSupervisor` own the run
+- Start preallocates the run ID and lets one `EngineSupervisor` own the run
   under an internal output PTY.
 - Read-only, bounded, normalized live Engine Output.
-- Basic run state, current step, branch, baseline commit, elapsed time (<= 500 ms).
+- Basic run state, current step, branch, elapsed time (<= 500 ms).
 - Confirmed Abort: signal a verified live owned group only; if a paused command has exited,
   record the Cockpit-owned abort without signaling a stale process-group ID.
 - Success and failure outcomes that require acknowledgment to exit; a confirmed Abort shows a
@@ -35,7 +35,7 @@ This plan realizes S01 against the real engine in `../spec-kit`. Product contrac
 ### Out (later stories)
 
 - Full control-flow Runway, branches, loops, attempts (S02).
-- Worktree Changes, diff/rendered views, `$EDITOR` (S03).
+- Feature Files, current-content view, `$EDITOR` (S03).
 - Structured or interactive gate decisions (S03/S04).
 - Context index and Cockpit skill (S05).
 - Catchable-signal cleanup, stale-read recovery, and full resilience hardening (S06).
@@ -189,12 +189,12 @@ design reference and is not imported by production code.
 - `RunStateReader`: read `state.json`/`inputs.json`/`log.jsonl`; skip unchanged (mtime/size);
   include inode/replacement identity; tolerate incomplete directories, independently replaced
   state/inputs, and a partial final log record; treat `state.json` as authoritative.
-- `GitService`: current `HEAD`/branch, dirty detection. Diff/classification deferred to S03.
+- `GitService`: current `HEAD`/branch, dirty detection. File review deferred to S03.
 - `RunSnapshot`: immutable status, active step (or last step for terminal states), branch,
-  baseline, elapsed, output tail, process condition, and outcome.
+  elapsed, output tail, process condition, and outcome.
 - Tests (unit): malformed/partial JSON, missing and same-size replaced files, input typing and
   argv construction, base-plus-overlay resolution, disabled/corrupt registry entries, tracked/
-  staged/untracked dirt, detached HEAD, and branch changes that do not alter the baseline.
+  staged/untracked dirt, detached HEAD, and branch changes across refreshes.
 - Contract tests cover delayed/incomplete persisted `workflow.yml`, normalized semantic equality,
   and a fatal mismatch between the launch model and persisted effective definition.
 
@@ -238,12 +238,12 @@ design reference and is not imported by production code.
 
 - `LaunchScreen`: workflow list, brief, in-place configure; typed inputs; required-field inline
   validation; dirty-warning strip plus one confirmation; singular Start in `signal`.
-- `CockpitScreen`: HeaderRail (state word+symbol, branch, baseline, elapsed, workflow, run ID);
+- `CockpitScreen`: HeaderRail (state word+symbol, branch, elapsed, workflow, run ID);
   low-fidelity StepRail placeholder (S02 replaces it); Focus overview; read-only bounded
   `RichLog` EngineOutput with auto-scroll pause on scroll-up and `l`/`e`/`End`; CommandRail with
   confirmed Abort (`q`/`x`); HelpScreen; resize guard.
 - Minimal paused surface in S01: paused step/message as read-only text and Abort only. No disabled
-  decision controls, CONTEXT path, or Worktree Changes; those arrive in S03/S05.
+  decision controls, CONTEXT path, or feature review; those arrive in S03/S05.
 - Outcome surfaces: success and failure require acknowledgment (`enter`) to exit; a
   Cockpit-owned abort closes the app after a blocking Aborting sheet and process cleanup.
 - `CockpitViewModel`: map `RunSnapshot` to widgets, preserving focus, selection, and scroll.
@@ -278,20 +278,19 @@ design reference and is not imported by production code.
 | Start records HEAD, exact run ID, one supervisor | 3/4 - EngineSupervisor, CockpitSession |
 | One process group, output-producing commands under internal PTY | 3 - PtySession, EngineSupervisor |
 | Read-only bounded normalized Engine Output | 3/5 - OutputNormalizer, EngineOutput |
-| State/step/branch/baseline/elapsed within 500 ms | 2/4/5 - RunStateReader, PollingLoop, HeaderRail |
+| State/step/branch/elapsed within 500 ms | 2/4/5 - RunStateReader, PollingLoop, HeaderRail |
 | Confirmed Abort + bounded cleanup/no stale signal | 3/4 - EngineSupervisor abort paths |
 | Success/failure outcomes visible until acknowledgment; Abort closes after cleanup | 5 - outcome surfaces |
 | Unit / Textual / contract / PTY tests | 0-6 |
 
-The test suite must additionally assert: baseline capture occurs after dirty confirmation and
-immediately before spawn; a second Start cannot spawn; ordinary keys never reach child stdin;
-another process creating a run cannot change Cockpit's owned ID; state, branch, step, and elapsed
-changes appear within 500 ms; success and failure outcomes remain until explicit acknowledgment; and
-a confirmed Abort closes only after the process group is reaped.
+The test suite must additionally assert: a second Start cannot spawn; ordinary keys never reach
+child stdin; another process creating a run cannot change Cockpit's owned ID; state, branch, step,
+and elapsed changes appear within 500 ms; success and failure outcomes remain until explicit
+acknowledgment; and a confirmed Abort closes only after the process group is reaped.
 
 ## 8. Deferred / assumptions
 
-- Decisions and Worktree Changes are intentionally not in S01. S03/S04 add `decide()` and gate
+- Decisions and Feature Files are intentionally not in S01. S03/S04 add `decide()` and gate
   details when behavior exists.
 - S01 resolves overlays for accurate launch steps and inputs; S02 adds complete control-flow
   parsing and projection.

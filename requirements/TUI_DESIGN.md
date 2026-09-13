@@ -19,7 +19,7 @@ worktree. Cockpit is the sole workflow-lifecycle writer.
 terminal
 └─ workflow-cockpit (Textual)
    ├─ workflow graph and status
-   ├─ gate and Worktree Changes review
+   ├─ gate and Feature Files review
    ├─ read-only Engine Output (`RichLog`)
    └─ managed `specify` child process in an internal PTY
 ```
@@ -38,7 +38,7 @@ invoke the dedicated Cockpit skill there.
 5. Show workflow summary, declared steps, current branch/worktree, and schema-driven inputs.
 6. Validate required fields. Treat secret-looking inputs like ordinary engine inputs.
 7. Warn, but allow, when the worktree is dirty.
-8. Record current `HEAD` as the fixed Worktree Changes baseline and issue one explicit Start.
+8. Resolve the declared feature directory as the file review root and issue one explicit Start.
 9. After the run ID exists, write its stable context index and display its path plus Cockpit
    skill usage help.
 
@@ -83,7 +83,7 @@ diagnostic content, not a second state model.
 - Workflow catalog: `.specify/workflows/workflow-registry.json`.
 - Workflow definition: resolved installed workflow file.
 - Branch: Git state in the current worktree.
-- Review content: Git diff/status against the fixed start commit.
+- Review content: files under the declared feature directory.
 - Human-readable output: internal workflow PTY.
 
 A single asynchronous polling loop reads the current run at most every 500 ms and publishes
@@ -104,10 +104,10 @@ or partially written state.
 
 The application keeps these elements available through one adaptive layout:
 
-- workflow/run identity, state, branch, baseline, and elapsed time;
+- workflow/run identity, state, branch, and elapsed time;
 - declared workflow graph with active path and attempt information;
 - current step or gate;
-- Worktree Changes review;
+- Feature Files review;
 - read-only Engine Output;
 - context-index path and current valid actions.
 
@@ -133,29 +133,29 @@ nodes and edges and overlays runtime information:
 The graph parser is derived from the installed workflow definition and does not hardcode a
 particular workflow.
 
-## 7. Worktree Changes and editor
+## 7. Feature Files and editor
 
-At Start, record the current commit SHA. At every gate and final summary, compare the current
-worktree with that same commit, even if the workflow changes branches.
+At Start, resolve the feature directory declared in `.specify/feature.json`. At every gate and
+final summary, list every file under that directory. The feature directory is the product of the
+workflow, so no Git comparison or change attribution is attempted.
 
-This is called **Worktree Changes**, not run artifacts: a dirty worktree is allowed and its
-pre-existing changes are included.
+This is called **Feature Files**, not run artifacts: the whole directory is listed, including
+files that existed before Start.
 
-- Include created, modified, deleted, and renamed tracked or untracked files.
-- Exclude the complete `.specify/` tree and all Git-ignored files.
-- Include changed workflow-definition files without special treatment.
-- Do not attribute changes to a particular source.
-- For text: provide a diff and rendered/current-file view.
-- For binary: provide path, change type, and size only.
+- Include every file under the feature directory, recursively.
+- List project-relative paths, sorted, so the set is stable across refreshes.
+- Make no change-source attribution and compute no diff.
+- For text: show the current file content.
+- For binary: show path and size only.
 - For large text: provide a bounded preview and explicit full-open action.
 - Refresh automatically while paused while preserving selection and scroll when practical.
-- Show a clear empty state when there are no reviewable changes.
+- Show a clear empty state when the feature directory has no files or is not declared.
 - Present review as a Focus mode that is primary while the engine is paused at a gate; it is not
   allocated space during automated steps.
 
-To open `$EDITOR`, Textual suspends its terminal control, opens the selected existing worktree
+To open `$EDITOR`, Textual suspends its terminal control, opens the selected existing feature
 file, and restores/redraws the application when the editor exits. The action is available only
-at a gate and unavailable for deleted files or when `$EDITOR` is unset. Cockpit restores the
+at a gate, for existing non-binary files, and when `$EDITOR` is set. Cockpit restores the
 selected path; exact editor scroll state is editor-owned.
 
 ## 8. Cockpit skill and context index
@@ -163,13 +163,13 @@ selected path; exact editor scroll state is editor-owned.
 After Start returns a run ID, create a stable Markdown context index under
 `.specify/workflows/runs/<run_id>/`. It points to the workflow definition, `state.json`,
 `inputs.json`, `log.jsonl`, relevant CLI status command, worktree, current branch source, and
-baseline commit. The file is an index, not a copied live snapshot.
+the declared feature directory. The file is an index, not a copied live snapshot.
 
 Ship a dedicated Cockpit skill for a coding agent chosen and started by the user. The skill:
 
 - accepts the context-index path displayed by Cockpit;
 - reads authoritative live sources through the paths and commands in that index;
-- explains the workflow, current state, gate, and Worktree Changes when asked;
+- explains the workflow, current state, gate, and Feature Files when asked;
 - states that Cockpit alone starts, resumes, decides, and aborts the run;
 - never invokes workflow lifecycle commands; and
 - checks that the engine is paused at a gate before editing repository files.
@@ -213,7 +213,7 @@ Workflow behavior such as reject -> retry or reject -> skip is preserved.
 ### Success
 
 Show the outcome summary as the default Focus mode with final status, graph, total and step
-timings, and Worktree Changes. Engine Output stays available as a collapsed diagnostic tail.
+timings, and the Feature Files set. Engine Output stays available as a collapsed diagnostic tail.
 Exit the application after acknowledgment.
 
 ### Failure
@@ -232,7 +232,7 @@ No special notifications are emitted for gates or completion.
 
 - Package as a standalone Python distribution exposing `workflow-cockpit`.
 - Use Textual's testing harness for user interactions.
-- Unit-test parsing, graph projection, diff classification, compatibility checks, Engine
+- Unit-test parsing, graph projection, feature-file listing, compatibility checks, Engine
   Supervisor transitions, output normalization, and decision strategy selection.
 - Run subprocess/PTY integration tests against fixture workflows for success, both gate paths,
   branch creation, retry/skip, no-change, no-gate, failure, abort, and termination signals.

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tests.support import (
     FakeGit,
+    FakeReviewService,
     FakeSupervisor,
     compatibility_result,
     write_registry,
@@ -28,12 +29,14 @@ class SessionTests(unittest.TestCase):
 
     def make_session(self, **kwargs):
         git = kwargs.pop("git", FakeGit())
+        review_source = kwargs.pop("review_source", FakeReviewService())
         return CockpitSession(
             self.root,
             compatibility_result(),
             registry=WorkflowRegistry(self.root),
             resolver=WorkflowDefinitionResolver(self.root),
             git=git,
+            review_source=review_source,
             supervisor=self.supervisor,
             clock=lambda: 10.0,
         )
@@ -228,7 +231,7 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(second.revision, 1)
         self.assertIs(session.snapshot().review, second)
 
-    def test_branch_refreshes_without_changing_baseline(self):
+    def test_branch_refreshes_after_start(self):
         git = FakeGit(branch_value="main")
         session = self.make_session(git=git)
         session.select("demo")
@@ -237,7 +240,6 @@ class SessionTests(unittest.TestCase):
         git.branch_value = "feature/runway"
         refreshed = session.snapshot()
         self.assertEqual(refreshed.branch, "feature/runway")
-        self.assertEqual(refreshed.baseline_commit, "a" * 40)
 
 
 if __name__ == "__main__":

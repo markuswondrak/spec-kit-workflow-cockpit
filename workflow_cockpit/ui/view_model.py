@@ -106,7 +106,6 @@ def header_fields(snapshot: RunSnapshot) -> dict[str, str]:
     return {
         "word": word,
         "branch": snapshot.branch or "unknown",
-        "baseline": (snapshot.baseline_commit or "")[:7] or "unknown",
         "elapsed": format_elapsed(snapshot.elapsed_seconds),
         "workflow": snapshot.workflow_name or snapshot.workflow_id or "workflow",
         "run": snapshot.abbreviated_run_id or "—",

@@ -25,7 +25,7 @@ themes the S2-S6 surfaces.
 ## First-release boundary
 
 S1-S6 deliver workflow selection and inputs, owned process lifecycle, integrated output, the
-workflow graph, Worktree Changes, both gate paths, the external-agent context bridge, and robust
+workflow graph, Feature Files, both gate paths, the external-agent context bridge, and robust
 shutdown behavior. S7 is a cross-cutting presentation slice layered over the core loop.
 
 ## Global definition of done

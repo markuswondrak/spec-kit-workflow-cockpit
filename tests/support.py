@@ -142,7 +142,6 @@ class FakeGit:
     head_value: str | None = "a" * 40
     branch_value: str | None = "main"
     dirty_value: bool = False
-    review_files: tuple = ()
 
     def head(self):
         return self.head_value
@@ -156,16 +155,24 @@ class FakeGit:
     def is_worktree(self):
         return True
 
-    def worktree_changes(self, baseline):
+
+class FakeReviewService:
+    """Feature Files double that never touches disk."""
+
+    def refresh(self):
         from workflow_cockpit.services.review import ReviewSnapshot
 
-        return ReviewSnapshot(baseline=baseline, files=self.review_files)
+        return ReviewSnapshot(feature_dir="specs/demo", status="ready")
 
-    def document(self, changed, view="diff", *, full=False, baseline=None):
+    def document(self, path, *, full=False):
         from workflow_cockpit.services.review import ReviewDocument
 
-        text = "diff --git a/x b/x\n+change" if view == "diff" else "rendered content"
-        return ReviewDocument(path=changed.path, view=view, kind=changed.kind, text=text)
+        return ReviewDocument(path=path, text="file content")
+
+    def resolve_path(self, path):
+        if not path:
+            return None
+        return Path("/tmp/demo-project") / path
 
 
 class FakeSupervisor:
@@ -332,11 +339,10 @@ class FakeSession:
         self.refreshed += 1
         return self.review
 
-    def review_document(self, path, view="diff", *, full=False):
-        from workflow_cockpit.services.review import ChangeKind, ReviewDocument
+    def review_document(self, path, *, full=False):
+        from workflow_cockpit.services.review import ReviewDocument
 
-        text = "diff --git a/x b/x\n+change" if view == "diff" else "rendered content"
-        return ReviewDocument(path=path, view=view, kind=ChangeKind.MODIFIED, text=text)
+        return ReviewDocument(path=path, text="file content")
 
     def resolve_path(self, path):
         if not path:
@@ -361,7 +367,6 @@ class FakeSession:
             status=self.status,
             current_step_id="prepare",
             branch="main",
-            baseline_commit="a" * 40,
             elapsed_seconds=12,
             output_tail=tuple(self.output_lines),
             output_emitted=(

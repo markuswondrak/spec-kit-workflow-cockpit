@@ -9,9 +9,17 @@
 | Baseline | `PRD.md`, `TUI_DESIGN.md`, `UI_DESIGN.md`, `ARCHITECTURE.md`, `engine-contract.md` |
 | Package | Top-level `workflow_cockpit/` |
 
+> **Superseding note.** The fixed-baseline Git Worktree Changes described below was replaced by
+> **Feature Files**: `FeatureReviewService` reads the feature directory declared in
+> `.specify/feature.json`, lists its files recursively, and shows current content with no diff and
+> no start commit. Git is now only read for branch and dirty state. Sections below retain the
+> original S03 reasoning; the review-specific clauses (locked decisions 6-8, scope, tests, and
+> acceptance) are superseded by `PRD.md` section 6.3 and `TUI_DESIGN.md` section 7.
+
+
 This plan sequences S03 only. The persisted engine state remains authoritative; Cockpit reads it,
-compares the current worktree with the fixed S01 baseline, and sends a structured `resume` command
-only after the user confirms a declared gate option. Interactive PTY input remains S04 work.
+lists the declared feature directory's files, and sends a structured `resume` command only after
+the user confirms a declared gate option. Interactive PTY input remains S04 work.
 
 ## 1. Scope
 
@@ -21,16 +29,15 @@ only after the user confirms a declared gate option. Interactive PTY input remai
   message, and exact resolved option order from the recorded gate result.
 - Enrich the static graph's gate metadata with `verdict_input` and `on_reject` solely to select the
   structured strategy and explain a declared rejection effect.
-- Worktree Changes against the fixed Start commit, including branch commits and dirty changes that
-  existed before Start; exclude `.specify/` and Git-ignored files.
-- File classification for created, modified, deleted, renamed, and conflicted files; text diff and
-  rendered/current content; binary metadata; bounded large-text preview; clear empty state.
-- Paused-gate review as the default Focus mode, with State, Changes, Gate, and collapsible Engine
+- Feature Files: every file under the feature directory declared in `.specify/feature.json`,
+  listed by project-relative path with a clear empty/error state.
+- Current text content for listed files; binary metadata; bounded large-text preview.
+- Paused-gate review as the default Focus mode, with State, Files, Gate, and collapsible Engine
   Output reachable without abandoning the review.
 - Existing selected-file launch through `$EDITOR`, with Textual suspended and restored.
 - Confirmed structured decisions for gates declaring `verdict_input`, using an internally supervised
   `specify workflow resume <run_id> -i <name>=<choice> --json` process.
-- Unit, Textual, Git integration, fake-executable contract, and pinned-real-engine coverage for the
+- Unit, Textual, file-listing, fake-executable contract, and pinned-real-engine coverage for the
   structured path.
 
 ### Out
@@ -85,22 +92,20 @@ when the pinned executable is unavailable.
    no choices. After it reaps, polling reads the state again: running, terminal, a retry pause, or an
    unchanged pause are all rendered as persisted. A launch/CLI failure is shown as diagnostic feedback;
    it does not overwrite persisted state or synthesize a terminal outcome.
-6. **Worktree comparison is baseline-to-worktree.** `GitService` uses `git diff --no-ext-diff
-   --find-renames --name-status -z <baseline>` for tracked changes, combines it with
-   `git ls-files --others --exclude-standard -z` for untracked files, and deduplicates by final path.
-   This includes commits on a branch created after Start as well as index and working-tree changes.
-   Every path below `.specify/` is discarded before presentation; `--exclude-standard` omits ignored
-   untracked files. All Git path arguments use `--` and NUL-delimited parsing.
-7. **Review content is bounded and non-blocking.** `GitService` returns immutable file summaries and
-   lazily obtains content on selection. It identifies binary content from Git's binary diff signal or
-   a NUL byte in a bounded sample. Diff and rendered text use byte limits; large content reports its
-   limit and requires an explicit full-load action. Git subprocesses, diffs, and file reads run in a
-   Textual thread worker; a last completed immutable review remains visible during refresh.
+6. **Review source is the declared feature directory.** `FeatureReviewService` resolves
+   `feature_directory` from `.specify/feature.json`, lists every file beneath it recursively as
+   project-relative sorted paths, and reports an error when the declaration is missing. There is
+   no Git diff, no start commit, and no change classification.
+7. **Review content is bounded and non-blocking.** `FeatureReviewService` returns immutable file
+   summaries and lazily obtains content on selection. It identifies binary content from a NUL byte
+   in a bounded sample. Text uses byte limits; large content reports its limit and requires an
+   explicit full-load action. File listing, reads, and decoding run in a Textual thread worker; a
+   last completed immutable review remains visible during refresh.
 8. **Review refresh preservation.** `CockpitSession` owns the latest immutable review data, and
    `CockpitScreen` requests a refresh at its existing paused polling cadence through an exclusive worker.
    Snapshot publication incorporates the last completed review result. The screen retains selected path,
-   filter, view (`diff` or `rendered`), and document scroll when the path still exists; otherwise it
-   selects the first available file or the empty state.
+   filter, and document scroll when the path still exists; otherwise it selects the first available file
+   or the empty state.
 9. **Editor is controlled but not a lifecycle writer.** `o` is available only for an existing selected
    file at a paused gate when `$EDITOR` is non-empty. Parse it with `shlex.split`, append the validated
    project-relative path, and run it without a shell inside Textual's suspend/restore context. Deleted
@@ -117,20 +122,21 @@ workflow_cockpit/
   engine/
     supervisor.py            sequential structured-resume supervision and resume argv
   services/
-    git.py                   Worktree Changes model, Git reads, content and preview helpers
+    git.py                   branch, dirty, and HEAD reads only
+    feature_review.py        feature-directory resolution, file listing, content and preview helpers
     run_state.py             tolerant current gate-result extraction input
     snapshot.py              GateSnapshot, review value objects, RunSnapshot fields
     graph.py                 declared gate verdict_input/on_reject metadata
   session/
     cockpit_session.py       gate extraction, decide(), cached review refresh
   ui/
-    widgets/                 changed-file index and review-document widgets
-    screens/cockpit.py       Changes/Gate modes, refresh worker, editor and decision intents
+    widgets/                 feature-file index and review-document widgets
+    screens/cockpit.py       Files/Gate modes, refresh worker, editor and decision intents
     screens/confirm.py       neutral declared-choice confirmation copy
     screens/help.py          S03 keyboard and structured-gate help
-    styles.tcss              review layout, file statuses, empty/error states
+    styles.tcss              review layout, empty/error states
 tests/
-  unit/test_git.py           classification, filtering, content and preview behavior
+  unit/test_feature_review.py  feature listing, filtering, content and preview behavior
   unit/test_run_state.py     gate-result extraction tolerance
   unit/test_session.py       structured decision validation and reconciliation
   textual/test_cockpit.py    review modes, confirmation, selection and editor eligibility
@@ -139,13 +145,13 @@ tests/
 ```
 
 Keep review widgets small and component-scoped. The existing `#overview` canvas may compose the file
-index and document surface; do not create a second screen or a second Git state model.
+index and document surface; do not create a second screen or a second review state model.
 
 ## 5. Phases
 
 ### Phase 1 - Gate and review read models
 
-- Add `GateSnapshot`, `ChangeKind`, `ChangedFile`, `ReviewDocument`, and `ReviewSnapshot` as frozen
+- Add `GateSnapshot`, `FeatureFile`, `ReviewDocument`, and `ReviewSnapshot` as frozen
   value objects. Include review status/error/revision so an unchanged or failed refresh does not erase
   the last usable review.
 - Extend `RunStateData` with a safe accessor for the current result and construct `GateSnapshot` in the
@@ -153,12 +159,11 @@ index and document surface; do not create a second screen or a second Git state 
   exact strings and option order.
 - Extend `GraphNode` parsing with `verdict_input` and `on_reject`; nested gates receive the same
   metadata as top-level gates.
-- Add `GitService.worktree_changes(baseline)`, `document(path, view, full=False)`, and path-safe current
-  file resolution. Treat Git exit code 1 from a diff as a normal difference, not a service failure.
+- Add `FeatureReviewService` with `feature_directory` resolution from `.specify/feature.json`,
+  `refresh()` listing every file recursively, `document(path, full=False)`, and path-safe resolution.
 - Unit tests: absent/non-gate/malformed paused data; resolved runtime id; expression-resolved message;
-  option ordering/case; nested verdict gates; added/modified/deleted/renamed/conflicted/untracked files;
-  `.specify` and ignored exclusions; dirty baseline; branch commit comparison; binary NUL detection;
-  small and large previews; empty changes; special-character/NUL path parsing.
+  option ordering/case; nested verdict gates; recursive sorted listing; missing/escaping feature
+  declarations; binary NUL detection; small and large previews; empty feature directory.
 
 ### Phase 2 - Session and structured resume
 
@@ -180,32 +185,29 @@ index and document surface; do not create a second screen or a second Git state 
 
 ### Phase 3 - Review and decision surface
 
-- Add `c`, `d`, `r`, `o`, `/`, and generated `1` through `9` bindings. `s`, `c`, `g`, and `l` remain
+- Add `c`, `o`, `/`, and generated `1` through `9` bindings. `s`, `c`, `g`, and `l` remain
   reachable while paused; the default paused mode is Gate and Engine Output remains a short tail until
   expanded.
-- Render the amber gate message without silent truncation, the Worktree Changes count and baseline,
-  a narrow status/path index, and the selected document. Use `+`, `M`, `-`, `R`, and conflict text rather
-  than color alone. Diff defaults for modified files; rendered defaults for newly created Markdown.
-- Render deleted text from the baseline blob, binary path/change/size metadata without attempting text,
-  and the explicit bounded-preview/full-load state for large text. Render a decidable empty review state.
+- Render the amber gate message without silent truncation, the Feature Files count and directory,
+  a narrow path index, and the selected document. Use path text rather than a change-kind marker.
+- Render binary path/size metadata without attempting text, and the explicit bounded-preview/full-load
+  state for large text. Render a decidable empty review state.
 - Make pause refresh use an exclusive Textual worker. Apply a result only if it belongs to the current
-  run and preserve selection/filter/view/scroll as described above. Never block rendering on Git or disk.
+  run and preserve selection/filter/scroll as described above. Never block rendering on file reads.
 - Generate equal-weight decision controls from `GateSnapshot.options`. Pressing a shortcut or selecting
   an option opens confirmation; only confirmation calls `session.decide`. Disable/hide choices for an
   unstructured, malformed, or resume-in-progress gate while preserving Abort.
 - Implement the editor action with eligibility feedback and terminal restoration. Update command rail and
   help text so S03 advertises only structured gate decisions.
-- Textual tests: automatic gate mode and highlighted Runway; mode/output reachability; diff/rendered
-  switch; empty and binary/large/deleted content; selection and scroll retention across refresh; dynamic
+- Textual tests: automatic gate mode and highlighted Runway; mode/output reachability;
+  empty and binary/large content; selection and scroll retention across refresh; dynamic
   option order/shortcuts; cancel and confirm; choices unavailable while resuming; editor availability and
-  suspended launcher invocation; `$EDITOR` unset/deleted/running rejection.
+  suspended launcher invocation; `$EDITOR` unset/binary/running rejection.
 
 ### Phase 4 - End-to-end verification
 
-- Add a temporary real Git repository fixture that commits the Start baseline, creates branch commits,
-  edits tracked files, stages/deletes/renames files, creates ignored and untracked files, and writes a
-  `.specify` artifact. Assert the presented set and baseline behavior rather than command implementation
-  details.
+- Add a temporary feature-directory fixture that declares `.specify/feature.json`, writes nested text
+  and binary files, and asserts the presented set and content rather than command implementation details.
 - Extend the fake `specify` fixture to persist a paused structured gate and record a resume invocation.
   Assert one confirmed decision starts exactly one `resume ... -i name=choice --json` child with the
   original run ID and project environment.
@@ -219,10 +221,10 @@ index and document surface; do not create a second screen or a second Git state 
 |---|---|
 | Paused gate, step, message, exact options | 1 - `RunStateReader`, `GateSnapshot`, graph metadata |
 | Runway highlight, automatic Gate Focus, output tail | 3 - `CockpitScreen`, existing Runway/EngineOutput |
-| Paused State, Changes, Gate, and expanded output | 3 - Focus bindings and mode machine |
-| Fixed-baseline Worktree Changes including pre-Start dirt | 1 - `GitService.worktree_changes` |
-| Created/modified/deleted/renamed, `.specify`/ignored excluded | 1 - NUL Git status/diff parsing |
-| Text diff/rendered, binary metadata, bounded large preview | 1/3 - document service and review widgets |
+| Paused State, Files, Gate, and expanded output | 3 - Focus bindings and mode machine |
+| Feature directory listing including pre-Start files | 1 - `FeatureReviewService.refresh` |
+| Recursive project-relative listing, sorted | 1 - feature-directory walk |
+| Current text content, binary metadata, bounded large preview | 1/3 - document service and review widgets |
 | Paused refresh and empty state | 1/3 - cached review + exclusive worker |
 | `$EDITOR` suspension and availability constraints | 3 - editor action |
 | Confirm every choice; no review-completeness gate | 3 - dynamic options plus `ConfirmScreen` |
@@ -235,11 +237,9 @@ index and document surface; do not create a second screen or a second Git state 
 - S03 assumes the verified engine contract that a structured paused gate's initial child has exited. The
   resume supervisor must still support a live-process check and reject resume if the state/process pairing
   is inconsistent rather than address a stale process.
-- Rename detection is Git heuristic output. Present Git's reported rename status and old/new paths; do not
-  claim source attribution or calculate an independent rename algorithm.
 - Exact persisted gate options can differ from static YAML due to expression evaluation. This is intended:
   static metadata chooses the transport while persisted data is the decision evidence.
 - A full large-file view can consume memory. Bound default previews and make full load explicit; S06 owns
   broader resource limits and recoverable worker-error polish.
-- Git commands may fail because the worktree changes concurrently. Preserve the last completed review,
-  show the failure, and leave the gate decidable when its persisted state remains valid.
+- Files may appear, change, or disappear while the feature directory is listed. Preserve the last
+  completed review, show the failure, and leave the gate decidable when its persisted state remains valid.

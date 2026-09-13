@@ -1,4 +1,4 @@
-"""Widgets for the paused-gate Worktree Changes review surface."""
+"""Widgets for the paused-gate Feature Files review surface."""
 
 from __future__ import annotations
 
@@ -7,24 +7,16 @@ from textual.binding import Binding
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
-from ...services.review import ChangeKind, ReviewDocument
-from ..palette import COLD, FAULT, FOG, HOLD, PAPER, SIGNAL
-
-KIND_TONES: dict[ChangeKind, str] = {
-    ChangeKind.ADDED: SIGNAL,
-    ChangeKind.MODIFIED: COLD,
-    ChangeKind.DELETED: FAULT,
-    ChangeKind.RENAMED: HOLD,
-    ChangeKind.CONFLICTED: FAULT,
-}
+from ...services.review import ReviewDocument
+from ..palette import FAULT, FOG, HOLD, PAPER
 
 
 def _text(*parts) -> Text:
     return Text.assemble(*parts)
 
 
-class ChangedFileList(OptionList):
-    """Compact status/path index that retains selection across refresh."""
+class FeatureFileList(OptionList):
+    """Compact feature-file index that retains selection across refresh."""
 
     BINDINGS = [
         Binding("j", "cursor_down", show=False),
@@ -40,10 +32,9 @@ class ChangedFileList(OptionList):
         live = self.highlighted_option
         live_path = str(live.id) if live is not None and live.id is not None else None
         options: list[Option] = []
-        for changed in files:
-            tone = KIND_TONES.get(changed.kind, FOG)
-            suffix = "  (binary)" if changed.binary else ""
-            options.append(Option(_text((f"{changed.kind.marker}  {changed.label}{suffix}", tone)), id=changed.path))
+        for feature_file in files:
+            suffix = "  (binary)" if feature_file.binary else ""
+            options.append(Option(_text((f"{feature_file.label}{suffix}", PAPER)), id=feature_file.path))
         self.clear_options()
         self.add_options(options)
         if options:
@@ -57,20 +48,20 @@ class ChangedFileList(OptionList):
 
 
 class ReviewDocumentView(Static):
-    """Rendered unified diff or current/rendered file content."""
+    """Rendered current content of one feature file."""
 
     def show(self, document: ReviewDocument | None) -> None:
         if document is None:
-            self.update(_text(("No Worktree Changes to review yet.", FOG)))
+            self.update(_text(("No feature files to review yet.", FOG)))
             return
-        header = f"{document.path}   ·   {document.kind.value}   ·   {document.view}"
+        header = document.path
         if document.error:
             self.update(_text((header + "\n\n", PAPER), (document.error, FAULT)))
             return
         if document.binary:
             self.update(_text((header + "\n\n", PAPER), (document.note or "Binary file.", HOLD)))
             return
-        body = document.text or "(no textual changes)"
+        body = document.text or "(empty file)"
         parts = [(header + "\n\n", PAPER), (body, PAPER)]
         if document.truncated:
             limit = document.limit_bytes or 0

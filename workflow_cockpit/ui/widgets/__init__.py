@@ -12,13 +12,13 @@ from textual.widgets.option_list import Option
 from ...services.snapshot import RunSnapshot
 from ..palette import FAULT, FOG, HOLD, PAPER, SIGNAL
 from ..view_model import render_runway, state_grammar
-from .review import ChangedFileList, GateOptions, ReviewDocumentView
+from .review import FeatureFileList, GateOptions, ReviewDocumentView
 
 __all__ = [
     "TRUNCATION_MARKER",
-    "ChangedFileList",
     "CommandRail",
     "EngineOutput",
+    "FeatureFileList",
     "GateOptions",
     "HeaderRail",
     "ResizeGuard",
@@ -44,7 +44,7 @@ def _text(*parts) -> Text:
 
 
 class HeaderRail(Vertical):
-    """Product identity, run state, branch, baseline, elapsed, run ID."""
+    """Product identity, run state, branch, elapsed, run ID."""
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="masthead"):
@@ -58,15 +58,12 @@ class HeaderRail(Vertical):
         tone = SELF_TONE.get(snapshot.status, PAPER)
         self.query_one("#run-status", Static).update(_text((f"{symbol} {word}", f"bold {tone}")))
         branch = snapshot.branch or "unknown"
-        baseline = (snapshot.baseline_commit or "")[:7] or "unknown"
         elapsed = _elapsed(snapshot)
         run = snapshot.abbreviated_run_id or "—"
         self.query_one("#identity", Static).update(
             _text(
                 ("  BRANCH ", FOG),
                 (branch, PAPER),
-                ("   /   BASE ", FOG),
-                (baseline, PAPER),
                 ("   /   ELAPSED ", FOG),
                 (elapsed, PAPER),
                 ("   /   RUN ", FOG),

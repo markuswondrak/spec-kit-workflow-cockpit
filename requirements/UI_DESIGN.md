@@ -82,7 +82,7 @@ Wide layout:
 
 ```text
 +------------------------------------------------------------------------------+
-| WORKFLOW COCKPIT   RUNNING       feature/search        BASE a19c2f1   04:12  |
+| WORKFLOW COCKPIT   RUNNING       feature/search                     04:12  |
 | workflow: feature-delivery       run: 01J...                       [?] HELP  |
 +----------------------------+-------------------------------------------------+
 | RUNWAY                     | FOCUS                                           |
@@ -92,7 +92,7 @@ Wide layout:
 |                            | ENGINE OUTPUT                         LIVE [>]   |
 |                            | read-only RichLog                               |
 +----------------------------+-------------------------------------------------+
-| [s] state   [c] changes   [l] output   [g] gate   [x] abort        [q] exit |
+| [s] state   [c] files   [l] output   [g] gate   [x] abort        [q] exit |
 +------------------------------------------------------------------------------+
 ```
 
@@ -109,7 +109,7 @@ checked using Textual's Linux headless renderer. Physical macOS/WSL terminal
 validation remains open. Compact layouts retain the gate question, decisions,
 context path and at least five document rows in the default gate fixture.
 
-Focus navigation uses a quiet tab rail: Overview, Changes, and Gate review only
+Focus navigation uses a quiet tab rail: Overview, Files, and Gate review only
 while paused. A warm amber question strip introduces the gate; a separate pinned
 decision row closes it. File basenames lead the index, parent paths sit underneath,
 and the full selected path appears above the document. All declared gate choices
@@ -122,7 +122,6 @@ The header always shows:
 - product name;
 - state word and symbol;
 - current branch;
-- fixed baseline commit;
 - total elapsed time;
 - workflow name and abbreviated run ID.
 
@@ -159,7 +158,7 @@ viewport when possible.
 Focus is one large canvas, not a grid of cards. It switches among:
 
 - State: current step and immediate workflow context.
-- Changes: file index plus diff/rendered content.
+- Files: feature-file index plus current content.
 - Gate: evidence and decision surface.
 - Output: Engine Output as a full-height working view.
 - Outcome: success, failure, or abort summary.
@@ -174,7 +173,7 @@ The canvas is state-driven and never reserves space for a pane that has no usefu
 
 - The review surface is never permanently visible during automated steps, and Output is never an
   empty region at a gate.
-- State, Changes, and Gate stay directly reachable with `s`, `c`, and `g`; Output stays reachable
+- State, Files, and Gate stay directly reachable with `s`, `c`, and `g`; Output stays reachable
   with `l` in every state.
 - Automatic mode changes on run-state transitions preserve Output scroll position and the selected
   review file.
@@ -244,7 +243,7 @@ State summary keeps current intent visible; `s` shows the full State mode:
 | Building search index                                                       |
 | ...                                                                          |
 +------------------------------------------------------------------------------+
-| [s] state   [c] changes   [l] output   [x] abort                  [q] exit |
+| [s] state   [c] files   [l] output   [x] abort                  [q] exit |
 +------------------------------------------------------------------------------+
 ```
 
@@ -270,11 +269,11 @@ than showing a detached modal. Engine Output collapses to a short tail and can b
 | GATE / REVIEW SPEC                                             WAITING [!]   |
 | Is the specification complete enough to plan?                               |
 |                                                                            |
-| WORKTREE CHANGES  4 files  +96 -12          VIEW  [d] diff  [r] rendered   |
-| + specs/042-search/spec.md          | @@ Acceptance scenarios              |
-| M specs/042-search/checklist.md     | + Given a catalog with ...           |
-| M README.md                         | + When the user searches ...         |
-| - notes/draft.md                    | + Then ranked results appear ...     |
+| FEATURE FILES  4 files in specs/042-search                                 |
+| specs/042-search/spec.md            | # Feature Specification              |
+| specs/042-search/checklist.md       | ## Acceptance scenarios              |
+| specs/042-search/plan.md            | ## Implementation plan               |
+| specs/042-search/tasks.md           | ## Tasks                             |
 |                                     |                                      |
 | CONTEXT  .specify/.../cockpit-context.md                                   |
 |                                                                            |
@@ -285,15 +284,14 @@ than showing a detached modal. Engine Output collapses to a short tail and can b
 ```
 
 - Gate message is never silently truncated.
-- File status uses Git's familiar `+`, `M`, `-`, and `R` vocabulary.
+- The file list shows project-relative paths; there is no change status marker.
 - The file list remains narrow; document content receives most horizontal space.
-- Diff is default for modified files; rendered content is default for new Markdown.
-- Deleted files show their prior content and deletion status.
-- Binary files show type, status, and size.
+- Text files show their current content.
+- Binary files show path and size.
 - Large files show preview limits and a deliberate `load full` action.
 - The context path is selectable terminal text; clipboard integration remains terminal-owned.
-- `o` suspends Textual and opens the selected existing file in `$EDITOR`. Deleted files cannot
-  be opened. Cockpit restores the selected path afterward.
+- `o` suspends Textual and opens the selected existing non-binary file in `$EDITOR`. Cockpit
+  restores the selected path afterward.
 - Gate choices are numbered dynamically and preserve workflow labels and order.
 
 ### Decision confirmation
@@ -321,16 +319,16 @@ Abort uses `fault`; ordinary workflow choices use `hold`.
 | [l] engine output                                           [x] abort run  |
 ```
 
-## 7. Changes mode
+## 7. Files mode
 
-Changes mode is available whenever useful; editor actions appear only at a paused gate.
+Files mode is available whenever useful; editor actions appear only at a paused gate.
 
-- File order: conflicts, modified, added, renamed, deleted; then lexical path.
-- Show file count and additions/deletions.
-- `d` and `r` switch between diff and rendered/current content.
-- `/` filters changed paths.
-- Title includes the fixed baseline: `CHANGES vs a19c2f1`.
-- Empty state: `No reviewable worktree changes against a19c2f1`.
+- File order: lexical project-relative path.
+- Show file count and the declared feature directory.
+- Text files show their current content; there is no diff view.
+- `/` filters feature paths.
+- Empty state: `No feature files to review yet`.
+- Undeclared feature directory state: a persistent error with the `.specify/feature.json` guidance.
 
 ## 8. Outcomes
 
@@ -341,12 +339,11 @@ Changes mode is available whenever useful; editor actions appear only at a pause
 |                                                                            |
 | feature-delivery                                              06:42         |
 | 8 completed   1 skipped   2 gates                                          |
-| Worktree Changes  11 files  +402 -87                                       |
+| Feature Files  11 files in specs/042-search                                |
 |                                                                            |
 | Branch  feature/indexed-search                                             |
-| Base    a19c2f1                                                            |
 |                                                                            |
-| [c] review changes   [l] engine output              [enter] close         |
+| [c] review files   [l] engine output                [enter] close         |
 ```
 
 ### Failure
@@ -359,7 +356,7 @@ Changes mode is available whenever useful; editor actions appear only at a pause
 |                                                                            |
 | Engine Output expanded below with the failure tail in view.                |
 |                                                                            |
-| [c] review changes   [l] engine output              [enter] close         |
+| [c] review files   [l] engine output              [enter] close         |
 ```
 
 ### Abort
@@ -375,12 +372,10 @@ Enter.
 | `j` / `k` or arrows | Move within focused graph/list/log |
 | `Tab` / `Shift+Tab` | Move between Runway and Focus |
 | `s` | State mode |
-| `c` | Changes mode |
+| `c` | Files mode |
 | `l` | Toggle the Engine Output drawer (expand/collapse) |
 | `End` | Return Engine Output to the live tail |
 | `g` | Gate mode when paused |
-| `d` | Diff view |
-| `r` | Rendered/current-file view |
 | `o` | Suspend Textual and open `$EDITOR` when allowed |
 | `/` | Filter the current list |
 | `x` | Begin confirmed Abort |
@@ -410,7 +405,7 @@ Enter rather than ambiguous multi-digit shortcuts.
 ## 12. Prototype checkpoints
 
 1. A branching graph remains legible at the minimum width.
-2. Gate message, file list, meaningful diff, context path, and decisions fit without clipping.
+2. Gate message, file list, meaningful content, context path, and decisions fit without clipping.
 3. The state-driven canvas gives Output the full area while running and the review surface the
    full area at a gate, with no empty reserved region.
 4. Expanded output supports long workflow output and strips controls without UI corruption.

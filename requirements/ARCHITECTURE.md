@@ -23,7 +23,7 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
   lifecycle writer. A numeric PID/PGID is actionable only while its child is verified live and
   is cleared immediately after reaping.
 - The PTY is internal and never user-visible; ordinary keystrokes are never forwarded to it.
-- The UI never blocks: polling, process I/O, Git, and diffing run off the render path.
+- The UI never blocks: polling, process I/O, Git, and file reads run off the render path.
 - Core services have no Textual imports, so they are testable without a running app.
 
 ## 2. Layers and components
@@ -57,7 +57,8 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 | `ControlFlowGraph` | Generic graph of nodes, edges, branches, loops, gates, and overlays. |
 | `RunStateReader` | Tolerant reads of independently written `state.json`, `inputs.json`, and `log.jsonl`; skip unchanged files while detecting atomic replacements. |
 | `GraphProjector` | Combine static `ControlFlowGraph` with runtime state into node status, active path, attempts, and timings. |
-| `GitService` | Record the fixed start SHA; classify Worktree Changes; exclude `.specify/` and ignored files; detect binary and large files; produce diff and rendered content. |
+| `GitService` | Read `HEAD`, branch, and dirty state of the project worktree. |
+| `FeatureReviewService` | Resolve the declared feature directory; list its files; detect binary and large files; read current content. |
 | `ContextIndexWriter` | Write `cockpit-context.md` after Start; failure is reported but never interrupts the run. |
 | `EditorLauncher` | Suspend and restore Textual around `$EDITOR` at a paused gate only. |
 
@@ -76,9 +77,9 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 |---|---|
 | `CockpitApp` | Textual application and screen routing. |
 | Screens | Preflight, Launch (select then in-place configure), Cockpit, Confirm, Help; a resize-guard widget replaces the layout below the minimum size without exiting. |
-| `HeaderRail` | Product, state, branch, baseline, elapsed, workflow, run ID. |
+| `HeaderRail` | Product, state, branch, elapsed, workflow, run ID. |
 | `Runway` | Scrollable control-flow graph with runtime overlay. |
-| `Focus` | State, Changes, Gate, and Outcome surfaces with `d`/`r` diff and rendered views. |
+| `Focus` | State, Files, Gate, and Outcome surfaces showing feature-file content. |
 | `EngineOutput` | Bounded, read-only `RichLog` fed from the supervisor. |
 | `CommandRail` | Actions valid in the current state, including dynamic gate choices. |
 | `CockpitViewModel` | Map `RunSnapshot` to renderable state; preserve selection, focus, and scroll across refreshes. |
@@ -131,8 +132,8 @@ An isolated wheel smoke test verifies the executable and package data.
 
 1. `WorkflowDefinitionResolver` applies enabled overlays before the config screen presents the
    effective step list and schema-driven input set.
-2. `GitService` records the fixed baseline commit after dirty confirmation and immediately
-   before spawn; a dirty worktree warns but does not block.
+2. `FeatureReviewService` resolves the declared feature directory after dirty confirmation and
+   immediately before spawn; a dirty worktree warns but does not block.
 3. `CockpitSession` generates a collision-resistant run ID; `EngineSupervisor` fails if its
    directory exists, then launches argv without a shell with `SPECKIT_WORKFLOW_RUN_ID` set to
    that ID.
@@ -146,8 +147,8 @@ An isolated wheel smoke test verifies the executable and package data.
 
 1. A `RunSnapshot` marks a paused gate with its step, message, and exact declared options.
 2. Runway highlights the gate and Focus opens the review surface automatically.
-3. `GitService` provides Worktree Changes against the fixed start commit; Focus toggles diff
-   and rendered views.
+3. `FeatureReviewService` lists the declared feature directory's files; Focus shows the
+   selected file's current content.
 4. A confirmed choice is dispatched: structured resume when `verdict_input` exists, otherwise
    one write to the PTY via `InternalPtyDecider`.
 5. Persisted state remains authoritative. An unverified PTY write is shown but not resent; if
@@ -197,7 +198,7 @@ of reaping while the same supervisor lock is held.
 
 - One asyncio event loop hosts Textual and the async subprocess/PTY tasks. The polling loop uses
   a 250 ms monotonic schedule so observable updates remain within the 500 ms product bound.
-- Blocking work (Git, diffing, large files) runs in worker threads so rendering stays
+- Blocking work (Git, feature-file reads, large files) runs in worker threads so rendering stays
   responsive.
 - State is passed as immutable `RunSnapshot` objects; no shared mutable model crosses the
   presentation boundary.
@@ -219,7 +220,7 @@ of reaping while the same supervisor lock is held.
 
 | Layer | Test type |
 |---|---|
-| Registry, effective definition resolution, graph parsing, projection, diff classification, compatibility, deciders | Unit tests |
+| Registry, effective definition resolution, graph parsing, projection, feature-file listing, compatibility, deciders | Unit tests |
 | Screens, focus, modes, confirmation, outcomes | Textual `App.run_test()` |
 | Executable/project/run identity, process lifecycle, output normalization, gate submission, cleanup, signals | Contract and subprocess/PTY integration against fixtures |
 
@@ -232,7 +233,7 @@ retry/skip, empty changes, no-gate runs, failure, abort, and termination signals
 |---|---|
 | S1 Own one run | `cli`, `Preflight`, `Launch`, `EngineSupervisor`, `EngineOutput`, Abort path |
 | S2 Runway | `WorkflowDefinitionParser`, `ControlFlowGraph`, `GraphProjector`, `Runway` |
-| S3 Structured gate | `RunStateReader`, `GitService`, `Focus/Changes`, `VerdictInputDecider` |
+| S3 Structured gate | `RunStateReader`, `FeatureReviewService`, `Focus/Files`, `VerdictInputDecider` |
 | S4 Interactive gate | `InternalPtyDecider`, `PtySession`, unverified-submission state |
 | S5 Skill and context | `ContextIndexWriter`, `cockpit-skill` |
 | S6 Resilience | `PollingLoop`, `SignalHandler`, error handling across services |
@@ -241,14 +242,14 @@ retry/skip, empty changes, no-gate runs, failure, abort, and termination signals
 
 1. Snapshot transport: an `asyncio.Queue` published with `post_message`; presentation never
    polls services directly.
-2. Heavy I/O execution: Textual `@work(thread=True)` for Git, diffing, and large-file work.
+2. Heavy I/O execution: Textual `@work(thread=True)` for Git, feature-file reads, and large-file work.
 3. Minimum terminal size is **88 x 36**; the app enters a reversible resize guard below it. S1
    ships a low-fidelity step rail in place of the
    S2 control-flow Runway.
 4. The `specify` transport (PTY or pipe) and decision strategy stay internal to the engine
    boundary; the presentation sees only `CockpitSession`.
 5. Run identity is allocated before spawn and passed through `SPECKIT_WORKFLOW_RUN_ID`; directory
-   diffing is never used to claim ownership.
+   scanning is never used to claim ownership.
 6. A process group is signalable only while its owned child is verified live. Paused runs whose
    command exited are aborted locally without a signal.
 7. The launch model is the effective base-plus-overlay definition. S2 adds graph semantics but

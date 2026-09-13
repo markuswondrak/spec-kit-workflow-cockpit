@@ -35,7 +35,7 @@ stays in `PRD.md`; component names stay in `ARCHITECTURE.md`; visual behavior st
 
 ### Out (later stories)
 
-- Worktree Changes content, diff/rendered views, `$EDITOR` (S03).
+- Feature Files content, current-content view, `$EDITOR` (S03).
 - Structured `verdict_input` and interactive PTY gate decisions (S03/S04).
 - Context index and Cockpit skill (S05).
 - Catchable-signal cleanup and stale-read recovery beyond the current tolerant reads (S06).
@@ -218,7 +218,7 @@ changes meaning.
 | Complete declared graph incl. branches, loops, gates, overlays | 1 - `WorkflowDefinitionParser`, `ControlFlowGraph` |
 | Runtime status incl. pending/running/paused/completed/failed/skipped/aborted | 2 - `GraphProjector` |
 | Attempts and completed/live per-step durations | 2 - `RunLogAggregator`, `GraphProjector` |
-| Branch changes update; fixed baseline unchanged | 2/4 - `CockpitSession` unchanged baseline; Runway refresh |
+| Branch changes update independently of review data | 2/4 - `CockpitSession`; Runway refresh |
 | Selection, focus, scroll survive refreshes | 3/4 - `Runway`, view model |
 | Graph derived generically from installed definition | 1 - parser (no workflow hardcoding) |
 | Focus state-driven; Engine Output default while running; no empty reserved panes | 4 - mode machine |
