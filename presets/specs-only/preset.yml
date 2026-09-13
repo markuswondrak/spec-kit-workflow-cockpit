@@ -1,0 +1,29 @@
+schema_version: "1.0"
+
+preset:
+  id: "specs-only"
+  name: "Specs-Only Specify"
+  version: "1.0.0"
+  description: "Non-interactive specify: the agent names the feature and features always live under specs/"
+  author: "workflow-cockpit"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.6.0"
+
+provides:
+  # Only override specify. plan/tasks/implement/constitution keep coming from
+  # the lean preset (or the core pack) because this preset is registered with a
+  # lower priority number, so it is only consulted for speckit.specify.
+  templates:
+    - type: "command"
+      name: "speckit.specify"
+      file: "commands/speckit.specify.md"
+      description: "Non-interactive specify - agent picks the feature name, features always live under specs/"
+      replaces: "speckit.specify"
+
+tags:
+  - "workflow-cockpit"
+  - "headless"
+  - "specify"
+  - "specs"
