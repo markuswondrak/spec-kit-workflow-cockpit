@@ -19,6 +19,10 @@
 - Branch changes update automatically while the fixed baseline commit remains unchanged.
 - Selection, focus, and scroll survive polling refreshes.
 - The graph is derived generically from the installed workflow definition.
+- Focus is one state-driven canvas: it defaults to Engine Output with a compact run summary while
+  automated steps run, and it never reserves empty space for an inactive review or output pane.
+- Automatic mode changes on run-state transitions preserve Engine Output scroll and the selected
+  review file.
 
 ## Tests
 

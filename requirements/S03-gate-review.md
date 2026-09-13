@@ -12,7 +12,10 @@
 ## Acceptance criteria
 
 - Persisted state identifies a paused gate and its step, message, and exact declared options.
-- The Runway highlights the gate and the review surface opens automatically.
+- The Runway highlights the gate and the review surface opens automatically as the primary Focus
+  mode; Engine Output collapses to a short diagnostic tail.
+- While paused, State, Changes, and Gate modes stay reachable and Engine Output can be expanded
+  on demand.
 - Worktree Changes compares the current worktree with the fixed Start commit, including dirty
   pre-start changes.
 - Created, modified, deleted, and renamed files are listed; `.specify/` and Git-ignored files

@@ -92,6 +92,9 @@ a status dashboard.
 4. The UI follows branch changes automatically while retaining the fixed start commit as the
    Worktree Changes baseline.
 5. The Cockpit polls the current run state frequently enough that updates appear within 500 ms.
+6. While automated steps run, Engine Output is the primary workspace. The review surface appears
+   as the primary workspace only when the engine pauses at a gate, and the outcome summary only
+   after termination.
 
 ### 6.3 Review and adjust at a gate
 
@@ -155,6 +158,8 @@ a status dashboard.
 ### FR-2 - Workspace and observability
 
 - Render workflow state, review content, and engine output in one Textual application.
+- Present one state-driven workspace: Engine Output is primary while automated steps run, the
+  review surface is primary at a gate, and neither reserves empty space when inactive.
 - Stream normalized, bounded engine output into a read-only log component and keep direct
   engine input inaccessible to the user.
 - Render the workflow definition as a graph with active path, runtime node status, and attempt

@@ -161,8 +161,23 @@ Focus is one large canvas, not a grid of cards. It switches among:
 - State: current step and immediate workflow context.
 - Changes: file index plus diff/rendered content.
 - Gate: evidence and decision surface.
-- Output: expanded Engine Output.
+- Output: Engine Output as a full-height working view.
 - Outcome: success, failure, or abort summary.
+
+The canvas is state-driven and never reserves space for a pane that has no useful content:
+
+| Run state | Default Focus mode | Engine Output |
+|---|---|---|
+| initializing / running | Output, with a compact State summary header | Full canvas, live tail and auto-scroll |
+| paused at a gate | Gate | Collapsed to a short diagnostic tail; `l` expands |
+| completed / failed / aborted | Outcome | Collapsed to a diagnostic tail; `l` expands |
+
+- The review surface is never permanently visible during automated steps, and Output is never an
+  empty region at a gate.
+- State, Changes, and Gate stay directly reachable with `s`, `c`, and `g`; Output stays reachable
+  with `l` in every state.
+- Automatic mode changes on run-state transitions preserve Output scroll position and the selected
+  review file.
 
 ### Command rail
 
@@ -214,24 +229,22 @@ Configuration replaces the description with workflow summary and input form:
 
 ## 5. Running state
 
-During automated work, Focus emphasizes current intent while Engine Output remains available
-below it:
+During automated work, Output is the default Focus mode and uses the full canvas. A compact
+State summary keeps current intent visible; `s` shows the full State mode:
 
 ```text
-| FOCUS / RUNNING                                                              |
-|                                                                              |
-|  IMPLEMENT                      attempt 1                      elapsed 00:47   |
-|  Creates the implementation described by the approved plan.                  |
-|                                                                              |
-|  NEXT  verify -> review_implementation                                       |
-|  WORKTREE CHANGES  7 files  +184 -29                                         |
-|  CONTEXT  .specify/workflows/runs/01J.../cockpit-context.md                  |
-|                                                                              |
++------------------------------------------------------------------------------+
+| OUTPUT / RUNNING                                                  [s] state  |
+| NOW implement  attempt 1  00:47  NEXT verify -> review_implementation        |
+| WORKTREE 7 files  +184 -29                                                   |
 +------------------------------------------------------------------------------+
 | ENGINE OUTPUT                                                     LIVE [>]   |
 | $ specify workflow run feature-delivery ...                                 |
-| Running step implement ...                                                   |
+| Running step implement ...                                                  |
 | Building search index                                                       |
+| ...                                                                          |
++------------------------------------------------------------------------------+
+| [s] state   [c] changes   [l] output   [x] abort                  [q] exit |
 +------------------------------------------------------------------------------+
 ```
 
@@ -239,7 +252,7 @@ Engine Output behavior:
 
 - Read-only `RichLog` fed from the managed process PTY.
 - Auto-scroll while at the tail; scrolling upward automatically pauses it.
-- `End` or `l` returns to the live tail.
+- `End` returns to the live tail; `l` toggles the drawer.
 - ANSI and terminal control sequences are stripped.
 - Output history is bounded and old lines are discarded with an explicit truncation marker.
 
@@ -356,10 +369,11 @@ Show the abort result and source when known. Await acknowledgment before exiting
 | Key | Action |
 |---|---|
 | `j` / `k` or arrows | Move within focused graph/list/log |
-| `Tab` / `Shift+Tab` | Move between Runway, Focus, and Engine Output |
+| `Tab` / `Shift+Tab` | Move between Runway and Focus |
 | `s` | State mode |
 | `c` | Changes mode |
-| `l` | Expand Engine Output or return it to live tail |
+| `l` | Toggle the Engine Output drawer (expand/collapse) |
+| `End` | Return Engine Output to the live tail |
 | `g` | Gate mode when paused |
 | `d` | Diff view |
 | `r` | Rendered/current-file view |
@@ -393,7 +407,8 @@ Enter rather than ambiguous multi-digit shortcuts.
 
 1. A branching graph remains legible at the minimum width.
 2. Gate message, file list, meaningful diff, context path, and decisions fit without clipping.
-3. Collapsed output leaves enough review space while retaining useful process context.
+3. The state-driven canvas gives Output the full area while running and the review surface the
+   full area at a gate, with no empty reserved region.
 4. Expanded output supports long workflow output and strips controls without UI corruption.
 5. Responsive stacking behaves correctly on Linux, macOS, and WSL terminals.
 6. Refreshes preserve graph selection, file selection, document scroll, and output-tail mode.

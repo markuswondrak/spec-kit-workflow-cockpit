@@ -61,6 +61,8 @@ terminal.
 - Decode with replacement, normalize carriage returns, and retain complete lines plus the
   current partial line.
 - Render output in a bounded, read-only `RichLog` with auto-scroll enabled by default.
+- Treat Engine Output as a Focus mode, not a fixed region: it owns the canvas while automated
+  steps run and collapses to a diagnostic tail whenever a gate review or outcome is primary.
 - Strip ANSI and terminal control sequences instead of emulating a terminal.
 - Let the user pause auto-scroll, scroll the retained tail, and jump back to live output.
 - Never route ordinary user keystrokes to the PTY.
@@ -109,9 +111,14 @@ The application keeps these elements available through one adaptive layout:
 - read-only Engine Output;
 - context-index path and current valid actions.
 
-At wide sizes the graph and Focus area are side by side. Engine Output is a collapsible region
-inside Focus and can be expanded when diagnosing behavior. At narrower supported sizes the
-graph stacks above Focus. Below the validated minimum, Textual shows a blocking resize screen.
+At wide sizes the graph and Focus area are side by side. Focus is a single state-driven canvas:
+Engine Output is the default mode while automated steps run, the review surface is the default
+mode when the engine pauses at a gate, and the outcome summary is the default mode after
+termination. Engine Output collapses to a short diagnostic tail whenever a gate review or
+outcome is primary, and expands on demand. No mode reserves space for a pane with no content, and
+mode transitions preserve output scroll and the selected review file. At narrower supported
+sizes the graph stacks above Focus. Below the validated minimum, Textual shows a blocking resize
+screen.
 
 ## 6. Workflow graph
 
@@ -143,6 +150,8 @@ pre-existing changes are included.
 - For large text: provide a bounded preview and explicit full-open action.
 - Refresh automatically while paused while preserving selection and scroll when practical.
 - Show a clear empty state when there are no reviewable changes.
+- Present review as a Focus mode that is primary while the engine is paused at a gate; it is not
+  allocated space during automated steps.
 
 To open `$EDITOR`, Textual suspends its terminal control, opens the selected existing worktree
 file, and restores/redraws the application when the editor exits. The action is available only
@@ -203,14 +212,15 @@ Workflow behavior such as reject -> retry or reject -> skip is preserved.
 
 ### Success
 
-Show final status, graph, total and step timings, Worktree Changes, and Engine Output. Exit the
-application after acknowledgment.
+Show the outcome summary as the default Focus mode with final status, graph, total and step
+timings, and Worktree Changes. Engine Output stays available as a collapsed diagnostic tail.
+Exit the application after acknowledgment.
 
 ### Failure
 
-Show the failed graph node, structured cause, and Engine Output. Acknowledgment exits the
-application; retry requires a new invocation. Independently running agents remain outside the
-Cockpit lifecycle.
+Show the failed graph node and structured cause as the default Focus mode, with Engine Output as
+a collapsed diagnostic tail. Acknowledgment exits the application; retry requires a new
+invocation. Independently running agents remain outside the Cockpit lifecycle.
 
 ### Abort
 
