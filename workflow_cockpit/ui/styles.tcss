@@ -28,7 +28,7 @@ Checkbox > .toggle--button { color: $signal; background: $raised; }
 .muted { color: $fog; }
 .eyebrow, .section-label { color: $fog; height: 1; }
 .section-label { margin-bottom: 1; }
-.field-label { color: $fog; height: auto; margin-top: 1; }
+.field-label { color: $fog; height: auto; margin-top: 1; margin-bottom: 1; }
 
 #shell { height: 100%; }
 #resize-guard { display: none; width: 100%; height: 100%; content-align: center middle; padding: 2; }
