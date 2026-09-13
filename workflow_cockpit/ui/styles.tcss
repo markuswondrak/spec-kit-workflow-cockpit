@@ -1,0 +1,124 @@
+/* Flight Recorder / warm graphite, sage signal, amber attention. */
+$ink: #101312;
+$deck: #171C19;
+$raised: #202821;
+$rail: #303B34;
+$fog: #94A399;
+$paper: #E5E9DF;
+$signal: #9CD6AD;
+$hold: #E8BD79;
+$fault: #EF9387;
+$cold: #A1BFCE;
+
+Screen { background: $ink; color: $paper; }
+* { scrollbar-size: 1 1; scrollbar-background: $ink; scrollbar-color: $rail;
+    scrollbar-color-hover: $fog; scrollbar-color-active: $cold; }
+Static { height: auto; }
+Button { min-width: 10; height: 3; border: none; background: $raised; color: $paper; text-style: none; }
+Button:hover { background: #354238; }
+Button:focus { text-style: bold; background: #34463D; color: $paper; }
+Button.-primary { background: $signal; color: $ink; text-style: bold; }
+Button.-warning { background: $hold; color: $ink; text-style: bold; }
+Button.-error { background: $fault; color: $ink; text-style: bold; }
+Input, Select { background: $ink; border: tall $rail; color: $paper; }
+Input:focus { border: tall $cold; }
+SelectCurrent { background: $ink; border: tall $rail; }
+Checkbox { background: transparent; border: none; padding: 0; height: 1; margin-top: 1; }
+Checkbox > .toggle--button { color: $signal; background: $raised; }
+.muted { color: $fog; }
+.eyebrow, .section-label { color: $fog; height: 1; }
+.section-label { margin-bottom: 1; }
+.field-label { color: $fog; height: auto; margin-top: 1; }
+
+#shell { height: 100%; }
+#resize-guard { display: none; width: 100%; height: 100%; content-align: center middle; padding: 2; }
+
+#masthead { height: 2; padding: 1 1 0 1; background: $deck; }
+#wordmark { width: 1fr; height: 1; }
+#run-status { width: 30; height: 1; text-align: right; }
+#help-hint { width: 12; height: 1; color: $fog; text-align: right; }
+#identity { height: 2; padding: 0 1; background: $deck; border-bottom: solid $rail; color: $fog; }
+
+/* Launch */
+#launch-content { height: 1fr; padding: 2 7; align-horizontal: center; }
+#launch-eyebrow, #launch-logo, #launch-intro, #workflow-picker { width: 100%; max-width: 90; }
+#launch-eyebrow { color: $hold; margin-bottom: 1; }
+#launch-logo { height: 5; color: $paper; margin-bottom: 1; text-wrap: nowrap; }
+#launch-intro { color: $fog; margin-bottom: 2; }
+#workflow-picker { height: auto; }
+#picker-help { color: $fog; margin-bottom: 1; }
+#workflows { width: 100%; height: auto; min-height: 5; }
+#workflows > .option-list--option { padding: 0 2; }
+#workflows > .option-list--option-highlighted { border-left: wide $signal; padding-left: 1; }
+#catalog-note { color: $fog; margin-top: 1; padding-left: 2; }
+#workflow-empty { display: none; width: 100%; max-width: 90; min-height: 10; margin-top: 1; padding: 2 3;
+    background: $deck; border-left: wide $hold; content-align: left middle; }
+#launch-detail { display: none; width: 100%; max-width: 90; height: auto; }
+#detail-name { color: $paper; text-style: bold; margin-bottom: 1; }
+#detail-description { color: $fog; margin-bottom: 1; }
+#detail-flow { color: $cold; margin: 1 0 2 0; }
+#launch-state { margin: 1 0; }
+#start { width: auto; padding: 0 3; }
+#config-form { height: auto; }
+#validation { color: $fault; min-height: 1; }
+#start-note { color: $fog; margin-top: 1; }
+#launch-commands { height: 2; border-top: solid $rail; background: $deck; padding: 0 2; color: $fog; }
+.configuring #launch-logo, .configuring #launch-intro, .configuring #launch-eyebrow { display: none; }
+.short #launch-content { padding: 1 4; }
+.compact #launch-content { padding-left: 3; padding-right: 3; }
+
+/* Preflight */
+#preflight-content { height: 1fr; padding: 2 5; }
+#preflight-list { margin-bottom: 2; }
+#preflight-repair { color: $fog; }
+
+/* Cockpit */
+#header { height: 4; }
+#workspace { height: 1fr; }
+#runway { width: 29; padding: 1 1 0 1; border-right: solid $rail; }
+#workflow-name { text-style: bold; margin-bottom: 1; }
+#run-progress { height: 1; margin-bottom: 1; }
+#steps { height: 1fr; }
+OptionList { background: transparent; border: none; padding: 0; }
+OptionList > .option-list--option { padding: 0 1; }
+OptionList > .option-list--option-highlighted { background: $raised; color: $paper; }
+OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color: $paper; }
+#focus { width: 1fr; }
+#view-tabs { height: 2; border-bottom: solid $rail; padding: 0 2; }
+#view-label { height: 1; }
+#overview { height: 1fr; padding: 1 2; }
+#overview-content { margin-bottom: 1; }
+#output { height: 5; border-top: solid $rail; background: $ink; }
+#output.expanded { height: 45%; min-height: 6; }
+#output-heading { height: 1; padding: 0 2; }
+#output-title { width: 1fr; }
+#output-hint { width: auto; color: $fog; }
+#engine { padding: 0 2; background: $ink; color: $fog; height: 1fr; }
+#command-rail { height: 2; border-top: solid $rail; background: $deck; padding: 0 1; }
+#commands { width: 1fr; height: 1; }
+#abort { width: auto; height: 1; padding: 0 1; color: $fog; background: transparent; }
+#abort:hover, #abort:focus { color: $fault; }
+
+/* Compact and short terminals */
+.compact #workspace { layout: vertical; }
+.compact #runway { width: 100%; height: 4; layout: horizontal; padding: 0 2; border-right: none; border-bottom: solid $rail; }
+.compact #runway .section-label { display: none; }
+.compact #workflow-name { width: 22; height: 3; content-align: left middle; }
+.compact #run-progress { display: none; }
+.compact #steps { width: 1fr; height: 3; }
+.short #view-tabs { height: 1; }
+.short #output { height: 3; }
+.short #output.expanded { height: 6; }
+.compact #output { height: 3; }
+.compact #output.expanded { height: 6; }
+
+/* Confirmation and help sheets */
+ConfirmScreen, HelpScreen { align: center middle; background: $ink 80%; }
+#confirm-sheet, #help-sheet { width: 64; height: auto; max-height: 95%; padding: 1 3; background: $deck; border-top: heavy $hold; border-bottom: solid $rail; }
+#confirm-sheet.danger { border-top: heavy $fault; }
+#confirm-heading { text-style: bold; margin: 1 0; }
+#confirm-effect { margin-bottom: 1; }
+.sheet-actions { height: 3; margin: 2 0 1 0; }
+.sheet-actions Button { width: auto; padding: 0 2; margin-right: 2; }
+#help-sheet { width: 74; overflow-y: auto; }
+#close-help { margin-top: 1; width: auto; padding: 0 2; }
