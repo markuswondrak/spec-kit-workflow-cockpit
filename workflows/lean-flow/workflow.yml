@@ -1,0 +1,64 @@
+schema_version: "1.0"
+
+workflow:
+  id: "lean-flow"
+  name: "Lean Flow"
+  version: "1.0.1"
+  author: "workflow-cockpit"
+  description: "Lean specify → plan → tasks → implement with review gates"
+
+requires:
+  speckit_version: ">=1.0.0"
+  integrations:
+    any:
+      - "opencode"
+      - "claude"
+      - "copilot"
+      - "gemini"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe what you want to build"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integration to use ('auto' uses the project's initialized integration)"
+
+steps:
+  - id: specify
+    command: speckit.specify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: review-spec
+    type: gate
+    message: "Review the generated spec before planning."
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: plan
+    command: speckit.plan
+    integration: "{{ inputs.integration }}"
+    input:
+      args: ""
+
+  - id: review-plan
+    type: gate
+    message: "Review the plan before generating tasks."
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: tasks
+    command: speckit.tasks
+    integration: "{{ inputs.integration }}"
+    input:
+      args: ""
+
+  - id: implement
+    command: speckit.implement
+    integration: "{{ inputs.integration }}"
+    input:
+      args: ""
