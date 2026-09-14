@@ -1,0 +1,56 @@
+# Workflow Cockpit
+
+A standalone Python + Textual TUI that owns exactly one Spec Kit workflow run in one
+project/worktree. It lets a user select and start a workflow, observe its execution, review
+worktree changes at gates, and submit the workflow's declared decision. It uses an installed
+`specify` CLI for writes and the engine's persisted run files for reads; the engine is never
+modified and its internals are never imported.
+
+See [`requirements/README.md`](requirements/README.md) for the product and design contract, and
+[`AGENTS.md`](AGENTS.md) for the repository layout and rules.
+
+## Preset: Lean Workflow Cockpit
+
+The bundled [`presets/lean-workflow`](presets/lean-workflow) preset makes the core Spec Kit
+commands safe to run unattended inside a workflow:
+
+- `speckit.specify` is replaced so the agent names the feature itself and always creates
+  `specs/<feature-name>` (writing `.specify/feature.json` for the downstream commands).
+- `speckit.plan`, `speckit.tasks`, and `speckit.implement` keep their lean bodies and gain a shared
+  **Workflow Runtime** preamble: never ask questions, never request permissions, make informed
+  defaults, and report a blocker instead of hanging.
+
+### Install
+
+From the repository root, with an initialized Spec Kit project:
+
+```bash
+# priority 1 < lean's 10, so this preset's commands win over the lean originals
+specify preset add --dev ./presets/lean-workflow --priority 1
+```
+
+Verify:
+
+```bash
+specify preset list
+specify preset resolve speckit.specify
+specify preset resolve speckit.tasks
+```
+
+Remove:
+
+```bash
+specify preset remove lean-workflow
+```
+
+Re-apply after editing the preset, since the installed `.specify/presets/<id>/` and
+`.opencode/commands/` copies are generated scaffolding:
+
+```bash
+specify preset remove lean-workflow
+specify preset add --dev ./presets/lean-workflow --priority 1
+```
+
+## License
+
+MIT

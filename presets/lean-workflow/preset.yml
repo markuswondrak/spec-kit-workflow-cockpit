@@ -1,0 +1,49 @@
+schema_version: "1.0"
+
+preset:
+  id: "lean-workflow"
+  name: "Lean Workflow Cockpit"
+  version: "1.0.0"
+  description: "Unattended lean workflow: self-named specs under specs/ plus workflow-runtime context for every core command"
+  author: "workflow-cockpit"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.6.0"
+
+provides:
+  # specify is replaced outright (the lean original asks the user for the
+  # feature directory). plan/tasks/implement keep their lean content and only
+  # gain the shared workflow-runtime preamble, prepended from one file so the
+  # unattended-workflow context is not duplicated per command.
+  templates:
+    - type: "command"
+      name: "speckit.specify"
+      file: "commands/speckit.specify.md"
+      description: "Non-interactive specify - agent picks the feature name, features always live under specs/"
+      replaces: "speckit.specify"
+
+    - type: "command"
+      name: "speckit.plan"
+      file: "commands/workflow-runtime.md"
+      strategy: "prepend"
+      description: "Prepend unattended-workflow context to plan"
+
+    - type: "command"
+      name: "speckit.tasks"
+      file: "commands/workflow-runtime.md"
+      strategy: "prepend"
+      description: "Prepend unattended-workflow context to tasks"
+
+    - type: "command"
+      name: "speckit.implement"
+      file: "commands/workflow-runtime.md"
+      strategy: "prepend"
+      description: "Prepend unattended-workflow context to implement"
+
+tags:
+  - "workflow-cockpit"
+  - "headless"
+  - "unattended"
+  - "specify"
+  - "specs"
