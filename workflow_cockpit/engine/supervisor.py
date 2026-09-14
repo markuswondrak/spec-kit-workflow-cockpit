@@ -9,14 +9,28 @@ import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from .normalizer import OutputNormalizer
-from .pty_session import PtySession
+from .pty_session import PtySession, WriteOutcome
 
 
 class SupervisorError(Exception):
     """Raised for invalid supervisor lifecycle calls."""
+
+
+class StdinPolicy(str, Enum):
+    """The stdin transport chosen for one spawned child.
+
+    ``DEVNULL`` keeps ``sys.stdin.isatty()`` false so a declared gate pauses
+    instead of prompting (structured resume owns it). ``PTY`` attaches the
+    child's stdin to the managed PTY so a non-verdict gate prompts in-process
+    and can be decided by one guarded write.
+    """
+
+    DEVNULL = "devnull"
+    PTY = "pty"
 
 
 @dataclass(frozen=True)
@@ -25,6 +39,7 @@ class ProcessCondition:
     exit_code: int | None
     reaped: bool
     aborting: bool
+    stdin_pty: bool = False
 
 
 def build_run_argv(
@@ -62,6 +77,7 @@ class EngineSupervisor:
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
         spawner: Callable[..., subprocess.Popen] | None = None,
+        stdin: StdinPolicy = StdinPolicy.DEVNULL,
     ) -> None:
         self.executable = Path(executable)
         self.project_root = Path(project_root)
@@ -71,6 +87,9 @@ class EngineSupervisor:
         self._clock = clock
         self._sleep = sleeper
         self._spawner = spawner or subprocess.Popen
+        #: Default stdin policy for spawns that do not override it. The active
+        #: policy is also recorded on each spawn and surfaced in the condition.
+        self._default_stdin = StdinPolicy(stdin)
 
         self._lock = threading.RLock()
         self._proc: subprocess.Popen | None = None
@@ -83,6 +102,7 @@ class EngineSupervisor:
         self._started_at: float | None = None
         self._command_kind: str | None = None
         self._last_reaped_command: str | None = None
+        self._stdin_policy = self._default_stdin
 
     @property
     def run_id(self) -> str | None:
@@ -124,6 +144,7 @@ class EngineSupervisor:
         run_id: str,
         argv: Sequence[str],
         *,
+        stdin: StdinPolicy | None = None,
         env: Mapping[str, str] | None = None,
     ) -> None:
         with self._lock:
@@ -135,16 +156,17 @@ class EngineSupervisor:
                 raise SupervisorError(
                     f"Run directory already exists for {run_id!r}; refusing to reuse it."
                 )
-            self._spawn(run_id, argv, env, command_kind="run")
+            self._spawn(run_id, argv, env, command_kind="run", stdin=stdin)
 
     def resume(
         self,
         run_id: str,
         argv: Sequence[str],
         *,
+        stdin: StdinPolicy | None = None,
         env: Mapping[str, str] | None = None,
     ) -> None:
-        """Spawn a structured resume for the already-owned run.
+        """Spawn a resume for the already-owned run.
 
         Only one child may be owned at a time; the previous child must have
         been reaped. The normalizer's output history is preserved.
@@ -161,7 +183,7 @@ class EngineSupervisor:
             if not self._reaped_event.is_set():
                 raise SupervisorError("The previous engine process has not exited.")
             self._reset_for_spawn()
-            self._spawn(run_id, argv, env, command_kind="resume")
+            self._spawn(run_id, argv, env, command_kind="resume", stdin=stdin)
 
     def _reset_for_spawn(self) -> None:
         if self._pty is not None:
@@ -179,12 +201,15 @@ class EngineSupervisor:
         env: Mapping[str, str] | None,
         *,
         command_kind: str,
+        stdin: StdinPolicy | None = None,
     ) -> None:
+        policy = self._default_stdin if stdin is None else StdinPolicy(stdin)
         master_fd, slave_fd = os.openpty()
-        # stdin is deliberately not a TTY: Cockpit is a read-only observer in
-        # S03, and the engine pauses a gate instead of prompting when stdin is
-        # not a TTY. stdout/stderr stay on the PTY for normalized output.
-        stdin_fd = os.open(os.devnull, os.O_RDONLY)
+        # Default stdin is deliberately not a TTY so a declared gate pauses
+        # instead of prompting (S03). With ``PTY`` the slave is the child's
+        # stdin so a non-verdict gate prompts and stays alive; stdout and stderr
+        # always share the slave for normalized output.
+        stdin_fd = slave_fd if policy is StdinPolicy.PTY else os.open(os.devnull, os.O_RDONLY)
         child_env = dict(os.environ if env is None else env)
         child_env["SPECIFY_INIT_DIR"] = str(self.project_root)
         child_env["SPECKIT_WORKFLOW_RUN_ID"] = run_id
@@ -202,14 +227,17 @@ class EngineSupervisor:
         except BaseException:
             os.close(master_fd)
             os.close(slave_fd)
-            os.close(stdin_fd)
+            if stdin_fd != slave_fd:
+                os.close(stdin_fd)
             raise
         os.close(slave_fd)
-        os.close(stdin_fd)
+        if stdin_fd != slave_fd:
+            os.close(stdin_fd)
         self._proc = proc
         self._run_id = run_id
         self._pgid = os.getpgid(proc.pid)
         self._command_kind = command_kind
+        self._stdin_policy = policy
         if self._started_at is None:
             self._started_at = self._clock()
         self._pty = PtySession(master_fd, self.normalizer.feed)
@@ -245,6 +273,28 @@ class EngineSupervisor:
     def is_live(self) -> bool:
         return self.verify_live()
 
+    def write_input(self, data: bytes) -> WriteOutcome:
+        """Write to the PTY of the current live owned process, else refuse.
+
+        This is the only write seam, and it shares the supervisor lock with
+        Abort. It rejects a write once Abort has been claimed, verifies
+        liveness, and requires that the active child was spawned with PTY
+        stdin, so it can never address a reaped, foreign, or non-interactive
+        process. The returned classification reports complete, absent, or
+        uncertain delivery.
+        """
+        with self._lock:
+            if self._abort_requested:
+                return WriteOutcome.NOT_WRITTEN
+            if not self.verify_live():
+                return WriteOutcome.NOT_WRITTEN
+            if self._stdin_policy is not StdinPolicy.PTY:
+                return WriteOutcome.NOT_WRITTEN
+            pty = self._pty
+            if pty is None:
+                return WriteOutcome.NOT_WRITTEN
+            return pty.write(data)
+
     def condition(self) -> ProcessCondition:
         with self._lock:
             reaped = self._reaped_event.is_set()
@@ -253,6 +303,7 @@ class EngineSupervisor:
                 exit_code=self._exit_code,
                 reaped=reaped,
                 aborting=self._abort_requested and not reaped,
+                stdin_pty=self._stdin_policy is StdinPolicy.PTY,
             )
 
     def _wait_until_reaped(self, timeout: float) -> bool:

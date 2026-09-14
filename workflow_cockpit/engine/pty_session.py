@@ -6,12 +6,27 @@ import errno
 import os
 import threading
 from collections.abc import Callable
+from enum import Enum
 
 _IO_ERRORS = (errno.EIO, errno.EBADF, errno.EINVAL)
 
 
+class WriteOutcome(str, Enum):
+    """Classification of one attempted PTY write.
+
+    ``WRITTEN`` means the complete payload was accepted exactly once.
+    ``NOT_WRITTEN`` means zero bytes reached the PTY. ``UNCERTAIN`` means a
+    partial write or an ambiguous I/O failure occurred, so the input may or may
+    not have been received; the caller must treat the attempt as consumed.
+    """
+
+    NOT_WRITTEN = "not_written"
+    WRITTEN = "written"
+    UNCERTAIN = "uncertain"
+
+
 class PtySession:
-    """Read one PTY master in a background thread; never write to it."""
+    """Read one PTY master in a background thread; write only confirmed input."""
 
     def __init__(
         self,
@@ -52,6 +67,33 @@ class PtySession:
             except Exception:
                 self.exit_reason = "consumer"
                 break
+
+    def write(self, data: bytes) -> WriteOutcome:
+        """Write the complete payload, classifying the result.
+
+        Short writes are retried until the whole payload is accepted, and an
+        interrupted ``os.write`` (``EINTR``) is retried. The returned
+        classification lets the caller keep write-once protection for a partial
+        or ambiguous write instead of treating it as complete.
+        """
+        if self._stop.is_set():
+            return WriteOutcome.NOT_WRITTEN
+        if not data:
+            return WriteOutcome.WRITTEN
+        written = 0
+        while written < len(data):
+            try:
+                count = os.write(self.master_fd, data[written:])
+            except InterruptedError:
+                continue
+            except OSError as exc:
+                if exc.errno == errno.EINTR:
+                    continue
+                return WriteOutcome.UNCERTAIN if written else WriteOutcome.NOT_WRITTEN
+            if count <= 0:
+                return WriteOutcome.UNCERTAIN if written else WriteOutcome.NOT_WRITTEN
+            written += count
+        return WriteOutcome.WRITTEN
 
     def close(self) -> None:
         self._stop.set()

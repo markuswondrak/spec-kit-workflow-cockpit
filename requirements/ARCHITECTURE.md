@@ -42,7 +42,7 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 | Component | Responsibility |
 |---|---|
 | `EngineSupervisor` | Validate the session's preallocated run ID; start or resume with the pinned executable and locked project environment; own/reap one process group; signal only a verified live group. |
-| `PtySession` | Own the internal output PTY per output-producing command; incremental non-blocking reads. S1 uses non-TTY stdin; later interactive input is enabled only by its validated strategy. |
+| `PtySession` | Own the internal output PTY per output-producing command; incremental non-blocking reads and complete-or-classified writes. Child stdin is selected explicitly per spawn. |
 | `OutputNormalizer` | Decode with replacement, normalize carriage returns, strip ANSI/control sequences, retain complete lines plus the partial line. |
 | `VerdictInputDecider` | Structured gate decisions via `resume -i <name>=<choice> --json`. |
 | `InternalPtyDecider` | Fallback gate decisions written once to the managed PTY. |
@@ -66,7 +66,8 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 
 | Component | Responsibility |
 |---|---|
-| `CockpitSession` | Facade that composes services. S1 exposes select, configure, start, and abort; S3 adds decide. |
+| `CockpitSession` | Presentation facade that composes services and exposes one `submit_decision(choice, token)` seam. |
+| `GateDecisionCoordinator` | Projects every current declared gate into one transport-independent `GateSnapshot`, owns opaque tokens and write-once attempt reconciliation. |
 | `PollingLoop` | Publish an immutable `RunSnapshot` on a 250 ms monotonic schedule. |
 | `RunSnapshot` | Immutable view of status, graph projection, gate, review data, output tail, and outcome. |
 | `SignalHandler` | On catchable `SIGINT`, `SIGHUP`, `SIGTERM`, attempt bounded best-effort abort without confirmation. |
@@ -145,19 +146,24 @@ An isolated wheel smoke test verifies the executable and package data.
 
 ### 3.3 Gate
 
-1. A `RunSnapshot` marks a paused gate with its step, message, and exact declared options.
+1. A `RunSnapshot` publishes one `GateSnapshot` for every current declared gate, whether the raw engine state is paused or running.
 2. Runway highlights the gate and Focus opens the review surface automatically.
 3. `FeatureReviewService` lists the declared feature directory's files; Focus shows the
    selected file's current content.
-4. A confirmed choice is dispatched: structured resume when `verdict_input` exists, otherwise
-   one write to the PTY via `InternalPtyDecider`.
-5. Persisted state remains authoritative. An unverified PTY write is shown but not resent; if
-   state does not advance, only confirmed Abort is offered.
+4. A confirmed choice is dispatched through `CockpitSession.submit_decision(choice, token)`;
+   the coordinator selects structured resume or one guarded PTY write internally.
+5. Persisted state remains authoritative. Submitted and uncertain writes are shown once and never
+   resent; if state does not advance, only confirmed Abort is offered.
 
 S4 replaces S1's non-TTY stdin with validated, Cockpit-controlled PTY stdin for workflows that
 need an interactive gate. No user keystrokes are forwarded. `InternalPtyDecider` writes only
 while that original supervised process and PTY are still live; it never addresses a reaped
 process. Structured gates whose command exited use a newly supervised `resume` process.
+
+Because the engine's stdin policy applies to the whole child, Cockpit rejects mixed structured and
+interactive workflows before Start. It also rejects dynamic interactive gate values, interactive
+gates inside loops or fan-out, and interactive `on_reject: retry` until a deterministic contract
+for those shapes is proven.
 
 ### 3.4 Lifecycle
 

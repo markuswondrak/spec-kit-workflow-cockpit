@@ -14,7 +14,7 @@ from ...services.snapshot import OutcomeKind
 from ...session.polling import PollingLoop
 from ..editor import default_editor_launcher, editor_environment
 from ..palette import COLD, FAULT, FOG, PAPER, SIGNAL
-from ..view_model import default_focus_mode, format_elapsed
+from ..view_model import default_focus_mode, format_elapsed, gate_decision
 from ..widgets import (
     TRUNCATION_MARKER,
     CommandRail,
@@ -74,6 +74,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         self._document_key: tuple | None = None
         self._document_pending_key: tuple | None = None
         self._diagnostic = ""
+        self._pending_decision: tuple[str, str | None] | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):
@@ -181,7 +182,11 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         overview.set_class(mode == "output", "compact-summary")
         overview.set_class(mode == "gate", "gate-summary")
         review.display = mode in ("gate", "changes")
-        decide.display = mode == "gate" and not snapshot.process_live
+        # The decide bar follows the unified gate snapshot: selectable while
+        # ready, visible-but-disabled while submitted, unverified, or blocked
+        # when the gate still declares options.
+        decision = gate_decision(snapshot) if mode == "gate" else None
+        decide.display = decision is not None and bool(decision.options)
 
     def _render_state(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")
@@ -264,19 +269,19 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         rail = self.query_one(CommandRail)
         if snapshot.terminal:
             rail.set_actions("  enter  close", None)
-        elif snapshot.status == "paused" and not snapshot.process_live:
-            gate = snapshot.gate
-            if gate is not None and gate.structured:
-                digits = " ".join(str(index) for index in range(1, min(9, len(gate.options)) + 1))
-                rail.set_actions(f"  {digits}  decide     c  changes     s  state     x  abort", "x  Abort run")
-            else:
-                rail.set_actions("  c  changes     s  state     x  abort run", "x  Abort run")
+            return
+        decision = gate_decision(snapshot)
+        if decision.selectable:
+            digits = " ".join(str(index) for index in range(1, min(9, len(decision.options)) + 1))
+            rail.set_actions(f"  {digits}  decide     c  changes     s  state     x  abort", "x  Abort run")
+        elif snapshot.gate is not None:
+            rail.set_actions("  c  changes     s  state     l  output     x  abort run", "x  Abort run")
         else:
             rail.set_actions("  l  output     x  abort run     ?  help", "x  Abort run")
 
     def action_expand_output(self) -> None:
         snapshot = self._snapshot_now()
-        at_gate = snapshot.status == "paused" and not snapshot.process_live and snapshot.gate is not None
+        at_gate = snapshot.gate is not None
         if at_gate:
             if not self._output_expanded:
                 self._output_expanded = True
@@ -295,7 +300,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
     def action_collapse_output(self) -> None:
         snapshot = self._snapshot_now()
         self._output_expanded = False
-        self._held_mode = "gate" if snapshot.status == "paused" else None
+        self._held_mode = "gate" if snapshot.gate is not None else None
         self._update_focus(snapshot)
 
     def action_tail(self) -> None:
@@ -306,59 +311,78 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         self._update_focus(self._snapshot_now())
 
     def action_gate(self) -> None:
-        if self._snapshot_now().status == "paused":
+        snapshot = self._snapshot_now()
+        if snapshot.gate is not None:
             self._held_mode = "gate"
-            self._update_focus(self._snapshot_now())
+            self._update_focus(snapshot)
 
     def action_changes(self) -> None:
         snapshot = self._snapshot_now()
-        if snapshot.status != "paused" and snapshot.review is None:
+        if snapshot.gate is None and snapshot.review is None:
             return
         self._held_mode = "changes"
-        if snapshot.status == "paused":
+        if snapshot.gate is not None:
             self._reload_review()
         self._update_focus(snapshot)
 
     def action_choose(self, index: str | None = None) -> None:
         snapshot = self._snapshot_now()
-        gate = snapshot.gate
-        if self._focus_mode != "gate" or snapshot.process_live or gate is None or not gate.structured:
+        decision = gate_decision(snapshot)
+        if self._focus_mode != "gate" or not decision.selectable:
             return
         if index is not None:
             try:
                 number = int(index)
             except (TypeError, ValueError):
                 return
-            if not 1 <= number <= len(gate.options):
+            if not 1 <= number <= len(decision.options):
                 return
-            self._confirm_choice(gate.options[number - 1])
+            self._confirm_choice(decision.options[number - 1])
             return
         selected = self.query_one(GateOptions).selected_option()
         if selected is not None:
             self._confirm_choice(selected)
 
     def _confirm_choice(self, choice: str) -> None:
-        gate = self._snapshot_now().gate
-        effect = "The engine resumes and re-executes this gate with your choice."
-        if gate is not None and gate.on_reject and choice.lower() in ("reject", "abort"):
+        snapshot = self._snapshot_now()
+        gate = snapshot.gate
+        if gate is None or not gate.selectable:
+            return
+        self._pending_decision = (choice, gate.token)
+        title = f"Submit {choice!r}?"
+        effect = "The confirmed choice is submitted once. Persisted engine state stays authoritative."
+        if gate.on_reject and choice.lower() in ("reject", "abort"):
             effect = f"This gate declares on_reject: {gate.on_reject}. " + effect
         self.app.push_screen(
             ConfirmScreen(
-                f"Submit {choice!r}?",
+                title,
                 effect,
                 confirm_label=choice,
                 note="Persisted engine state stays authoritative after submission.",
             ),
-            lambda confirmed: self._after_choice(choice, confirmed),
+            self._after_choice,
         )
 
-    def _after_choice(self, choice: str, confirmed: bool | None) -> None:
-        if not confirmed:
+    def _after_choice(self, confirmed: bool | None) -> None:
+        pending = self._pending_decision
+        self._pending_decision = None
+        if not confirmed or pending is None:
             return
+        choice, token = pending
+        self._submit_decision(choice, token)
+
+    @work(thread=True)
+    def _submit_decision(self, choice: str, token: str | None) -> None:
+        error = ""
         try:
-            self.session.decide(choice)
-        except Exception as exc:  # noqa: BLE001 - CLI failures stay diagnostic
-            self._diagnostic = str(exc)
+            self.session.submit_decision(choice, token)
+        except Exception as exc:  # noqa: BLE001 - refusal stays diagnostic
+            error = str(exc)
+        self.app.call_from_thread(self._after_submission, error)
+
+    def _after_submission(self, error: str) -> None:
+        if error:
+            self._diagnostic = error
         self._review_loaded = False
         self._refresh()
 
@@ -415,15 +439,13 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         if snapshot.terminal:
             self.app.exit()
             return
-        if (
-            self._focus_mode == "gate"
-            and not snapshot.process_live
-            and snapshot.gate is not None
-            and snapshot.gate.structured
-        ):
-            selected = self.query_one(GateOptions).selected_option()
-            if selected is not None:
-                self._confirm_choice(selected)
+        if self._focus_mode != "gate":
+            return
+        if not gate_decision(snapshot).selectable:
+            return
+        selected = self.query_one(GateOptions).selected_option()
+        if selected is not None:
+            self._confirm_choice(selected)
 
     def action_help(self) -> None:
         self.app.push_screen(HelpScreen())

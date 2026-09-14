@@ -4,8 +4,10 @@ import time
 import unittest
 from pathlib import Path
 
+from workflow_cockpit.engine.pty_session import WriteOutcome
 from workflow_cockpit.engine.supervisor import (
     EngineSupervisor,
+    StdinPolicy,
     SupervisorError,
     build_resume_argv,
 )
@@ -123,6 +125,75 @@ class SupervisorTests(unittest.TestCase):
                 "--json",
             ],
         )
+
+    def test_default_stdin_is_not_a_tty(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.start("run-1", [sys.executable, "-c", "import sys; print(sys.stdin.isatty())"])
+        self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+        self.assertIn("False", supervisor.output_lines)
+
+    def test_stdin_policy_is_recorded_on_the_condition(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.start(
+            "run-1",
+            [sys.executable, "-c", "import sys; print(sys.stdin.isatty())"],
+            stdin=StdinPolicy.PTY,
+        )
+        self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+        self.assertIn("True", supervisor.output_lines)
+        self.assertTrue(supervisor.condition().stdin_pty)
+
+    def test_default_stdin_is_devnull(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.start("run-1", [sys.executable, "-c", "print('x')"])
+        self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+        self.assertFalse(supervisor.condition().stdin_pty)
+
+    def test_write_input_writes_to_live_process(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        script = (
+            "import sys; print('ready'); sys.stdout.flush();"
+            "line = sys.stdin.readline(); print('got:' + line.strip())"
+        )
+        supervisor.start("run-1", [sys.executable, "-c", script], stdin=StdinPolicy.PTY)
+        self.assertTrue(wait_for(lambda: "ready" in supervisor.output_lines))
+        self.assertIs(supervisor.write_input(b"approve\n"), WriteOutcome.WRITTEN)
+        self.assertTrue(wait_for(lambda: any("got:approve" in line for line in supervisor.output_lines)))
+        supervisor.close()
+
+    def test_write_input_refuses_when_reaped(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.start("run-1", [sys.executable, "-c", "print('done')"], stdin=StdinPolicy.PTY)
+        self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+        self.assertIs(supervisor.write_input(b"approve\n"), WriteOutcome.NOT_WRITTEN)
+
+    def test_write_input_refuses_without_process(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        self.assertIs(supervisor.write_input(b"approve\n"), WriteOutcome.NOT_WRITTEN)
+
+    def test_write_input_refuses_without_pty_stdin(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        script = "import time; print('up'); time.sleep(5)"
+        supervisor.start("run-1", [sys.executable, "-c", script])
+        try:
+            self.assertTrue(wait_for(lambda: supervisor.verify_live()))
+            self.assertIs(supervisor.write_input(b"approve\n"), WriteOutcome.NOT_WRITTEN)
+        finally:
+            supervisor.abort()
+            supervisor.close()
+
+    def test_write_input_refuses_after_abort_claimed(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        script = "import sys, time; print('ready'); sys.stdout.flush(); time.sleep(5)"
+        supervisor.start("run-1", [sys.executable, "-c", script], stdin=StdinPolicy.PTY)
+        try:
+            self.assertTrue(wait_for(lambda: "ready" in supervisor.output_lines))
+            with supervisor._lock:
+                supervisor._abort_requested = True
+            self.assertIs(supervisor.write_input(b"approve\n"), WriteOutcome.NOT_WRITTEN)
+        finally:
+            supervisor.abort()
+            supervisor.close()
 
 
 if __name__ == "__main__":

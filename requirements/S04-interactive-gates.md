@@ -19,6 +19,9 @@
 - If state does not advance, choices cannot be resent and confirmed Abort is the only action.
 - Engine Output remains available for diagnosis.
 - Structured `verdict_input` is preferred whenever declared.
+- Mixed structured/non-verdict workflows, dynamic non-verdict gate values, loop/fan-out
+  interactive gates, and interactive `on_reject: retry` shapes are rejected before Start until
+  the engine contract proves deterministic prompt ownership for them.
 
 ## Tests
 

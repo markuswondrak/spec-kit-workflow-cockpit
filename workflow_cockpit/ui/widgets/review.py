@@ -71,20 +71,34 @@ class ReviewDocumentView(Static):
 
 
 class GateOptions(OptionList):
-    """Equal-weight declared gate choices; digits select by position."""
+    """Equal-weight declared gate choices; digits select by position.
+
+    ``update_options`` accepts a ``selectable`` flag so a disabled gate still
+    shows its declared choices without offering a write affordance.
+    """
 
     BINDINGS = [
         Binding("j", "cursor_down", show=False),
         Binding("k", "cursor_up", show=False),
     ]
 
-    def update_options(self, options: tuple[str, ...] | list[str]) -> None:
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.selectable = True
+
+    def update_options(self, options: tuple[str, ...] | list[str], *, selectable: bool = True) -> None:
+        self.selectable = bool(selectable)
         highlighted = self.highlighted_option
         selected = str(highlighted.id) if highlighted is not None and highlighted.id is not None else None
         scroll_y = self.scroll_y
-        items = [Option(_text((f"[{index}]  {option}", PAPER)), id=option) for index, option in enumerate(options, 1)]
+        tone = PAPER if self.selectable else FOG
+        items = [
+            Option(_text((f"[{index}]  {option}", tone)), id=option)
+            for index, option in enumerate(options, 1)
+        ]
         self.clear_options()
         self.add_options(items)
+        self.set_class(not self.selectable, "disabled")
         if items:
             by_id = {str(option.id): index for index, option in enumerate(items)}
             self.highlighted = by_id.get(selected or "", 0)

@@ -188,6 +188,8 @@ a status dashboard.
 - Prefer `verdict_input`; use automated PTY input otherwise.
 - Never send the same unverified PTY decision twice.
 - Provide a separately confirmed Abort action.
+- Reject mixed, dynamic, loop/fan-out, and interactive-retry gate shapes before Start when the
+  verified engine contract cannot prove deterministic prompt ownership.
 
 ### FR-6 - Lifecycle
 

@@ -11,9 +11,34 @@ from tests.support import (
     write_run,
     write_workflow,
 )
+from workflow_cockpit.engine.supervisor import StdinPolicy
 from workflow_cockpit.services.definition import WorkflowDefinitionResolver
 from workflow_cockpit.services.registry import WorkflowRegistry
+from workflow_cockpit.services.snapshot import GateState
 from workflow_cockpit.session.cockpit_session import CockpitSession, SessionError, generate_run_id
+
+NON_VERDICT_WORKFLOW = {
+    "schema_version": "1.0",
+    "workflow": {"id": "demo", "name": "Demo", "version": "1.0.0", "description": "demo"},
+    "inputs": {"spec": {"type": "string", "required": True}},
+    "steps": [
+        {"id": "prepare", "command": "demo.prepare"},
+        {
+            "id": "review",
+            "type": "gate",
+            "message": "Approve the plan?",
+            "options": ["approve", "reject"],
+            "on_reject": "skip",
+        },
+        {"id": "finish", "command": "demo.finish"},
+    ],
+}
+
+
+def non_verdict_workflow(options):
+    workflow = {**NON_VERDICT_WORKFLOW, "steps": list(NON_VERDICT_WORKFLOW["steps"])}
+    workflow["steps"][1] = {**workflow["steps"][1], "options": list(options)}
+    return workflow
 
 
 class SessionTests(unittest.TestCase):
@@ -30,15 +55,16 @@ class SessionTests(unittest.TestCase):
     def make_session(self, **kwargs):
         git = kwargs.pop("git", FakeGit())
         review_source = kwargs.pop("review_source", FakeReviewService())
+        version = kwargs.pop("version", "1.0.0")
         return CockpitSession(
             self.root,
-            compatibility_result(),
+            compatibility_result(version),
             registry=WorkflowRegistry(self.root),
             resolver=WorkflowDefinitionResolver(self.root),
             git=git,
             review_source=review_source,
             supervisor=self.supervisor,
-            clock=lambda: 10.0,
+            clock=kwargs.pop("clock", lambda: 10.0),
         )
 
     def test_select_and_validate(self):
@@ -56,6 +82,7 @@ class SessionTests(unittest.TestCase):
         self.assertFalse((self.root / ".specify" / "workflows" / "runs" / snapshot.run_id).exists())
         self.assertIn("workflow", self.supervisor.started_argv)
         self.assertIn("demo", self.supervisor.started_argv)
+        self.assertIs(self.supervisor.stdin_policy, StdinPolicy.DEVNULL)
 
     def test_second_start_rejected(self):
         session = self.make_session()
@@ -164,57 +191,58 @@ class SessionTests(unittest.TestCase):
         self.supervisor.finish(exit_code=0)
         return session.snapshot()
 
-    def test_decide_builds_structured_resume_argv(self):
+    def test_submit_builds_structured_resume_argv(self):
         session = self.make_session()
         session.select("demo")
         snapshot = session.start({"spec": "search"})
         final = self._paused_gate(session, snapshot.run_id)
-        self.assertTrue(final.gate.structured)
-        session.decide("reject")
+        self.assertEqual(final.gate.state, GateState.READY)
+        session.submit_decision("reject", final.gate.token)
         run_id, argv = self.supervisor.resume_calls[-1]
         self.assertEqual(run_id, snapshot.run_id)
         self.assertEqual(argv[1:4], ["workflow", "resume", snapshot.run_id])
         self.assertIn("review_verdict=reject", argv)
         self.assertIn("--json", argv)
 
-    def test_decide_rejects_unknown_option(self):
+    def test_submit_rejects_unknown_option(self):
         session = self.make_session()
         session.select("demo")
         snapshot = session.start({"spec": "search"})
-        self._paused_gate(session, snapshot.run_id)
+        final = self._paused_gate(session, snapshot.run_id)
         with self.assertRaises(SessionError):
-            session.decide("maybe")
+            session.submit_decision("maybe", final.gate.token)
 
-    def test_decide_rejects_while_process_live(self):
+    def test_submit_rejects_while_process_live(self):
         session = self.make_session()
         session.select("demo")
         session.start({"spec": "search"})
         with self.assertRaises(SessionError):
-            session.decide("approve")
+            session.submit_decision("approve", None)
 
-    def test_decide_rejects_malformed_gate(self):
+    def test_submit_rejects_malformed_gate(self):
         session = self.make_session()
         session.select("demo")
         snapshot = session.start({"spec": "search"})
-        self._paused_gate(session, snapshot.run_id, output={"message": "Review"})
+        final = self._paused_gate(session, snapshot.run_id, output={"message": "Review"})
+        self.assertEqual(final.gate.state, GateState.BLOCKED)
         with self.assertRaises(SessionError):
-            session.decide("approve")
+            session.submit_decision("approve", None)
 
-    def test_decide_rejects_after_abort(self):
+    def test_submit_rejects_after_abort(self):
         session = self.make_session()
         session.select("demo")
         snapshot = session.start({"spec": "search"})
-        self._paused_gate(session, snapshot.run_id)
+        final = self._paused_gate(session, snapshot.run_id)
         session.abort()
         with self.assertRaisesRegex(SessionError, "aborted"):
-            session.decide("approve")
+            session.submit_decision("approve", final.gate.token)
 
     def test_failed_resume_keeps_paused_gate_and_reports_diagnostic(self):
         session = self.make_session()
         session.select("demo")
         snapshot = session.start({"spec": "search"})
-        self._paused_gate(session, snapshot.run_id)
-        session.decide("approve")
+        final = self._paused_gate(session, snapshot.run_id)
+        session.submit_decision("approve", final.gate.token)
         self.supervisor.finish(exit_code=3)
         final = session.snapshot()
         self.assertEqual(final.status, "paused")
@@ -240,6 +268,171 @@ class SessionTests(unittest.TestCase):
         git.branch_value = "feature/runway"
         refreshed = session.snapshot()
         self.assertEqual(refreshed.branch, "feature/runway")
+
+
+class InteractiveSessionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        write_workflow(self.root, NON_VERDICT_WORKFLOW)
+        write_registry(self.root)
+        self.supervisor = FakeSupervisor()
+        self.now = [100.0]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def make_session(self, version="1.0.6"):
+        return CockpitSession(
+            self.root,
+            compatibility_result(version),
+            registry=WorkflowRegistry(self.root),
+            resolver=WorkflowDefinitionResolver(self.root),
+            git=FakeGit(),
+            review_source=FakeReviewService(),
+            supervisor=self.supervisor,
+            clock=lambda: self.now[0],
+        )
+
+    def _start_live_gate(self, version="1.0.6"):
+        session = self.make_session(version)
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        write_run(self.root, snapshot.run_id, status="running", current_step_id="review")
+        return session, snapshot.run_id
+
+    def test_contract_enables_interactive_stdin_policy(self):
+        session = self.make_session()
+        session.select("demo")
+        session.start({"spec": "search"})
+        self.assertIs(self.supervisor.stdin_policy, StdinPolicy.PTY)
+        self.assertEqual(session.compatibility_error, "")
+
+    def test_verdict_gate_definition_keeps_stdin_closed(self):
+        from tests.support import LINEAR_WORKFLOW
+
+        write_workflow(self.root, LINEAR_WORKFLOW)
+        session = self.make_session()
+        session.select("demo")
+        session.start({"spec": "search"})
+        self.assertIs(self.supervisor.stdin_policy, StdinPolicy.DEVNULL)
+
+    def test_unverified_version_is_rejected_before_start(self):
+        session = self.make_session("1.0.5")
+        session.select("demo")
+        self.assertIn("not verified", session.compatibility_error)
+        with self.assertRaisesRegex(SessionError, "not verified"):
+            session.start({"spec": "search"})
+        self.assertIsNone(self.supervisor.started_argv)
+
+    def test_live_non_verdict_gate_is_ready(self):
+        session, _ = self._start_live_gate()
+        gate = session.snapshot().gate
+        self.assertEqual(gate.state, GateState.READY)
+        self.assertEqual(gate.options, ("approve", "reject"))
+        self.assertTrue(gate.token)
+
+    def test_submit_writes_mapped_choice_exactly_once(self):
+        session, _ = self._start_live_gate()
+        gate = session.snapshot().gate
+        session.submit_decision("approve", gate.token)
+        self.assertEqual(self.supervisor.writes, [b"1\n"])
+        after = session.snapshot().gate
+        self.assertEqual(after.state, GateState.SUBMITTED)
+        self.assertFalse(after.selectable)
+        with self.assertRaises(SessionError):
+            session.submit_decision("reject", gate.token)
+        self.assertEqual(self.supervisor.writes, [b"1\n"])
+
+    def test_repeated_snapshots_do_not_rewrite(self):
+        session, _ = self._start_live_gate()
+        gate = session.snapshot().gate
+        session.submit_decision("approve", gate.token)
+        for _ in range(5):
+            session.snapshot()
+        self.assertEqual(self.supervisor.writes, [b"1\n"])
+
+    def test_watch_expiry_marks_unverified(self):
+        session, _ = self._start_live_gate()
+        gate = session.snapshot().gate
+        session.submit_decision("approve", gate.token)
+        self.now[0] += 10.0
+        after = session.snapshot().gate
+        self.assertEqual(after.state, GateState.UNVERIFIED)
+        self.assertFalse(after.selectable)
+
+    def test_stale_token_is_rejected_without_write(self):
+        session, _ = self._start_live_gate()
+        with self.assertRaisesRegex(SessionError, "stale"):
+            session.submit_decision("approve", "not-the-token")
+        self.assertEqual(self.supervisor.writes, [])
+
+    def test_advancement_clears_gate(self):
+        session, run_id = self._start_live_gate()
+        gate = session.snapshot().gate
+        session.submit_decision("approve", gate.token)
+        write_run(self.root, run_id, status="completed", current_step_id="finish")
+        self.supervisor.finish(exit_code=0)
+        final = session.snapshot()
+        self.assertIsNone(final.gate)
+
+    def test_reaped_process_blocks_the_gate(self):
+        session, _ = self._start_live_gate()
+        self.supervisor.finish(exit_code=0)
+        gate = session.snapshot().gate
+        self.assertEqual(gate.state, GateState.BLOCKED)
+        self.assertIn("live", gate.reason)
+
+    def test_unknown_choice_is_rejected(self):
+        session, _ = self._start_live_gate()
+        gate = session.snapshot().gate
+        with self.assertRaises(SessionError):
+            session.submit_decision("maybe", gate.token)
+        self.assertEqual(self.supervisor.writes, [])
+
+    def test_not_running_state_blocks_the_gate(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        write_run(self.root, snapshot.run_id, status="created", current_step_id="review")
+        gate = session.snapshot().gate
+        self.assertEqual(gate.state, GateState.BLOCKED)
+        self.assertIn("not waiting", gate.reason)
+
+    def test_empty_options_are_rejected_before_start(self):
+        write_workflow(self.root, non_verdict_workflow([]))
+        session = self.make_session()
+        session.select("demo")
+        self.assertIn("no options", session.compatibility_error)
+        with self.assertRaises(SessionError):
+            session.start({"spec": "search"})
+        self.assertIsNone(self.supervisor.started_argv)
+
+    def test_structured_gate_never_uses_pty(self):
+        from tests.support import LINEAR_WORKFLOW
+
+        write_workflow(self.root, LINEAR_WORKFLOW)
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        write_run(
+            self.root,
+            snapshot.run_id,
+            status="paused",
+            current_step_id="review",
+            step_results={
+                "review": {
+                    "type": "gate",
+                    "output": {"message": "Review it", "options": ["approve", "reject"], "on_reject": "retry"},
+                }
+            },
+        )
+        self.supervisor.finish(exit_code=0)
+        final = session.snapshot()
+        self.assertEqual(final.gate.state, GateState.READY)
+        session.submit_decision("approve", final.gate.token)
+        self.assertEqual(self.supervisor.writes, [])
+        self.assertTrue(self.supervisor.resume_calls)
 
 
 if __name__ == "__main__":

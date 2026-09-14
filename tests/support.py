@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +12,8 @@ from packaging.version import Version
 from textual.app import App
 
 from workflow_cockpit.bootstrap.compatibility import CompatibilityResult
-from workflow_cockpit.engine.supervisor import ProcessCondition
+from workflow_cockpit.engine.pty_session import WriteOutcome
+from workflow_cockpit.engine.supervisor import ProcessCondition, StdinPolicy
 from workflow_cockpit.services.definition import (
     InputSpec,
     StepSpec,
@@ -21,7 +22,7 @@ from workflow_cockpit.services.definition import (
 from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
-from workflow_cockpit.services.snapshot import RunSnapshot
+from workflow_cockpit.services.snapshot import GateState, RunSnapshot
 
 STYLES = Path(__file__).resolve().parents[1] / "workflow_cockpit" / "ui" / "styles.tcss"
 
@@ -191,20 +192,31 @@ class FakeSupervisor:
         self.abort_calls = 0
         self.started_argv: list[str] | None = None
         self.resume_calls: list[tuple[str, list[str]]] = []
+        self.resume_stdin: list[StdinPolicy] = []
+        self.writes: list[bytes] = []
+        self.write_result = WriteOutcome.WRITTEN
+        self.stdin_policy = StdinPolicy.DEVNULL
         self._active_command: str | None = None
         self._live = live
 
-    def start(self, run_id: str, argv, *, env=None) -> None:
+    @property
+    def interactive(self) -> bool:
+        return self.stdin_policy is StdinPolicy.PTY
+
+    def start(self, run_id: str, argv, *, stdin=None, env=None) -> None:
         self.run_id = run_id
         self.started_argv = list(argv)
         self.started_at = 0.0
         self._live = True
+        if stdin is not None:
+            self.stdin_policy = StdinPolicy(stdin)
         self._active_command = "run"
 
-    def resume(self, run_id: str, argv, *, env=None) -> None:
+    def resume(self, run_id: str, argv, *, stdin=None, env=None) -> None:
         if self.run_id is None:
             raise RuntimeError("No run has been started to resume.")
         self.resume_calls.append((run_id, list(argv)))
+        self.resume_stdin.append(StdinPolicy(stdin) if stdin is not None else self.stdin_policy)
         self.started_argv = list(argv)
         self._live = True
         self.last_reaped_command = None
@@ -216,6 +228,7 @@ class FakeSupervisor:
             exit_code=self.exit_code,
             reaped=not self._live,
             aborting=self.abort_requested and not self._live,
+            stdin_pty=self.stdin_policy is StdinPolicy.PTY,
         )
 
     def verify_live(self) -> bool:
@@ -223,6 +236,14 @@ class FakeSupervisor:
 
     def is_live(self) -> bool:
         return self._live
+
+    def write_input(self, data: bytes) -> WriteOutcome:
+        if self.abort_requested or not self._live:
+            return WriteOutcome.NOT_WRITTEN
+        if self.write_result is not WriteOutcome.WRITTEN and self.write_result is not WriteOutcome.UNCERTAIN:
+            return WriteOutcome.NOT_WRITTEN
+        self.writes.append(bytes(data))
+        return self.write_result
 
     def abort(self) -> None:
         self.abort_calls += 1
@@ -336,11 +357,18 @@ class FakeSession:
             time.sleep(self.abort_delay)
         return self.snapshot()
 
-    def decide(self, choice):
+    def submit_decision(self, choice, token):
+        if self.gate is None or self.gate.state is not GateState.READY:
+            raise RuntimeError("This gate cannot be decided.")
+        if not token or token != self.gate.token:
+            raise RuntimeError("The gate changed; this submission is stale.")
         self.decisions.append(choice)
-        if self.gate is not None and not self.gate.malformed:
-            self.status = "running"
-            self.gate = None
+        self.gate = replace(
+            self.gate,
+            state=GateState.SUBMITTED,
+            token=None,
+            acknowledged="Choice submitted once.",
+        )
         return self.snapshot()
 
     def refresh_review(self):

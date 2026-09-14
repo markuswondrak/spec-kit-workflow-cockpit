@@ -1,15 +1,14 @@
-# Engine Contract: S01
+# Engine Contract: S01-S04
 
 | Field | Value |
 |---|---|
-| Status | Recorded from `../spec-kit` source at `1.0.6.dev0`; S03 structured-gate behavior confirmed live |
-| Story | S01 - Own one workflow run (implemented) |
+| Status | Recorded from `../spec-kit` source at `1.0.6.dev0`; S03/S04 gate behavior confirmed live |
+| Story | S01-S04 - Own, observe, and decide one workflow run |
 | Plan | [S01 - Implementation Plan](S01-implementation-plan.md) |
 | Sources | `src/specify_cli/workflows/_commands.py`, `engine.py`, `catalog.py`, `overlays/` |
 
 This note records the confirmed engine behavior Cockpit depends on. Each confirmed row has a
-Cockpit test or a code reference; unresolved behaviors are listed in section 8 and remain the
-only Phase 0 work that needs a live spike.
+Cockpit test or a code reference. Unsupported workflow shapes fail before Cockpit spawns a child.
 
 ## 1. Executable and version
 
@@ -92,15 +91,23 @@ only Phase 0 work that needs a live spike.
   Cockpit-owned outcome without signaling a stale PGID, and never resumes the run.
 - Implemented in `engine/supervisor.py`; tested in `tests/unit/test_supervisor.py`.
 
-## 8. Pending live spikes
+## 8. Unsupported Shapes And Pending Spikes
 
-These behaviors are documented from source but were not exercised against the real engine in
-this environment; they remain the only Phase 0 follow-ups:
+The following shapes are rejected before Start because the verified engine behavior cannot provide
+deterministic prompt ownership or authoritative resolved values for Cockpit:
+
+- A workflow mixing gates with and without `verdict_input`.
+- A non-verdict gate with dynamic message or option expressions.
+- A non-verdict gate inside a loop or fan-out node.
+- A non-verdict gate with `on_reject: retry`.
+
+The remaining source-level follow-ups are diagnostic only and do not enable a new runtime shape:
 
 1. Raw ANSI/CR output and prompt behavior of each step type through the real CLI.
 2. Exact persisted state after SIGINT during command, prompt, shell, and gate steps.
 3. ~~Real gate pause/exit behavior with and without a bound `verdict_input` under non-TTY stdin.~~
-   Resolved for the structured path in section 9; interactive-prompt behavior remains S04.
+   Resolved for the structured path in section 9; interactive-prompt behavior is recorded in
+   section 10.
 4. Confirmation that the final fixed SIGINT/TERM/KILL grace bounds are comfortable on the
    supported hardware.
 
@@ -126,3 +133,42 @@ authoritative evidence and always owns its own abort outcome.
   reject-to-retry then approve, reject-to-skip, and reject-to-abort) and deterministically against
   the fake executable in `tests/contract/test_engine_contract.py`. Cockpit-side extraction is
   tested in `tests/unit/test_gate.py`.
+
+## 10. Interactive gates (S04, confirmed live)
+
+| Field | Value |
+|---|---|
+| Status | Confirmed live against exact `specify 1.0.6.dev0`; exact `1.0.6` is separately admitted |
+| Engine | `/home/markus/workspace/spec-kit/.venv/bin/specify` (or `WORKFLOW_COCKPIT_REAL_SPECIFY`) |
+| Encoded in | `workflow_cockpit/engine/interactive_contract.py` (`PromptContract`) |
+
+Spike procedure: a minimal workflow with a non-verdict `gate` step was run through a real PTY
+whose slave was the child's stdin/out/err, and the persisted `state.json` and PTY output were
+observed while the prompt was live.
+
+1. With the PTY slave attached as child stdin, a gate that **declares** `verdict_input` **and has
+   no bound value** also prompts interactively rather than pausing. Therefore Cockpit enables the
+   interactive stdin policy only for definitions whose gates are all non-verdict; any
+   `verdict_input` gate keeps the non-TTY `/dev/null` policy so its S03 pause/resume path is never
+   regressed.
+2. A gate that declares **no** `verdict_input` with PTY stdin keeps the supervised `run` child
+   alive in front of the prompt and persists `status: "running"` at that gate's
+   `current_step_id`. It does **not** persist `paused` while the prompt is live; `running` is the
+   authoritative pause identity for the live-prompt case.
+3. **Readiness**: for `1.0.6`, a live supervised run whose persisted state is `running` at a
+   declared non-verdict gate is deterministically waiting at the prompt. No PTY output matching is
+   performed; PTY text is diagnostic only.
+4. **Choice-to-input mapping**: the prompt is the engine's builtin `input()` (see
+   `workflows/steps/gate/__init__.py`). It accepts either the option name (case-insensitively) or
+    its 1-based decimal index, and a newline terminates the line. Cockpit records the safer
+    `index` strategy, emitting only ASCII digits plus `b"\n"`. A non-decimal, unknown option loops
+    with `Invalid choice. Enter 1-N or an option name.` so only a declared choice may be written.
+5. After the mapped input is accepted, the run continues and persists a terminal or subsequent
+   state; Cockpit never treats PTY output as proof of submission. A `KeyboardInterrupt`/EOF at the
+   prompt defaults to the last option (usually reject) and Control-C returns the run to `PAUSED`.
+
+Covered by `tests/unit/test_interactive_contract.py`, `tests/pty/test_interactive_pty.py`,
+`tests/contract/test_engine_contract.py` (fake engine emulating this contract), and
+`tests/unit/test_session.py`. The recorded contract is the single source of truth shared by the
+fake, PTY, and real-engine tests. Any exact release without a recorded contract is unsupported;
+mixed, dynamic, loop/fan-out, and interactive-retry shapes are rejected before Start.

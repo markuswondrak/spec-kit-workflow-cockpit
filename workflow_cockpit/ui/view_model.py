@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..services.projection import GraphProjection
-from ..services.snapshot import RunSnapshot
+from ..services.snapshot import GateState, RunSnapshot
 
 STATUS_GRAMMAR: dict[str, tuple[str, str]] = {
     "idle": ("[ ]", "IDLE"),
     "initializing": ("[>]", "STARTING"),
     "running": ("[>]", "RUNNING"),
     "paused": ("[!]", "PAUSED"),
+    "awaiting": ("[!]", "AWAITING DECISION"),
     "aborting": ("[/]", "ABORTING"),
     "completed": ("[x]", "COMPLETE"),
     "success": ("[x]", "COMPLETE"),
@@ -47,9 +48,75 @@ class RunwayRow:
 def default_focus_mode(snapshot: RunSnapshot) -> str:
     if snapshot.terminal:
         return "outcome"
-    if snapshot.status == "paused":
+    if snapshot.gate is not None:
         return "gate"
     return "output"
+
+
+@dataclass(frozen=True)
+class GateDecision:
+    """Presentation decision for the current gate, free of Textual imports."""
+
+    mode: str
+    message: str
+    notice: str
+    tone: str
+    options: tuple[str, ...]
+    selectable: bool
+    hint: str
+
+
+def gate_decision(snapshot: RunSnapshot) -> GateDecision:
+    """Resolve how the unified gate snapshot is presented.
+
+    Transport is never consulted: the gate's presentation state decides
+    whether choices are live. Declared options stay visible while submitted,
+    unverified, or blocked, but only ``ready`` gates are selectable.
+    """
+    gate = snapshot.gate
+    if gate is None:
+        return GateDecision(
+            "blocked",
+            "The engine is paused.",
+            "This pause is not a declared gate; only Abort is available.",
+            "fog",
+            (),
+            False,
+            "selection unavailable",
+        )
+    selectable = gate.selectable
+    if gate.state is GateState.READY:
+        notice = "Choose an option, then confirm. Opening files is optional."
+        tone = "fog"
+        hint = "1..N or enter  confirm selected"
+    elif gate.state is GateState.SUBMITTED:
+        notice = gate.acknowledged or (
+            "Choice submitted once. Persisted engine state stays authoritative; "
+            "waiting for it to advance."
+        )
+        tone = "hold"
+        hint = "waiting for persisted state"
+    elif gate.state is GateState.UNVERIFIED:
+        notice = gate.acknowledged or (
+            "CHOICE SENT, STATE NOT ADVANCED\n"
+            "The choice was submitted once and will not be sent again. "
+            "Expand Engine Output to inspect the prompt state."
+        )
+        tone = "fault"
+        hint = "choices disabled  /  x  abort run"
+    else:
+        notice = gate.reason or "This gate cannot be decided; only Abort is available."
+        tone = "fault"
+        hint = "only x  abort run is available"
+    return GateDecision(
+        mode=gate.state.value,
+        message=gate.message,
+        notice=notice,
+        tone=tone,
+        options=gate.options,
+        selectable=selectable,
+        hint=hint,
+    )
 
 
 def _middle_truncate(value: str, limit: int) -> str:
@@ -102,7 +169,8 @@ def render_runway(projection: GraphProjection | None, *, width: int = 29) -> lis
 
 
 def header_fields(snapshot: RunSnapshot) -> dict[str, str]:
-    _symbol, word = state_grammar(snapshot.status)
+    status = "awaiting" if snapshot.awaiting_decision else snapshot.status
+    _symbol, word = state_grammar(status)
     return {
         "word": word,
         "branch": snapshot.branch or "unknown",

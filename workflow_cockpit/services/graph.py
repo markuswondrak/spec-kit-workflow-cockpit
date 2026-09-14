@@ -18,6 +18,7 @@ class GraphNode:
     depth: int
     order: int
     gate: bool = False
+    message: str = ""
     options: tuple[str, ...] = ()
     verdict_input: str | None = None
     on_reject: str | None = None
@@ -110,6 +111,7 @@ class WorkflowDefinitionParser:
                         depth=depth,
                         order=len(nodes),
                         gate=step_type == "gate",
+                        message=(str(raw["message"]) if raw.get("message") else ""),
                         options=tuple(str(item) for item in options) if isinstance(options, list) else (),
                         verdict_input=(
                             str(raw["verdict_input"]) if raw.get("verdict_input") else None

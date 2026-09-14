@@ -13,7 +13,7 @@ from workflow_cockpit.bootstrap.compatibility import Compatibility
 from workflow_cockpit.engine.supervisor import EngineSupervisor
 from workflow_cockpit.services.definition import WorkflowDefinitionResolver
 from workflow_cockpit.services.registry import WorkflowRegistry
-from workflow_cockpit.session.cockpit_session import CockpitSession
+from workflow_cockpit.session.cockpit_session import CockpitSession, SessionError
 
 FAKE_SPECIFY = Path(__file__).resolve().parents[1] / "fixtures" / "fake_specify.py"
 
@@ -80,6 +80,64 @@ class EngineContractTests(unittest.TestCase):
         self.assertEqual(final.outcome.kind.value, "success")
 
 
+    def test_interactive_gate_receives_one_mapped_input(self):
+        workflow = {
+            "schema_version": "1.0",
+            "workflow": {"id": "demo", "name": "Demo", "version": "1.0.0", "description": "demo"},
+            "inputs": {"spec": {"type": "string", "required": True}},
+            "steps": [
+                {"id": "prepare", "command": "demo.prepare"},
+                {
+                    "id": "review",
+                    "type": "gate",
+                    "message": "Review required.",
+                    "options": ["approve", "reject"],
+                    "on_reject": "skip",
+                },
+                {"id": "finish", "command": "demo.finish"},
+            ],
+        }
+        write_workflow(self.root, workflow)
+        received = self.root / "interactive-input.json"
+        supervisor = EngineSupervisor(self.fake, self.root)
+        result = replace(compatibility_result("1.0.6"), executable=self.fake)
+        env = {
+            "COCKPIT_TEST_INTERACTIVE_GATE": "review",
+            "COCKPIT_TEST_INTERACTIVE_OPTIONS": "approve,reject",
+            "COCKPIT_TEST_INTERACTIVE_EXPECT": "approve",
+            "COCKPIT_TEST_INTERACTIVE_INPUT": str(received),
+            "PATH": os.environ.get("PATH", ""),
+        }
+        with mock.patch.dict(os.environ, env, clear=False):
+            session = CockpitSession(
+                self.root,
+                result,
+                registry=WorkflowRegistry(self.root),
+                resolver=WorkflowDefinitionResolver(self.root),
+                git=FakeGit(),
+                supervisor=supervisor,
+            )
+            session.select("demo")
+            session.start({"spec": "indexed search"})
+            self.assertTrue(
+                wait_for(
+                    lambda: (snapshot := session.snapshot()).gate is not None
+                    and snapshot.gate.selectable
+                    and snapshot.process_live
+                )
+            )
+            gate = session.snapshot().gate
+            session.submit_decision("approve", gate.token)
+            # A second confirmation must not reach the PTY.
+            with self.assertRaises(SessionError):
+                session.submit_decision("reject", gate.token)
+            self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+            final = session.snapshot()
+
+        self.assertEqual(json.loads(received.read_text()), ["1\n"])
+        self.assertEqual(final.outcome.kind.value, "success")
+        self.assertEqual(final.engine_status, "completed")
+
     def test_structured_resume_uses_exact_argv(self):
         record = self.root / "resume-record.json"
         supervisor = EngineSupervisor(self.fake, self.root)
@@ -116,8 +174,9 @@ class EngineContractTests(unittest.TestCase):
                     }
                 },
             )
-            self.assertTrue(session.snapshot().gate.structured)
-            session.decide("approve")
+            gate = session.snapshot().gate
+            self.assertTrue(gate.selectable)
+            session.submit_decision("approve", gate.token)
             self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
             final = session.snapshot()
 

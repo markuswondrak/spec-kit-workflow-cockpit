@@ -2,9 +2,23 @@ import asyncio
 import unittest
 
 from tests.support import FakeSession, StyledApp
+from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
 from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, EngineOutput
+
+
+def paused_gate(**kwargs) -> GateSnapshot:
+    defaults = {
+        "runtime_step_id": "review",
+        "step_id": "review",
+        "message": "Review it",
+        "options": ("approve", "reject"),
+        "state": GateState.BLOCKED,
+        "reason": "No live engine process is waiting at this gate; only Abort is available.",
+    }
+    defaults.update(kwargs)
+    return GateSnapshot(**defaults)
 
 
 class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
@@ -70,11 +84,12 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_paused_surface_is_read_only_with_abort(self):
         session = FakeSession(status="paused")
+        session.gate = paused_gate()
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(CockpitScreen(session))
             await pilot.pause()
             screen = self.app.screen
-            self.assertIn("PAUSED", str(screen.query_one("#view-label").render()))
+            self.assertIn("GATE / REVIEW", str(screen.query_one("#view-label").render()))
             commands = screen.query_one("#commands").render()
             self.assertIn("abort", str(commands).lower())
 
@@ -92,10 +107,12 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             screen._refresh()
             self.assertEqual(screen._selected_node_id, "review")
             session.status = "paused"
+            session.gate = paused_gate()
             screen._refresh()
             self.assertIn("GATE", str(screen.query_one("#view-label").render()))
             self.assertTrue(screen.query_one("#overview").display)
             session.status = "success"
+            session.gate = None
             screen._refresh()
             self.assertIn("RUN COMPLETE", str(screen.query_one("#view-label").render()))
 

@@ -9,6 +9,7 @@ from textual.widgets import Input, Static
 from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
 from ..palette import FAULT, FOG, HOLD, PAPER
+from ..view_model import gate_decision
 from ..widgets import FeatureFileList, GateOptions, ReviewDocumentView
 
 
@@ -25,7 +26,7 @@ class ReviewMixin:
     REVIEW_REFRESH_TICKS = 8
 
     def _maybe_load_review(self, snapshot) -> None:
-        if snapshot.status != "paused":
+        if snapshot.gate is None:
             self._review_loaded = False
             self._review_tick = 0
             return
@@ -66,34 +67,21 @@ class ReviewMixin:
     # -- rendering -----------------------------------------------------
 
     def _render_gate(self, snapshot, step_label) -> None:
-        gate = snapshot.gate
-        options = gate.options if gate and gate.structured and not snapshot.process_live else ()
-        self.query_one(GateOptions).update_options(options)
-        self.query_one("#view-label", Static).update(Text.assemble(("GATE / PAUSED", f"bold {HOLD}")))
-        message = gate.message if gate else "The engine is paused."
-        if gate is None:
-            notice, tone = "This pause is not a declared gate; only Abort is available.", FOG
-        elif gate.malformed:
-            notice, tone = "The persisted gate result is missing options; only Abort is available.", FAULT
-        elif not gate.structured:
-            notice, tone = (
-                "This gate declares no verdict_input; an interactive resume is required (later work).",
-                FOG,
-            )
-        else:
-            notice, tone = "Choose an option, then confirm. Opening files is optional.", FOG
+        decision = gate_decision(snapshot)
+        self.query_one(GateOptions).update_options(decision.options, selectable=decision.selectable)
+        self.query_one("#view-label", Static).update(Text.assemble(("GATE / REVIEW", f"bold {HOLD}")))
+        tone = {"fog": FOG, "fault": FAULT, "hold": HOLD, "paper": PAPER}.get(decision.tone, FOG)
+        phase = "running" if snapshot.process_live else "paused"
         parts: list = [
-            (f"{step_label}   /   engine paused\n\n", PAPER),
-            (message + "\n\n", HOLD),
-            (notice + "\n\n", tone),
+            (f"{step_label}   /   engine {phase}\n\n", PAPER),
+            (decision.message + "\n\n", HOLD),
+            (decision.notice + "\n\n", tone),
         ]
         diagnostic = self._diagnostic or snapshot.diagnostic
         if diagnostic:
             parts.append((diagnostic + "\n\n", FAULT))
         self.query_one("#overview-content", Static).update(Text.assemble(*parts))
-        structured = gate is not None and gate.structured and not snapshot.process_live
-        hint = "1..N or enter  confirm selected" if structured else "structured selection unavailable"
-        self.query_one("#decide-hint", Static).update(Text.assemble((hint, FOG)))
+        self.query_one("#decide-hint", Static).update(Text.assemble((decision.hint, FOG)))
         self._render_review_status(snapshot)
         self._render_review_files(snapshot)
 
@@ -236,11 +224,9 @@ class ReviewMixin:
     def _editor_available(self) -> bool:
         snapshot = self._snapshot_now()
         document = self._current_document
-        if (
-            snapshot.status != "paused"
-            or snapshot.process_live
-            or self._focus_mode not in ("gate", "changes")
-        ):
+        # A gate wait is a gate wait: a live process blocked on its private PTY
+        # prompt is awaiting a decision, not running an automated editing step.
+        if snapshot.gate is None or self._focus_mode not in ("gate", "changes"):
             return False
         if document is None or document.binary or document.error:
             return False

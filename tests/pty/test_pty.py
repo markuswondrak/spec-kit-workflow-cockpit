@@ -49,9 +49,14 @@ class PtyTests(unittest.TestCase):
         self.assertTrue(wait_for(lambda: supervisor.condition().reaped, timeout=6))
         self.assertFalse(supervisor.verify_live())
 
-    def test_no_user_writepath_exists(self):
-        self.assertFalse(hasattr(PtySession, "write"))
-        self.assertFalse(hasattr(EngineSupervisor, "write_input"))
+    def test_writepath_is_confirmed_only(self):
+        # The PTY write exists but is reachable only through the supervisor's
+        # verified-live ``write_input``, which the session calls after
+        # confirmation; there is no ordinary key-forwarding path.
+        self.assertTrue(hasattr(PtySession, "write"))
+        self.assertTrue(hasattr(EngineSupervisor, "write_input"))
+        self.assertFalse(hasattr(EngineSupervisor, "send_keys"))
+        self.assertFalse(hasattr(EngineSupervisor, "write_keys"))
 
 
 if __name__ == "__main__":

@@ -101,6 +101,9 @@ OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color
 #decide-label { width: 9; height: 1; color: $fog; }
 #gate-options { width: 1fr; height: auto; max-height: 9; }
 #gate-options > .option-list--option { padding: 0 1; }
+#gate-options.disabled > .option-list--option { color: $fog; }
+#gate-options.disabled > .option-list--option-highlighted { background: transparent; color: $fog; }
+#gate-options.disabled:focus > .option-list--option-highlighted { background: transparent; color: $fog; }
 #decide-hint { width: auto; height: 1; color: $fog; text-align: right; padding-right: 1; }
 .compact #review-index { width: 28; }
 #output { height: 5; border-top: solid $rail; background: $ink; }
