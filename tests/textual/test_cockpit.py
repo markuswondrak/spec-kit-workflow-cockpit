@@ -5,7 +5,7 @@ from tests.support import FakeSession, StyledApp
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
-from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, EngineOutput
+from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, BounceIndicator, EngineOutput
 
 
 def paused_gate(**kwargs) -> GateSnapshot:
@@ -61,6 +61,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.app.push_screen(CockpitScreen(session))
             await pilot.pause()
             activity = self.app.screen.query_one("#activity")
+            self.assertIsInstance(activity, BounceIndicator)
             self.assertTrue(activity.display)
             session.status = "paused"
             self.app.screen._refresh()
@@ -70,6 +71,19 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.app.screen._refresh()
             await pilot.pause()
             self.assertFalse(activity.display)
+
+    async def test_active_phase_rendered_bold(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            runway = self.app.screen.query_one("#runway-graph")
+            styles = {
+                str(option.id): " ".join(str(span.style) for span in option.prompt.spans)
+                for option in runway.options
+            }
+            self.assertIn("bold", styles["prepare"])
+            self.assertNotIn("bold", styles["review"])
 
     async def test_outcome_acknowledged_with_enter(self):
         session = FakeSession(status="success")

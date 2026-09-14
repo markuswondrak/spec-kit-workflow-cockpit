@@ -37,6 +37,13 @@ def format_elapsed(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+DURATION_COLUMN = 8
+"""Fixed width of the right-aligned elapsed column; gates never get one."""
+
+TAIL_COLUMN = 8
+"""Fixed width of the gate/attempt column between label and duration."""
+
+
 @dataclass(frozen=True)
 class RunwayRow:
     id: str
@@ -157,14 +164,16 @@ def render_runway(projection: GraphProjection | None, *, width: int = 29) -> lis
             meta.append("gate")
         if state.attempts > 1:
             meta.append(f"#{state.attempts}")
-        if state.duration_seconds is not None:
-            meta.append(format_elapsed(state.duration_seconds))
-        reserved = len(prefix) + len(marker) + 1 + sum(len(item) + 2 for item in meta)
-        label = _middle_truncate(node.label, max(8, width - reserved))
-        text = f"{prefix}{marker} {label}"
-        if meta:
-            text += "  " + "  ".join(meta)
-        rows.append(RunwayRow(node.id, text, state.status, state.active))
+        duration = ""
+        if state.duration_seconds is not None and not node.gate:
+            duration = format_elapsed(state.duration_seconds).rjust(DURATION_COLUMN)
+        tail = ("  " + "  ".join(meta)) if meta else ""
+        label_width = max(8, width - len(prefix) - len(marker) - 1 - TAIL_COLUMN - DURATION_COLUMN)
+        label = _middle_truncate(node.label, label_width).ljust(label_width)
+        body = f"{prefix}{marker} {label}{tail}"
+        if duration:
+            body = body.ljust(width - DURATION_COLUMN)
+        rows.append(RunwayRow(node.id, body + duration, state.status, state.active))
     return rows
 
 

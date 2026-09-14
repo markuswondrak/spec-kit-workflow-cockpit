@@ -5,7 +5,9 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import LoadingIndicator, Static
+from textual.widgets import Static
+
+from ..widgets import BounceIndicator
 
 
 class AbortingScreen(ModalScreen[None]):
@@ -15,5 +17,5 @@ class AbortingScreen(ModalScreen[None]):
         with Vertical(id="abort-sheet"):
             yield Static("LIFECYCLE / ABORT", classes="eyebrow")
             yield Static("Aborting run...", id="abort-heading")
-            yield LoadingIndicator(id="abort-activity")
+            yield BounceIndicator(id="abort-activity")
             yield Static("Interrupting the engine process group. This cannot resume.", classes="muted")

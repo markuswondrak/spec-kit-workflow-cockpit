@@ -6,16 +6,18 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, LoadingIndicator, OptionList, RichLog, Static
+from textual.widgets import Button, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 from ...services.snapshot import RunSnapshot
 from ..palette import FAULT, FOG, HOLD, PAPER, SIGNAL
 from ..view_model import render_runway, state_grammar
+from .indicator import BounceIndicator
 from .review import FeatureFileList, GateOptions, ReviewDocumentView
 
 __all__ = [
     "TRUNCATION_MARKER",
+    "BounceIndicator",
     "CommandRail",
     "EngineOutput",
     "FeatureFileList",
@@ -115,8 +117,11 @@ class Runway(OptionList):
         options: list[Option] = []
         for row in rows:
             tone = STATUS_STYLES.get(row.status, FOG)
-            label_style = PAPER if row.status != "pending" else FOG
-            options.append(Option(_text((row.text, tone if row.active else label_style)), id=row.id))
+            if row.active:
+                options.append(Option(_text((row.text, f"bold {tone}")), id=row.id))
+            else:
+                label_style = PAPER if row.status != "pending" else FOG
+                options.append(Option(_text((row.text, label_style)), id=row.id))
         self.clear_options()
         self.add_options(options)
         if options:
@@ -135,7 +140,7 @@ class EngineOutput(Vertical):
     def compose(self) -> ComposeResult:
         with Horizontal(id="output-heading"):
             yield Static(id="output-title")
-            yield LoadingIndicator(id="activity")
+            yield BounceIndicator(id="activity")
             yield Static(id="output-hint")
         yield RichLog(id="engine", highlight=False, markup=False, wrap=True, max_lines=2000)
 
@@ -148,7 +153,7 @@ class EngineOutput(Vertical):
             label, tone = "STOPPED", FOG
         self.query_one("#output-title", Static).update(_text(("ENGINE OUTPUT", FOG), (f"  /  {label}", tone)))
         active = status in ("running", "initializing", "aborting")
-        self.query_one("#activity", LoadingIndicator).display = active
+        self.query_one("#activity", BounceIndicator).display = active
         self.set_class(expanded, "expanded")
         self.set_class(full, "full-canvas")
         self.query_one("#output-hint", Static).update(_text((self._hint(status, expanded, full), FOG)))
