@@ -18,15 +18,18 @@ application; external agents remain independent.
 | S5 | Cockpit skill and run context | FR-4 | [S05](S05-cockpit-skill.md) |
 | S6 | Resilient operation | FR-6, NFRs | [S06](S06-resilience.md) |
 | S7 | Agent-matched styling templates | FR-7 | [S07](S07-agent-styling-templates.md) |
+| S8 | Render Markdown in the review view | FR-2, FR-3 | [S08](S08-markdown-review.md) |
+| S9 | Release polish for publishing | Quality requirements | [S09](S09-release-polish.md) |
 
 Dependencies: S1 -> S2 -> S3 -> S4; S5 depends on S1; S6 depends on S1-S5; S7 depends on S1 and
-themes the S2-S6 surfaces.
+themes the S2-S6 surfaces; S8 depends on S3; S9 depends on S1-S8.
 
 ## First-release boundary
 
 S1-S6 deliver workflow selection and inputs, owned process lifecycle, integrated output, the
 workflow graph, Feature Files, both gate paths, the external-agent context bridge, and robust
-shutdown behavior. S7 is a cross-cutting presentation slice layered over the core loop.
+shutdown behavior. S7 is a cross-cutting presentation slice layered over the core loop. S8
+refines the S3 review surface, and S9 is the publication gate over the complete slice set.
 
 ## Global definition of done
 
