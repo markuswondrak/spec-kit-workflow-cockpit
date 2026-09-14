@@ -11,12 +11,12 @@
 
 ## Acceptance criteria
 
-- After Start returns a run ID, Cockpit writes a stable context index under
-  `.specify/workflows/runs/<run_id>/`.
+- After Start returns a run ID, Cockpit writes a stable context index in the file
+  `.specify/workflows/runs/current_run`.
 - The index points to authoritative workflow definition, status, inputs, logs, worktree,
   current branch source, and the declared feature directory rather than copying live state.
 - Cockpit displays the context path and concise skill invocation guidance.
-- The skill accepts that path, reads the authoritative sources, and can explain workflow state,
+- The skill knows that path, reads the authoritative sources, and can explain workflow state,
   gates, and Feature Files.
 - The skill states that Cockpit alone controls lifecycle and never invokes start, resume,
   decision, or abort commands.

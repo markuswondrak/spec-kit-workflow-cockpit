@@ -21,9 +21,18 @@
   produces installable sdist and wheel artifacts.
 - `CONTRIBUTING.md` documents local setup plus the exact test and lint commands.
 - The documented install path works from the built artifact in a clean environment.
+- The README describes the relationship to [AgentMux](https://github.com/markuswondrak/AgentMux)
+  and how `workflow-cockpit` complements its deterministic multi-agent pipeline; ongoing
+  further development of AgentMux is an explicit part of this story's scope.
+- Development follows the dogfooding principle: changes to this repository are driven through
+  the bundled [`presets/lean-workflow`](../presets/lean-workflow) preset and observed/decided in
+  the cockpit itself, and `CONTRIBUTING.md` documents this as the preferred development path.
 
 ## Tests
 
 - The CI steps are runnable locally with the same commands and pass.
 - A clean-environment install of the built wheel exposes the `workflow-cockpit` entry point.
 - README quickstart commands are executed as written.
+- The AgentMux relationship is documented in the README and the linked repository is reachable.
+- A documented dogfooding run drives a repository change through the bundled preset into the
+  cockpit and is reproducible from the `CONTRIBUTING.md` instructions.

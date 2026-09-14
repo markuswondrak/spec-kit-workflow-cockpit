@@ -24,6 +24,16 @@ application; external agents remain independent.
 Dependencies: S1 -> S2 -> S3 -> S4; S5 depends on S1; S6 depends on S1-S5; S7 depends on S1 and
 themes the S2-S6 surfaces; S8 depends on S3; S9 depends on S1-S8.
 
+## Deferred epics
+
+| # | Epic | Status | File |
+|---|---|---|---|
+| E1 | Optional OpenCode adapter | Deferred; discovery and design only | [E01](E01-opencode-adapter.md) |
+
+E1 depends on the completed first-release slices and a stable public session/read-model boundary.
+It must not alter the standalone Cockpit's lifecycle ownership or make OpenCode a required
+dependency.
+
 ## First-release boundary
 
 S1-S6 deliver workflow selection and inputs, owned process lifecycle, integrated output, the
