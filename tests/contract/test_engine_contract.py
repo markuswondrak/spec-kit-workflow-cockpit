@@ -11,9 +11,12 @@ from unittest import mock
 from tests.support import FakeGit, compatibility_result, write_registry, write_run, write_workflow
 from workflow_cockpit.bootstrap.compatibility import Compatibility
 from workflow_cockpit.engine.supervisor import EngineSupervisor
-from workflow_cockpit.services.definition import WorkflowDefinitionResolver
-from workflow_cockpit.services.registry import WorkflowRegistry
 from workflow_cockpit.session.cockpit_session import CockpitSession, SessionError
+from workflow_cockpit.session.dependencies import (
+    CockpitEnvironment,
+    CockpitServices,
+    EngineRuntime,
+)
 
 FAKE_SPECIFY = Path(__file__).resolve().parents[1] / "fixtures" / "fake_specify.py"
 
@@ -54,13 +57,10 @@ class EngineContractTests(unittest.TestCase):
             "PATH": os.environ.get("PATH", ""),
         }
         with mock.patch.dict(os.environ, env, clear=False):
+            environment = CockpitEnvironment(self.root, result)
+            services = replace(CockpitServices.for_environment(environment), git=FakeGit())
             session = CockpitSession(
-                self.root,
-                result,
-                registry=WorkflowRegistry(self.root),
-                resolver=WorkflowDefinitionResolver(self.root),
-                git=FakeGit(),
-                supervisor=supervisor,
+                environment, services=services, engine=EngineRuntime(supervisor=supervisor)
             )
             session.select("demo")
             snapshot = session.start({"spec": "indexed search"})
@@ -109,13 +109,10 @@ class EngineContractTests(unittest.TestCase):
             "PATH": os.environ.get("PATH", ""),
         }
         with mock.patch.dict(os.environ, env, clear=False):
+            environment = CockpitEnvironment(self.root, result)
+            services = replace(CockpitServices.for_environment(environment), git=FakeGit())
             session = CockpitSession(
-                self.root,
-                result,
-                registry=WorkflowRegistry(self.root),
-                resolver=WorkflowDefinitionResolver(self.root),
-                git=FakeGit(),
-                supervisor=supervisor,
+                environment, services=services, engine=EngineRuntime(supervisor=supervisor)
             )
             session.select("demo")
             session.start({"spec": "indexed search"})
@@ -147,13 +144,10 @@ class EngineContractTests(unittest.TestCase):
             "PATH": os.environ.get("PATH", ""),
         }
         with mock.patch.dict(os.environ, env, clear=False):
+            environment = CockpitEnvironment(self.root, result)
+            services = replace(CockpitServices.for_environment(environment), git=FakeGit())
             session = CockpitSession(
-                self.root,
-                result,
-                registry=WorkflowRegistry(self.root),
-                resolver=WorkflowDefinitionResolver(self.root),
-                git=FakeGit(),
-                supervisor=supervisor,
+                environment, services=services, engine=EngineRuntime(supervisor=supervisor)
             )
             session.select("demo")
             started = session.start({"spec": "indexed search"})

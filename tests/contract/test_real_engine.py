@@ -18,10 +18,8 @@ import yaml
 from packaging.version import Version
 
 from workflow_cockpit.bootstrap.compatibility import CompatibilityResult
-from workflow_cockpit.services.definition import WorkflowDefinitionResolver
-from workflow_cockpit.services.git import GitService
-from workflow_cockpit.services.registry import WorkflowRegistry
 from workflow_cockpit.session.cockpit_session import CockpitSession
+from workflow_cockpit.session.dependencies import CockpitEnvironment
 
 _CANDIDATES = [
     os.environ.get("WORKFLOW_COCKPIT_REAL_SPECIFY"),
@@ -99,13 +97,7 @@ class RealEngineTests(unittest.TestCase):
         (wf_dir / "workflow.yml").write_text(yaml.safe_dump(definition), encoding="utf-8")
 
     def _session(self):
-        self.session = CockpitSession(
-            self.root,
-            self.compatibility,
-            registry=WorkflowRegistry(self.root),
-            resolver=WorkflowDefinitionResolver(self.root),
-            git=GitService(self.root),
-        )
+        self.session = CockpitSession(CockpitEnvironment(self.root, self.compatibility))
         self.session.select("demo")
         return self.session
 

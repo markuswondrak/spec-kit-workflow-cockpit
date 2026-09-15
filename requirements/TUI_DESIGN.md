@@ -160,8 +160,8 @@ selected path; exact editor scroll state is editor-owned.
 
 ## 8. Cockpit skill and context index
 
-After Start returns a run ID, create a stable Markdown context index under
-`.specify/workflows/runs/<run_id>/`. It points to the workflow definition, `state.json`,
+After Start returns a run ID, create a stable Markdown context index at
+`.specify/workflows/runs/current_run`. It points to the workflow definition, `state.json`,
 `inputs.json`, `log.jsonl`, relevant CLI status command, worktree, current branch source, and
 the declared feature directory. The file is an index, not a copied live snapshot.
 

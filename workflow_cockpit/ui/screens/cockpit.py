@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Input, Static
 
+from ...services.context_index import SKILL_GUIDANCE
 from ...services.review import ReviewDocument
 from ...services.snapshot import OutcomeKind
 from ...session.polling import PollingLoop
@@ -191,14 +192,26 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
     def _render_state(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")
         self.query_one("#view-label", Static).update(Text.assemble(("STATE", f"bold {PAPER}")))
-        self.query_one("#overview-content", Static).update(
-            Text.assemble(
-                (f"{step_label}\n\n", f"bold {PAPER}"),
-                (f"workflow {snapshot.workflow_name or snapshot.workflow_id}\n", FOG),
-                (f"run {snapshot.run_id}\n", COLD),
-                (f"status {snapshot.status}\n", FOG),
-            )
-        )
+        parts: list = [
+            (f"{step_label}\n\n", f"bold {PAPER}"),
+            (f"workflow {snapshot.workflow_name or snapshot.workflow_id}\n", FOG),
+            (f"run {snapshot.run_id}\n", COLD),
+            (f"status {snapshot.status}\n", FOG),
+        ]
+        parts.extend(self._context_lines(snapshot))
+        self.query_one("#overview-content", Static).update(Text.assemble(*parts))
+
+    @staticmethod
+    def _context_lines(snapshot) -> list:
+        if snapshot.context_error:
+            return [(f"\n{snapshot.context_error}\n", FAULT)]
+        if snapshot.context_path:
+            return [
+                ("\ncontext ", FOG),
+                (snapshot.context_path + "\n", COLD),
+                (SKILL_GUIDANCE + "\n", FOG),
+            ]
+        return []
 
     def _render_output_mode(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")

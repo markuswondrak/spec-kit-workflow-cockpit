@@ -9,6 +9,8 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
+from ...services.context_index import CONTEXT_INDEX_RELATIVE, SKILL_NAME
+
 HOLD = "#E8BD79"
 COLD = "#A1BFCE"
 
@@ -42,8 +44,10 @@ class HelpScreen(ModalScreen):
                     "If state does not advance the choice cannot be resent; only Abort remains.\n",
                     "A gate Cockpit cannot decide is read-only and never writes.\n\n",
                     ("EXTERNAL AGENT\n", HOLD),
+                    f"Invoke the {SKILL_NAME} skill in your own agent with the context path\n"
+                    f"({CONTEXT_INDEX_RELATIVE.as_posix()}).\n"
                     "Cockpit alone starts, decides, and aborts the run.\n"
-                    "Check live engine state before editing files.\n",
+                    "Check live engine state before editing files; edit only at a gate.\n",
                 )
             )
             yield Button("Back to cockpit  [esc]", id="close-help")

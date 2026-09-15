@@ -275,7 +275,7 @@ than showing a detached modal. Engine Output collapses to a short tail and can b
 | specs/042-search/plan.md            | ## Implementation plan               |
 | specs/042-search/tasks.md           | ## Tasks                             |
 |                                     |                                      |
-| CONTEXT  .specify/.../cockpit-context.md                                   |
+| CONTEXT  .specify/workflows/runs/current_run                              |
 |                                                                            |
 | DECIDE  [1] approve   [2] retry   [3] skip                 [x] abort run   |
 +------------------------------------------------------------------------------+

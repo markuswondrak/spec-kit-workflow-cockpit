@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from tests.support import (
@@ -12,10 +13,13 @@ from tests.support import (
     write_workflow,
 )
 from workflow_cockpit.engine.supervisor import StdinPolicy
-from workflow_cockpit.services.definition import WorkflowDefinitionResolver
-from workflow_cockpit.services.registry import WorkflowRegistry
 from workflow_cockpit.services.snapshot import GateState
 from workflow_cockpit.session.cockpit_session import CockpitSession, SessionError, generate_run_id
+from workflow_cockpit.session.dependencies import (
+    CockpitEnvironment,
+    CockpitServices,
+    EngineRuntime,
+)
 
 NON_VERDICT_WORKFLOW = {
     "schema_version": "1.0",
@@ -53,19 +57,22 @@ class SessionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def make_session(self, **kwargs):
-        git = kwargs.pop("git", FakeGit())
-        review_source = kwargs.pop("review_source", FakeReviewService())
-        version = kwargs.pop("version", "1.0.0")
-        return CockpitSession(
-            self.root,
-            compatibility_result(version),
-            registry=WorkflowRegistry(self.root),
-            resolver=WorkflowDefinitionResolver(self.root),
-            git=git,
-            review_source=review_source,
-            supervisor=self.supervisor,
-            clock=kwargs.pop("clock", lambda: 10.0),
+        environment = CockpitEnvironment(
+            self.root, compatibility_result(kwargs.pop("version", "1.0.0"))
         )
+        services = replace(
+            CockpitServices.for_environment(environment),
+            git=kwargs.pop("git", FakeGit()),
+            review_source=kwargs.pop("review_source", FakeReviewService()),
+        )
+        context_writer = kwargs.pop("context_writer", None)
+        if context_writer is not None:
+            services = replace(services, context_writer=context_writer)
+        engine = replace(
+            EngineRuntime.for_environment(environment, clock=kwargs.pop("clock", lambda: 10.0)),
+            supervisor=self.supervisor,
+        )
+        return CockpitSession(environment, services=services, engine=engine)
 
     def test_select_and_validate(self):
         session = self.make_session()
@@ -83,6 +90,29 @@ class SessionTests(unittest.TestCase):
         self.assertIn("workflow", self.supervisor.started_argv)
         self.assertIn("demo", self.supervisor.started_argv)
         self.assertIs(self.supervisor.stdin_policy, StdinPolicy.DEVNULL)
+
+    def test_start_writes_context_index(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        self.assertEqual(snapshot.context_path, ".specify/workflows/runs/current_run")
+        self.assertEqual(snapshot.context_error, "")
+        self.assertTrue(
+            (self.root / ".specify" / "workflows" / "runs" / "current_run").is_file()
+        )
+
+    def test_context_failure_does_not_interrupt_run(self):
+        class BrokenWriter:
+            def write(self, **_kwargs):
+                raise RuntimeError("disk full")
+
+        session = self.make_session(context_writer=BrokenWriter())
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        self.assertTrue(snapshot.run_id.startswith("cockpit-"))
+        self.assertEqual(snapshot.context_path, "")
+        self.assertIn("disk full", snapshot.context_error)
+        self.assertIn("disk full", session.context_error)
 
     def test_second_start_rejected(self):
         session = self.make_session()
@@ -283,16 +313,17 @@ class InteractiveSessionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def make_session(self, version="1.0.6"):
-        return CockpitSession(
-            self.root,
-            compatibility_result(version),
-            registry=WorkflowRegistry(self.root),
-            resolver=WorkflowDefinitionResolver(self.root),
+        environment = CockpitEnvironment(self.root, compatibility_result(version))
+        services = replace(
+            CockpitServices.for_environment(environment),
             git=FakeGit(),
             review_source=FakeReviewService(),
-            supervisor=self.supervisor,
-            clock=lambda: self.now[0],
         )
+        engine = replace(
+            EngineRuntime.for_environment(environment, clock=lambda: self.now[0]),
+            supervisor=self.supervisor,
+        )
+        return CockpitSession(environment, services=services, engine=engine)
 
     def _start_live_gate(self, version="1.0.6"):
         session = self.make_session(version)

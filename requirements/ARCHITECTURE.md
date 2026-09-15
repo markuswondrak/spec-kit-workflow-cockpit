@@ -59,7 +59,7 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 | `GraphProjector` | Combine static `ControlFlowGraph` with runtime state into node status, active path, attempts, and timings. |
 | `GitService` | Read `HEAD`, branch, and dirty state of the project worktree. |
 | `FeatureReviewService` | Resolve the declared feature directory; list its files; detect binary and large files; read current content. |
-| `ContextIndexWriter` | Write `cockpit-context.md` after Start; failure is reported but never interrupts the run. |
+| `ContextIndexWriter` | Write the stable `current_run` context index after Start; failure is reported but never interrupts the run. |
 | `EditorLauncher` | Suspend and restore Textual around `$EDITOR` at a paused gate only. |
 
 ### 2.4 Coordination
@@ -113,7 +113,7 @@ An isolated wheel smoke test verifies the executable and package data.
 │  start/abort ────────┼──▶ EngineSupervisor ──▶ PtySession ──▶ OutputNormalizer ──▶ Log │
 └──────────────────────┼─────────────────────────────────────────────────────────────────┘
                        ▼                         reads      ▲            writes
-               specify CLI (start/resume)       persisted run files     context-index.md
+               specify CLI (start/resume)       persisted run files     runs/current_run
                OS signals (live-group Abort only)
 ```
 

@@ -4,33 +4,28 @@ from __future__ import annotations
 
 import secrets
 import threading
-import time
-from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from ..bootstrap.compatibility import CompatibilityResult
-from ..engine.supervisor import EngineSupervisor, StdinPolicy, build_run_argv
+from ..engine.supervisor import StdinPolicy, build_run_argv
 from ..services.definition import (
     WorkflowDefinition,
-    WorkflowDefinitionResolver,
     definition_signature,
     inputs_to_argv,
     normalized_signature,
     validate_inputs,
 )
-from ..services.feature_review import FeatureReviewService
-from ..services.git import GitService
 from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser, resolve_declared_id
 from ..services.log_aggregator import RunLogAggregator
 from ..services.projection import GraphProjector
-from ..services.registry import WorkflowEntry, WorkflowRegistry
+from ..services.registry import WorkflowEntry
 from ..services.review import ReviewDocument, ReviewSnapshot
 from ..services.run_state import RunStateReader
 from ..services.snapshot import GateSnapshot, Outcome, OutcomeKind, RunSnapshot
+from .dependencies import CockpitEnvironment, CockpitServices, EngineRuntime
 from .gate_decision import GateDecisionCoordinator, GateDecisionError, validate_shape
 
 #: Bounded post-write verification watch (about 40 ticks at the 250 ms cadence).
@@ -55,24 +50,27 @@ class CockpitSession:
 
     def __init__(
         self,
-        project_root: Path,
-        compatibility: CompatibilityResult,
+        environment: CockpitEnvironment,
         *,
-        registry: WorkflowRegistry | None = None,
-        resolver: WorkflowDefinitionResolver | None = None,
-        git: GitService | None = None,
-        review_source: FeatureReviewService | None = None,
-        supervisor: EngineSupervisor | None = None,
-        clock: Callable[[], float] = time.monotonic,
+        services: CockpitServices | None = None,
+        engine: EngineRuntime | None = None,
     ) -> None:
-        self.project_root = Path(project_root)
-        self.compatibility = compatibility
-        self.registry = registry or WorkflowRegistry(self.project_root)
-        self.resolver = resolver or WorkflowDefinitionResolver(self.project_root)
-        self.git = git or GitService(self.project_root)
-        self.review_source = review_source or FeatureReviewService(self.project_root)
-        self._clock = clock
-        self._supervisor = supervisor or EngineSupervisor(compatibility.executable, self.project_root)
+        self.environment = environment
+        self.project_root = environment.project_root
+        self.compatibility = environment.compatibility
+        services = services or CockpitServices.for_environment(environment)
+        engine = engine or EngineRuntime.for_environment(environment)
+        self.services = services
+        self.engine = engine
+        self.registry = services.registry
+        self.resolver = services.resolver
+        self.git = services.git
+        self.review_source = services.review_source
+        self._context_writer = services.context_writer
+        self._supervisor = engine.supervisor
+        self._clock = engine.clock
+        self._context_path = ""
+        self._context_error = ""
         self._definition: WorkflowDefinition | None = None
         self._reader: RunStateReader | None = None
         self._started = False
@@ -107,6 +105,16 @@ class CockpitSession:
     @property
     def runs_dir(self) -> Path:
         return self.project_root / ".specify" / "workflows" / "runs"
+
+    @property
+    def context_path(self) -> str:
+        """Project-relative path of the stable context index, if written."""
+        return self._context_path
+
+    @property
+    def context_error(self) -> str:
+        """Reported context-index generation failure; never interrupts the run."""
+        return self._context_error
 
     def list_workflows(self) -> tuple[WorkflowEntry, ...]:
         return self.registry.list_runnable()
@@ -154,8 +162,27 @@ class CockpitSession:
         )
         self._supervisor.start(run_id, argv, stdin=self._stdin_policy)
         self._reader = RunStateReader(self.project_root, run_id)
+        self._write_context_index(run_id)
         self._started = True
         return self.snapshot()
+
+    def _write_context_index(self, run_id: str) -> None:
+        """Write the stable context index; failure is reported, never fatal."""
+        self._context_path = ""
+        self._context_error = ""
+        if self._definition is None:
+            return
+        try:
+            result = self._context_writer.write(
+                run_id=run_id,
+                definition=self._definition,
+                branch=self._branch,
+                executable=self.compatibility.executable,
+            )
+        except Exception as exc:  # noqa: BLE001 - context failure must not stop the run
+            self._context_error = f"Context index unavailable: {exc}"
+            return
+        self._context_path = result.relative
 
     def abort(self) -> RunSnapshot:
         if not self._started:
@@ -407,6 +434,8 @@ class CockpitSession:
             review=self._review,
             reviewing=self._reviewing,
             diagnostic=self._diagnostic,
+            context_path=self._context_path,
+            context_error=self._context_error,
         )
 
     def close(self) -> None:

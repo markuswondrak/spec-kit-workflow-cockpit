@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 
 from .bootstrap.compatibility import Compatibility
 from .bootstrap.discovery import ProjectDiscovery, ProjectDiscoveryError
 from .bootstrap.preflight import Preflight
 from .services.git import GitService
 from .session.cockpit_session import CockpitSession
+from .session.dependencies import CockpitEnvironment, CockpitServices
 from .ui.app import CockpitApp
 
 
@@ -59,7 +61,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if report.ok else 1
 
     def session_factory(result) -> CockpitSession:
-        return CockpitSession(project.root, result, git=git)
+        environment = CockpitEnvironment(project.root, result)
+        services = replace(CockpitServices.for_environment(environment), git=git)
+        return CockpitSession(environment, services=services)
 
     CockpitApp(preflight, session_factory).run()
     return 0

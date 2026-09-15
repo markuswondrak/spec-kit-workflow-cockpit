@@ -6,9 +6,10 @@ from rich.text import Text
 from textual import work
 from textual.widgets import Input, Static
 
+from ...services.context_index import SKILL_GUIDANCE
 from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
-from ..palette import FAULT, FOG, HOLD, PAPER
+from ..palette import COLD, FAULT, FOG, HOLD, PAPER
 from ..view_model import gate_decision
 from ..widgets import FeatureFileList, GateOptions, ReviewDocumentView
 
@@ -80,6 +81,12 @@ class ReviewMixin:
         diagnostic = self._diagnostic or snapshot.diagnostic
         if diagnostic:
             parts.append((diagnostic + "\n\n", FAULT))
+        if snapshot.context_error:
+            parts.append((snapshot.context_error + "\n\n", FAULT))
+        elif snapshot.context_path:
+            parts.append(("context ", FOG))
+            parts.append((snapshot.context_path + "\n", COLD))
+            parts.append((SKILL_GUIDANCE + "\n\n", FOG))
         self.query_one("#overview-content", Static).update(Text.assemble(*parts))
         self.query_one("#decide-hint", Static).update(Text.assemble((decision.hint, FOG)))
         self._render_review_status(snapshot)

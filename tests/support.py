@@ -311,6 +311,8 @@ class FakeSession:
         self.refreshed = 0
         self.editor_launches: list[str] = []
         self.editor = "/usr/bin/true"
+        self.context_path = ".specify/workflows/runs/current_run"
+        self.context_error = ""
         self._graph = WorkflowDefinitionParser().parse(
             (
                 {"id": "prepare", "command": "demo.prepare"},
@@ -419,6 +421,8 @@ class FakeSession:
             review=self.review,
             reviewing=self.reviewing,
             diagnostic=self.diagnostic,
+            context_path=self.context_path,
+            context_error=self.context_error,
             graph_projection=GraphProjector().project(
                 self._graph,
                 RunStateData(

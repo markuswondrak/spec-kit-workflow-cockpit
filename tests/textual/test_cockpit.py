@@ -36,6 +36,39 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(len(log.lines), 0)
             self.assertTrue(screen.query_one("#overview").has_class("compact-summary"))
 
+    async def test_state_view_shows_context_path_and_skill_guidance(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            rendered = str(self.app.screen.query_one("#overview-content").render())
+            self.assertIn("context", rendered)
+            self.assertIn(".specify/workflows/runs/current_run", rendered)
+            self.assertIn("cockpit-run-context", rendered)
+
+    async def test_gate_view_shows_context_path(self):
+        session = FakeSession(status="paused")
+        session.gate = paused_gate()
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            rendered = str(self.app.screen.query_one("#overview-content").render())
+            self.assertIn(".specify/workflows/runs/current_run", rendered)
+
+    async def test_context_error_is_reported(self):
+        session = FakeSession(status="running")
+        session.context_path = ""
+        session.context_error = "Context index unavailable: disk full"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            rendered = str(self.app.screen.query_one("#overview-content").render())
+            self.assertIn("disk full", rendered)
+
     async def test_abort_requires_confirmation_then_closes(self):
         session = FakeSession(status="running")
         session.abort_delay = 0.2

@@ -84,6 +84,8 @@ class RunSnapshot:
     review: ReviewSnapshot | None = None
     reviewing: bool = False
     diagnostic: str = ""
+    context_path: str = ""
+    context_error: str = ""
 
     @property
     def terminal(self) -> bool:
