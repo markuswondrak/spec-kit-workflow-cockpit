@@ -9,15 +9,12 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Static
 
 from ...bootstrap.preflight import Preflight
+from ..palette import palette
+from ..theme import active_style
 from ..widgets import ResizeGuard
 from .base import AdaptiveScreen
 from .help import HelpScreen
 from .launch import LaunchScreen
-
-FOG = "#94A399"
-PAPER = "#E5E9DF"
-SIGNAL = "#9CD6AD"
-FAULT = "#EF9387"
 
 
 class PreflightScreen(AdaptiveScreen):
@@ -35,10 +32,13 @@ class PreflightScreen(AdaptiveScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):
             with Horizontal(id="masthead"):
-                wordmark = Text.assemble((" C / ", "bold #E8BD79"), ("WORKFLOW COCKPIT", f"bold {PAPER}"))
+                wordmark = Text.assemble(
+                    (" C / ", f"bold {palette.hold}"), ("WORKFLOW COCKPIT", f"bold {palette.paper}")
+                )
                 yield Static(wordmark, id="wordmark")
                 yield Static(id="run-status")
             yield Static("  checking environment", id="identity")
+            yield Static(id="style-note")
             with VerticalScroll(id="preflight-content"):
                 yield Static("00 / PREFLIGHT", classes="section-label")
                 yield Static(id="preflight-list")
@@ -55,29 +55,43 @@ class PreflightScreen(AdaptiveScreen):
         lines: list = []
         for check in report.checks:
             marker = "[x]" if check.ok else "[X]"
-            tone = SIGNAL if check.ok else FAULT
-            lines.append(Text.assemble((f"{marker} ", tone), (check.label, PAPER)))
+            tone = palette.signal if check.ok else palette.fault
+            lines.append(Text.assemble((f"{marker} ", tone), (check.label, palette.paper)))
             if check.detail:
-                lines.append(Text.assemble(("    ", FOG), (check.detail, FOG)))
+                lines.append(Text.assemble(("    ", palette.fog), (check.detail, palette.fog)))
             if not check.ok and check.repair:
-                lines.append(Text.assemble(("    repair: ", FAULT), (check.repair, PAPER)))
+                lines.append(Text.assemble(("    repair: ", palette.fault), (check.repair, palette.paper)))
         self.query_one("#preflight-list", Static).update(Text("\n").join(lines))
         status = "PROJECT READY" if report.ok else "PREREQUISITES MISSING"
         self.query_one("#run-status", Static).update(
-            Text.assemble((status, f"bold {SIGNAL if report.ok else FAULT}"))
+            Text.assemble((status, f"bold {palette.signal if report.ok else palette.fault}"))
         )
-        self.query_one("#identity", Static).update(Text.assemble(("  ", FOG), (str(report.project.root), PAPER)))
+        root = str(report.project.root)
+        self.query_one("#identity", Static).update(Text.assemble(("  ", palette.fog), (root, palette.paper)))
+        self._render_style_note()
         if report.ok:
             self.query_one("#preflight-repair", Static).update(
-                Text.assemble(("Launching workflow selection…", FOG))
+                Text.assemble(("Launching workflow selection…", palette.fog))
             )
             session = self.session_factory(report.compatibility)
             self.app.session = session
             self.app.switch_screen(LaunchScreen(session, report))
         else:
             self.query_one("#preflight-repair", Static).update(
-                Text.assemble(("Fix the items above, then press 'r' to re-check.", FOG))
+                Text.assemble(("Fix the items above, then press 'r' to re-check.", palette.fog))
             )
+
+    def _render_style_note(self) -> None:
+        """Always show the resolved style; name the fallback reason non-fatally."""
+        style = active_style()
+        label = style.display_name or style.name
+        note = self.query_one("#style-note", Static)
+        if style.is_fallback:
+            note.update(
+                Text.assemble(("STYLE  ", palette.fog), (label, palette.paper), (f"  /  {style.notice}", palette.hold))
+            )
+        else:
+            note.update(Text.assemble(("STYLE  ", palette.fog), (label, palette.paper)))
 
     def action_rerun(self) -> None:
         self._evaluate()

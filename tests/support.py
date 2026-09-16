@@ -26,6 +26,9 @@ from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateState, RunSnapshot
+from workflow_cockpit.styling.resolver import ResolvedStyle
+from workflow_cockpit.styling.tokens import default_template
+from workflow_cockpit.ui.theme import install_style
 
 STYLES = Path(__file__).resolve().parents[1] / "workflow_cockpit" / "ui" / "styles.tcss"
 
@@ -67,10 +70,15 @@ class StyledApp(App):
     """App that loads the real cockpit stylesheet.
 
     ``CSS_PATH`` must be a class attribute to be picked up; assigning it to an
-    instance after construction is silently ignored.
+    instance after construction is silently ignored. The neutral style is
+    installed so the theme-supplied tokens resolve.
     """
 
     CSS_PATH = str(STYLES)
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        install_style(self, ResolvedStyle(template=default_template(), source="default"))
 
 
 LINEAR_WORKFLOW = {

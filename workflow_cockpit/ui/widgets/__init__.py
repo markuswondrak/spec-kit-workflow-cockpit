@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 from ...services.snapshot import RunSnapshot
-from ..palette import FAULT, FOG, HOLD, PAPER, SIGNAL
+from ..palette import palette
+from ..theme import active_style
 from ..view_model import render_runway, state_grammar
 from .indicator import BounceIndicator
 from .review import FeatureFileList, GateOptions, MarkdownDocumentView, ReviewDocumentView
@@ -30,15 +30,18 @@ __all__ = [
     "Runway",
 ]
 
-STATUS_STYLES = {
-    "running": SIGNAL,
-    "paused": HOLD,
-    "completed": SIGNAL,
-    "skipped": FOG,
-    "aborted": FAULT,
-    "failed": FAULT,
-    "pending": FOG,
-}
+def status_tone(status: str) -> str:
+    """Runway tone for a node status, read from the active palette."""
+    return {
+        "running": palette.signal,
+        "paused": palette.hold,
+        "completed": palette.signal,
+        "skipped": palette.fog,
+        "aborted": palette.fault,
+        "failed": palette.fault,
+        "pending": palette.fog,
+    }.get(status, palette.fog)
+
 
 TRUNCATION_MARKER = "... earlier output truncated ..."
 
@@ -52,45 +55,67 @@ class HeaderRail(Vertical):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="masthead"):
-            yield Static(_text((" C / ", f"bold {HOLD}"), ("WORKFLOW COCKPIT", f"bold {PAPER}")), id="wordmark")
+            yield Static(
+                _text((" C / ", f"bold {palette.hold}"), ("WORKFLOW COCKPIT", f"bold {palette.paper}")),
+                id="wordmark",
+            )
+            yield Static(id="style-field")
             yield Static(id="run-status")
             yield Static("?  help", id="help-hint")
         yield Static(id="identity")
 
     def update_snapshot(self, snapshot: RunSnapshot) -> None:
         symbol, word = state_grammar(snapshot.status)
-        tone = SELF_TONE.get(snapshot.status, PAPER)
+        tone = self_tone(snapshot.status)
         if snapshot.stale:
             word = f"{word} / STALE"
-            tone = HOLD
+            tone = palette.hold
         self.query_one("#run-status", Static).update(_text((f"{symbol} {word}", f"bold {tone}")))
         branch = snapshot.branch or "unknown"
         elapsed = _elapsed(snapshot)
         run = snapshot.abbreviated_run_id or "—"
         self.query_one("#identity", Static).update(
             _text(
-                ("  BRANCH ", FOG),
-                (branch, PAPER),
-                ("   /   ELAPSED ", FOG),
-                (elapsed, PAPER),
-                ("   /   RUN ", FOG),
-                (run, FOG),
+                ("  BRANCH ", palette.fog),
+                (branch, palette.paper),
+                ("   /   ELAPSED ", palette.fog),
+                (elapsed, palette.paper),
+                ("   /   RUN ", palette.fog),
+                (run, palette.fog),
             )
         )
 
+    def on_mount(self) -> None:
+        self.update_style()
 
-SELF_TONE = {
-    "running": SIGNAL,
-    "initializing": SIGNAL,
-    "paused": HOLD,
-    "aborting": FAULT,
-    "completed": SIGNAL,
-    "success": SIGNAL,
-    "failed": FAULT,
-    "failure": FAULT,
-    "aborted": FAULT,
-    "abort": FAULT,
-}
+    def update_style(self) -> None:
+        """Show the resolved template name, marking a fallback non-fatally."""
+        style = active_style()
+        label = style.display_name or style.name
+        if style.is_fallback:
+            self.query_one("#style-field", Static).update(
+                _text(("STYLE ", palette.fog), (f"{label} / FALLBACK", palette.hold))
+            )
+        else:
+            self.query_one("#style-field", Static).update(
+                _text(("STYLE ", palette.fog), (label, palette.paper))
+            )
+
+
+def self_tone(status: str) -> str:
+    """Header run-state tone, read from the active palette."""
+    return {
+        "running": palette.signal,
+        "initializing": palette.signal,
+        "paused": palette.hold,
+        "aborting": palette.fault,
+        "completed": palette.signal,
+        "success": palette.signal,
+        "failed": palette.fault,
+        "failure": palette.fault,
+        "aborted": palette.fault,
+        "abort": palette.fault,
+    }.get(status, palette.paper)
 
 
 def _elapsed(snapshot: RunSnapshot) -> str:
@@ -100,43 +125,27 @@ def _elapsed(snapshot: RunSnapshot) -> str:
 
 
 class Runway(OptionList):
-    """Scrollable declared graph that retains node selection across refreshes."""
+    """Read-only declared graph; the current node is emphasized in place."""
 
-    BINDINGS = [
-        Binding("j", "cursor_down", show=False),
-        Binding("k", "cursor_up", show=False),
-    ]
+    can_focus = False
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.selected_node_id: str | None = None
-
-    def update_projection(self, projection, selected_id: str | None = None) -> None:
+    def update_projection(self, projection) -> None:
         scroll_y = self.scroll_y
-        # Capture the live highlight before rebuilding; a rebuild must not
-        # discard a selection the user just made, even if the highlight event
-        # has not been processed yet.
-        live = self.highlighted_option
-        live_id = str(live.id) if live is not None and live.id is not None else None
         rows = render_runway(projection, width=max(12, self.size.width or 29))
+        current = projection.current_node_id if projection is not None else None
         options: list[Option] = []
         for row in rows:
-            tone = STATUS_STYLES.get(row.status, FOG)
-            if row.active:
+            tone = status_tone(row.status)
+            if str(row.id) == current:
+                options.append(Option(_text((row.text, f"bold underline {tone}")), id=row.id))
+            elif row.active:
                 options.append(Option(_text((row.text, f"bold {tone}")), id=row.id))
             else:
-                label_style = PAPER if row.status != "pending" else FOG
+                label_style = palette.paper if row.status != "pending" else palette.fog
                 options.append(Option(_text((row.text, label_style)), id=row.id))
         self.clear_options()
         self.add_options(options)
-        if options:
-            index_by_id = {str(option.id): index for index, option in enumerate(options)}
-            current = projection.current_node_id if projection is not None else None
-            preferred = live_id or selected_id or self.selected_node_id or current
-            self.highlighted = index_by_id.get(preferred or "", 0)
-            option = options[self.highlighted]
-            self.selected_node_id = str(option.id)
-            self.scroll_to(y=scroll_y, animate=False)
+        self.scroll_to(y=scroll_y, animate=False)
 
 
 class EngineOutput(Vertical):
@@ -151,17 +160,19 @@ class EngineOutput(Vertical):
 
     def set_state(self, status: str, expanded: bool, full: bool = False) -> None:
         if status == "running" or status == "initializing":
-            label, tone = "LIVE [>]", SIGNAL
+            label, tone = "LIVE [>]", palette.signal
         elif status == "paused":
-            label, tone = "PAUSED [!]", HOLD
+            label, tone = "PAUSED [!]", palette.hold
         else:
-            label, tone = "STOPPED", FOG
-        self.query_one("#output-title", Static).update(_text(("ENGINE OUTPUT", FOG), (f"  /  {label}", tone)))
+            label, tone = "STOPPED", palette.fog
+        self.query_one("#output-title", Static).update(
+            _text(("ENGINE OUTPUT", palette.fog), (f"  /  {label}", tone))
+        )
         active = status in ("running", "initializing", "aborting")
         self.query_one("#activity", BounceIndicator).display = active
         self.set_class(expanded, "expanded")
         self.set_class(full, "full-canvas")
-        self.query_one("#output-hint", Static).update(_text((self._hint(status, expanded, full), FOG)))
+        self.query_one("#output-hint", Static).update(_text((self._hint(status, expanded, full), palette.fog)))
 
     @staticmethod
     def _hint(status: str, expanded: bool, full: bool) -> str:
@@ -184,7 +195,7 @@ class EngineOutput(Vertical):
         # RichLog.write auto-scrolls by default; suppress it so a reader who has
         # scrolled up keeps their place, then follow the tail explicitly.
         for line in lines:
-            log.write(Text(line, style=FOG), scroll_end=False)
+            log.write(Text(line, style=palette.fog), scroll_end=False)
         if lines and at_tail:
             log.scroll_end(animate=False)
 
@@ -209,7 +220,7 @@ class CommandRail(Horizontal):
 
     def set_feedback(self, message: str) -> None:
         """Transient success feedback, shown on the rail for a short while."""
-        self.query_one("#feedback", Static).update(_text((message, SIGNAL)) if message else "")
+        self.query_one("#feedback", Static).update(_text((message, palette.signal)) if message else "")
 
 
 class ErrorStrip(Static):
@@ -223,7 +234,7 @@ class ErrorStrip(Static):
         self.display = False
 
     def show(self, message: str) -> None:
-        self.update(_text((f"  {message}", FAULT)))
+        self.update(_text((f"  {message}", palette.fault)))
         self.display = True
 
     def clear(self) -> None:
@@ -237,9 +248,9 @@ class ResizeGuard(Static):
     def render_size(self, width: int, height: int) -> None:
         self.update(
             _text(
-                ("MORE ROOM TO WORK\n\n", f"bold {HOLD}"),
-                (f"Terminal  {width} x {height}\n", PAPER),
-                ("Required  88 x 36\n\n", FOG),
-                ("Resize to continue. Your place is preserved.\n[q] exit", PAPER),
+                ("MORE ROOM TO WORK\n\n", f"bold {palette.hold}"),
+                (f"Terminal  {width} x {height}\n", palette.paper),
+                ("Required  88 x 36\n\n", palette.fog),
+                ("Resize to continue. Your place is preserved.\n[q] exit", palette.paper),
             )
         )

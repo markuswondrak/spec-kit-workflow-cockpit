@@ -1,0 +1,22 @@
+{
+  "name": "claude",
+  "label": "Claude",
+  "aliases": ["claude", "claude code"],
+  "tokens": {
+    "ink": "#171310",
+    "deck": "#201A15",
+    "raised": "#2A221B",
+    "rail": "#3A2F26",
+    "fog": "#A89A8C",
+    "paper": "#EDE6DC",
+    "signal": "#9BD8A4",
+    "hold": "#E4B363",
+    "fault": "#F2705E",
+    "cold": "#B8A0E0"
+  },
+  "accents": {
+    "selection": "#3A2A22",
+    "focus": "#4A3629",
+    "hover": "#443024"
+  }
+}

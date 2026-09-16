@@ -45,6 +45,47 @@ instrument panel. Both live in one Textual application.
 
 Color never carries meaning alone. Every colored state also has a word and symbol.
 
+### Styling templates
+
+The ten roles above (`ink`, `deck`, `raised`, `rail`, `fog`, `paper`, `signal`, `hold`,
+`fault`, `cold`) form the required token set. Three optional accent roles round out the
+palette: `selection`, `focus`, and `hover` (the selected-row, focused-control, and
+hovered-control backgrounds). A template may omit accents and inherit the neutral
+defaults.
+
+A template is a data-only JSON definition; adding one requires no application code:
+
+```json
+{
+  "name": "opencode",
+  "label": "OpenCode",
+  "aliases": ["opencode"],
+  "tokens": { "ink": "#0E0F13", "deck": "#15171D", "raised": "#1D2028", "rail": "#2C313B",
+              "fog": "#939AA6", "paper": "#E7EAF0", "signal": "#7CE0B0", "hold": "#E8BD79",
+              "fault": "#F08A90", "cold": "#8FB8E0" },
+  "accents": { "selection": "#1E3038", "focus": "#25404A", "hover": "#233A43" }
+}
+```
+
+- A definition missing any required token is rejected as a whole; the neutral `cockpit`
+  default is used and the rejection is logged with the offending name and missing tokens.
+  Extra tokens are ignored for validation.
+- Names and aliases match case-insensitively with spaces, underscores, and dashes
+  collapsed: `"GitHub Copilot"`, `"github-copilot"`, and `"copilot"` all resolve to one
+  template.
+- Discovery precedence is fixed: built-in packaged templates first, then project-local
+  `.specify/cockpit/templates/*.json`. Within a directory files are read in sorted
+  filename order and the first definition for a name wins. The neutral `cockpit`
+  template can never be shadowed.
+- On launch the active template is the project's `default_integration` from
+  `.specify/integration.json`. The `--style NAME` launch option overrides it. An unknown,
+  missing, unreadable, or malformed input falls back to `cockpit` with a non-fatal
+  notice; the run is never blocked. The resolved name is shown in the header.
+
+Templates affect only colors and accent styling. Layout, wording, controls, and behavior
+are identical under every template, and color never carries meaning without its symbol
+and word.
+
 ### Typography
 
 Textual uses the terminal's monospace font. Hierarchy comes from weight, case, spacing, and
@@ -148,9 +189,10 @@ viewport when possible.
 ```
 
 - Active path uses `signal`; inactive alternatives are dim.
+- The current node is emphasized within the active path with bold underline.
 - A gate uses `hold` and the word `gate`.
 - Attempts appear as `#2`, `#3`, and so on.
-- Selecting a node updates Focus without changing the run.
+- Runway is display only; it has no cursor or selection.
 - Long labels truncate in the middle; Focus shows the full value.
 
 ### Focus
@@ -392,7 +434,7 @@ Enter rather than ambiguous multi-digit shortcuts.
 - Recoverable errors occupy a persistent strip above the command rail until dismissed.
 - Errors state the failed operation, authoritative run state, and next available action.
 - Background read errors preserve the last good graph and add a `STALE` marker.
-- Focus, selections, output scroll, and document scroll survive background refreshes.
+- Focus, file selection, output scroll, and document scroll survive background refreshes.
 - Unexpected child-process exit expands Engine Output and keeps the final lines visible.
 
 ## 11. Accessibility and degradation
@@ -411,4 +453,4 @@ Enter rather than ambiguous multi-digit shortcuts.
    full area at a gate, with no empty reserved region.
 4. Expanded output supports long workflow output and strips controls without UI corruption.
 5. Responsive stacking behaves correctly on Linux, macOS, and WSL terminals.
-6. Refreshes preserve graph selection, file selection, document scroll, and output-tail mode.
+6. Refreshes preserve the current-node highlight, file selection, document scroll, and output-tail mode.

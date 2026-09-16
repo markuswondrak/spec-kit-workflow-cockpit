@@ -85,6 +85,7 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 | `EngineOutput` | Bounded, read-only `RichLog` fed from the supervisor. |
 | `CommandRail` | Actions valid in the current state, including dynamic gate choices. |
 | `CockpitViewModel` | Map `RunSnapshot` to renderable state; preserve selection, focus, and scroll across refreshes. |
+| `ThemeBridge` (`ui/theme.py`) | Map the resolved styling template to a registered Textual `Theme`; install the mutable palette and expose the applied style to header/notice widgets. |
 
 ### 2.6 Shipped artifact
 
@@ -98,6 +99,23 @@ The repository has one `pyproject.toml` declaring the `workflow-cockpit` console
 Python/runtime dependencies, and packaged Textual CSS. PyYAML and version-specifier support are
 direct Cockpit dependencies; Cockpit never relies on packages from the `specify` installation.
 An isolated wheel smoke test verifies the executable and package data.
+
+### 2.8 Styling templates
+
+| Component | Responsibility |
+|---|---|
+| `StylingTemplate` | Immutable validated set of the ten required token roles plus optional accents. |
+| `TemplateRepository` | Data-only discovery of built-in and project-local template JSON, required-token validation, and a deterministic name/alias index. |
+| `IntegrationDescriptor` | Tolerant read of `.specify/integration.json` `default_integration`; never raises. |
+| `StylingResolver` | Resolve the active template from override -> integration -> `cockpit` default, returning the applied template with any non-fatal fallback notice. |
+
+**Resolved decision.** Styling is a pure-data layer resolved once at startup, before the app is
+constructed. It imports no Textual and touches no session, supervisor, gate, or run-state code, so
+resolution cannot block, delay, or alter a run. The resolved template drives both render paths: a
+registered Textual `Theme` (whose `variables` supply the `$ink`..`$cold` and accent tokens to
+`styles.tcss`) and the mutable `ui.palette` singleton read by Rich-text call sites at render time.
+The presentation boundary is unchanged: screens and widgets still consume styles through the
+palette and the active style only.
 
 ## 3. Wiring
 

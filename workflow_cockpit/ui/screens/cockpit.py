@@ -13,7 +13,7 @@ from ...services.context_index import SKILL_GUIDANCE
 from ...services.review import ReviewDocument
 from ...services.snapshot import OutcomeKind, RunSnapshot
 from ..editor import default_editor_launcher, editor_environment
-from ..palette import COLD, FAULT, FOG, PAPER, SIGNAL
+from ..palette import palette
 from ..view_model import default_focus_mode, format_elapsed, gate_decision
 from ..widgets import (
     TRUNCATION_MARKER,
@@ -64,7 +64,6 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
         self._held_mode: str | None = None
         self._focus_mode: str | None = None
         self._last_default_mode: str | None = None
-        self._selected_node_id: str | None = None
         self._selected_review_path: str | None = None
         self._filter = ""
         self._review_loaded = False
@@ -126,14 +125,12 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
         self.query_one(HeaderRail).update_snapshot(snapshot)
         definition = getattr(self.session, "definition", None)
         if definition is not None:
-            self.query_one("#workflow-name", Static).update(Text.assemble((definition.name, PAPER)))
+            self.query_one("#workflow-name", Static).update(Text.assemble((definition.name, palette.paper)))
         projection = snapshot.graph_projection
-        runway = self.query_one(Runway)
-        runway.update_projection(projection, self._selected_node_id)
-        self._selected_node_id = runway.selected_node_id
+        self.query_one(Runway).update_projection(projection)
         done = sum(1 for node in projection.nodes if node.status == "completed") if projection else 0
         total = len(projection.nodes) if projection else len(definition.steps) if definition else 0
-        self.query_one("#run-progress", Static).update(Text.assemble((f"{done}/{total} complete", FOG)))
+        self.query_one("#run-progress", Static).update(Text.assemble((f"{done}/{total} complete", palette.fog)))
         self._maybe_load_review(snapshot)
         self._update_output(snapshot)
         self._update_focus(snapshot)
@@ -196,12 +193,12 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
 
     def _render_state(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")
-        self.query_one("#view-label", Static).update(Text.assemble(("STATE", f"bold {PAPER}")))
+        self.query_one("#view-label", Static).update(Text.assemble(("STATE", f"bold {palette.paper}")))
         parts: list = [
-            (f"{step_label}\n\n", f"bold {PAPER}"),
-            (f"workflow {snapshot.workflow_name or snapshot.workflow_id}\n", FOG),
-            (f"run {snapshot.run_id}\n", COLD),
-            (f"status {snapshot.status}\n", FOG),
+            (f"{step_label}\n\n", f"bold {palette.paper}"),
+            (f"workflow {snapshot.workflow_name or snapshot.workflow_id}\n", palette.fog),
+            (f"run {snapshot.run_id}\n", palette.cold),
+            (f"status {snapshot.status}\n", palette.fog),
         ]
         parts.extend(self._context_lines(snapshot))
         self.query_one("#overview-content", Static).update(Text.assemble(*parts))
@@ -209,31 +206,34 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
     @staticmethod
     def _context_lines(snapshot) -> list:
         if snapshot.context_error:
-            return [(f"\n{snapshot.context_error}\n", FAULT)]
+            return [(f"\n{snapshot.context_error}\n", palette.fault)]
         if snapshot.context_path:
             return [
-                ("\ncontext ", FOG),
-                (snapshot.context_path + "\n", COLD),
-                (SKILL_GUIDANCE + "\n", FOG),
+                ("\ncontext ", palette.fog),
+                (snapshot.context_path + "\n", palette.cold),
+                (SKILL_GUIDANCE + "\n", palette.fog),
             ]
         return []
 
     def _render_output_mode(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")
-        self.query_one("#view-label", Static).update(Text.assemble(("OUTPUT / RUNNING", f"bold {PAPER}")))
+        self.query_one("#view-label", Static).update(Text.assemble(("OUTPUT / RUNNING", f"bold {palette.paper}")))
         phase = "STARTING" if snapshot.status == "initializing" else "RUNNING"
-        attempt = self._attempt(snapshot, self._selected_node_id or snapshot.current_step_id)
+        attempt = self._attempt(snapshot, snapshot.current_step_id)
         next_step = self._next_step(snapshot)
         self.query_one("#overview-content", Static).update(
             Text.assemble(
-                (f"{phase}\n", FOG),
-                (f"NOW {step_label}  attempt {attempt}  {format_elapsed(snapshot.elapsed_seconds)}\n", f"bold {PAPER}"),
-                (f"NEXT {next_step}\n", FOG),
+                (f"{phase}\n", palette.fog),
+                (
+                    f"NOW {step_label}  attempt {attempt}  {format_elapsed(snapshot.elapsed_seconds)}\n",
+                    f"bold {palette.paper}",
+                ),
+                (f"NEXT {next_step}\n", palette.fog),
             )
         )
 
     def _step_label(self, snapshot, definition) -> str:
-        selected = self._selected_node_id or snapshot.current_step_id
+        selected = snapshot.current_step_id
         projection = snapshot.graph_projection
         if projection is not None and selected:
             node = projection.graph.by_id.get(selected)
@@ -264,21 +264,22 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
         self.query_one("#review-status", Static).update("")
         outcome = snapshot.outcome
         if outcome.kind is OutcomeKind.SUCCESS:
-            marker, tone, heading = "[x]", SIGNAL, "RUN COMPLETE"
+            marker, tone, heading = "[x]", palette.signal, "RUN COMPLETE"
         elif outcome.kind is OutcomeKind.ABORT:
-            marker, tone, heading = "[/]", FAULT, "RUN ABORTED"
+            marker, tone, heading = "[/]", palette.fault, "RUN ABORTED"
         else:
-            marker, tone, heading = "[X]", FAULT, "RUN FAILED"
+            marker, tone, heading = "[X]", palette.fault, "RUN FAILED"
         self.query_one("#view-label", Static).update(Text.assemble((f"{marker} {heading}", f"bold {tone}")))
         detail = outcome.detail or ""
         step = outcome.step_id or snapshot.current_step_id or "—"
+        engine = outcome.engine_status or snapshot.engine_status
         self.query_one("#overview-content", Static).update(
             Text.assemble(
                 (f"{heading} {marker}\n\n", f"bold {tone}"),
-                (f"{step}\n", PAPER),
-                (f"status {snapshot.status}   /   engine {outcome.engine_status or snapshot.engine_status}\n", FOG),
-                (f"{detail}\n\n", tone if outcome.kind is not OutcomeKind.SUCCESS else FOG),
-                ("Press enter to close.", PAPER),
+                (f"{step}\n", palette.paper),
+                (f"status {snapshot.status}   /   engine {engine}\n", palette.fog),
+                (f"{detail}\n\n", tone if outcome.kind is not OutcomeKind.SUCCESS else palette.fog),
+                ("Press enter to close.", palette.paper),
             )
         )
         self._update_commands(snapshot)
@@ -416,12 +417,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
     def on_option_list_option_highlighted(self, event) -> None:
         if event.option.id is None:
             return
-        if event.option_list.id == "runway-graph":
-            self._selected_node_id = str(event.option.id)
-            self.query_one(Runway).selected_node_id = self._selected_node_id
-            self._update_focus(self._snapshot_now())
-            event.stop()
-        elif event.option_list.id in ("feature-files", "changed-files"):
+        if event.option_list.id in ("feature-files", "changed-files"):
             self._selected_review_path = str(event.option.id)
             self._full_file = False
             self._load_document(self._selected_review_path)

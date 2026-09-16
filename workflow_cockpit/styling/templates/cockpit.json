@@ -1,0 +1,22 @@
+{
+  "name": "cockpit",
+  "label": "Cockpit",
+  "aliases": ["cockpit", "default", "neutral"],
+  "tokens": {
+    "ink": "#101312",
+    "deck": "#171C19",
+    "raised": "#202821",
+    "rail": "#303B34",
+    "fog": "#94A399",
+    "paper": "#E5E9DF",
+    "signal": "#9CD6AD",
+    "hold": "#E8BD79",
+    "fault": "#EF9387",
+    "cold": "#A1BFCE"
+  },
+  "accents": {
+    "selection": "#2B3D32",
+    "focus": "#34463D",
+    "hover": "#354238"
+  }
+}

@@ -1,4 +1,4 @@
-"""Loading indicator whose bright dot travels right, then back left."""
+"""Loading indicator whose bright dot dwells, travels right, dwells, then returns."""
 
 from __future__ import annotations
 
@@ -18,16 +18,32 @@ class BounceIndicator(LoadingIndicator):
     """Ping-pong variant of the stock indicator: no wrap-around jump."""
 
     RATE = 4.0
-    """Triangle-wave units per second; one full left-to-right sweep per 1/rate * SPAN."""
+    """Triangle-wave units per second; one full left-to-right sweep per SPAN / RATE."""
 
     SPAN = 4.0
     """Distance the bright dot travels from the first to the last dot."""
 
+    DWELL = 0.35
+    """Seconds the bright dot rests at each end before reversing."""
+
+    @classmethod
+    def _position(cls, elapsed: float) -> float:
+        """Bright-dot position: hold at 0, sweep to SPAN, hold, sweep back."""
+        travel = cls.SPAN / cls.RATE
+        cycle = 2 * (travel + cls.DWELL)
+        phase = elapsed % cycle
+        if phase < cls.DWELL:
+            return 0.0
+        if phase < cls.DWELL + travel:
+            return (phase - cls.DWELL) * cls.RATE
+        if phase < 2 * cls.DWELL + travel:
+            return cls.SPAN
+        return cls.SPAN - (phase - 2 * cls.DWELL - travel) * cls.RATE
+
     @classmethod
     def _blends(cls, elapsed: float) -> list[float]:
-        """Dot intensities for a position that sweeps 0 -> SPAN -> 0."""
-        cycle = (elapsed * cls.RATE) % (2 * cls.SPAN)
-        position = cls.SPAN - abs(cycle - cls.SPAN)
+        """Dot intensities for a position that dwells and sweeps 0 -> SPAN -> 0."""
+        position = cls._position(elapsed)
         return [min(1.0, abs(position - dot) / cls.SPAN) for dot in range(5)]
 
     def render(self) -> RenderResult:

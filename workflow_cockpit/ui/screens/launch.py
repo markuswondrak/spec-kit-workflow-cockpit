@@ -12,17 +12,12 @@ from textual.widgets.option_list import Option
 
 from ...services.definition import InputSpec
 from ...services.registry import RegistryError
+from ..palette import palette
+from ..theme import active_style
 from ..widgets import ResizeGuard
 from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
 from .help import HelpScreen
-
-FOG = "#94A399"
-PAPER = "#E5E9DF"
-SIGNAL = "#9CD6AD"
-FAULT = "#EF9387"
-COLD = "#A1BFCE"
-HOLD = "#E8BD79"
 
 LAUNCH_LOGO = r"""  ____ ___   ____ _  ______ ___ _____
  / ___/ _ \ / ___| |/ /  _ \_ _|_   _|
@@ -65,13 +60,16 @@ class LaunchScreen(AdaptiveScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):
             with Horizontal(id="masthead"):
-                wordmark = Text.assemble((" C / ", f"bold {HOLD}"), ("WORKFLOW COCKPIT", f"bold {PAPER}"))
+                wordmark = Text.assemble(
+                    (" C / ", f"bold {palette.hold}"), ("WORKFLOW COCKPIT", f"bold {palette.paper}")
+                )
                 yield Static(wordmark, id="wordmark")
                 yield Static(id="run-status")
             yield Static(id="identity")
+            yield Static(id="style-note")
             with VerticalScroll(id="launch-content"):
                 yield Static("W O R K F L O W   /   S T A Y   I N   C O N T R O L", id="launch-eyebrow")
-                yield Static(Text(LAUNCH_LOGO, style=f"bold {PAPER}"), id="launch-logo")
+                yield Static(Text(LAUNCH_LOGO, style=f"bold {palette.paper}"), id="launch-logo")
                 yield Static(
                     "Choose the workflow this cockpit will own.",
                     id="launch-intro",
@@ -103,9 +101,10 @@ class LaunchScreen(AdaptiveScreen):
 
     async def on_mount(self) -> None:
         super().on_mount()
-        self.query_one("#run-status", Static).update(Text.assemble(("[x] PROJECT READY", SIGNAL)))
+        self.query_one("#run-status", Static).update(Text.assemble(("[x] PROJECT READY", palette.signal)))
         root = getattr(getattr(self.session, "project_root", None), "__str__", lambda: "")()
-        self.query_one("#identity", Static).update(Text.assemble(("  ", FOG), (root, PAPER)))
+        self.query_one("#identity", Static).update(Text.assemble(("  ", palette.fog), (root, palette.paper)))
+        self._render_style_note()
         listing = self.query_one("#workflows", OptionList)
         if self._registry_error:
             self._show_empty_state(
@@ -119,12 +118,12 @@ class LaunchScreen(AdaptiveScreen):
             options.append(
                 Option(
                     Text.assemble(
-                        ("\n", FOG),
-                        (f"{index + 1:02d}  ", HOLD),
-                        (f"{entry.name}\n", f"bold {PAPER}"),
-                        ("    ", FOG),
-                        (entry.description or "No description provided.", FOG),
-                        ("\n    Enter to configure\n", COLD),
+                        ("\n", palette.fog),
+                        (f"{index + 1:02d}  ", palette.hold),
+                        (f"{entry.name}\n", f"bold {palette.paper}"),
+                        ("    ", palette.fog),
+                        (entry.description or "No description provided.", palette.fog),
+                        ("\n    Enter to configure\n", palette.cold),
                     ),
                     id=entry.id,
                 )
@@ -135,7 +134,7 @@ class LaunchScreen(AdaptiveScreen):
             listing.focus()
             await self.update_selection()
             self.query_one("#catalog-note", Static).update(
-                Text.assemble((f"{len(options)} workflow{'s' if len(options) != 1 else ''} available", FOG))
+                Text.assemble((f"{len(options)} workflow{'s' if len(options) != 1 else ''} available", palette.fog))
             )
         else:
             self._show_empty_state(
@@ -144,15 +143,27 @@ class LaunchScreen(AdaptiveScreen):
                 "Install one with:  specify workflow add <id>",
             )
 
+    def _render_style_note(self) -> None:
+        """Always show the resolved style; name the fallback reason non-fatally."""
+        style = active_style()
+        label = style.display_name or style.name
+        note = self.query_one("#style-note", Static)
+        if style.is_fallback:
+            note.update(
+                Text.assemble(("STYLE  ", palette.fog), (label, palette.paper), (f"  /  {style.notice}", palette.hold))
+            )
+        else:
+            note.update(Text.assemble(("STYLE  ", palette.fog), (label, palette.paper)))
+
     def _show_empty_state(self, heading: str, detail: str, repair: str) -> None:
         self._definition = None
         self.query_one("#workflow-picker").display = False
         self.query_one("#launch-detail").display = False
         self.query_one("#workflow-empty", Static).update(
             Text.assemble(
-                (f"[!]  {heading}\n\n", f"bold {HOLD}"),
-                (f"{detail}\n\n", PAPER),
-                (repair, COLD),
+                (f"[!]  {heading}\n\n", f"bold {palette.hold}"),
+                (f"{detail}\n\n", palette.paper),
+                (repair, palette.cold),
             )
         )
         self.query_one("#workflow-empty").display = True
@@ -171,16 +182,16 @@ class LaunchScreen(AdaptiveScreen):
             self._definition = self.session.select(entry.id)
         except Exception as exc:
             self._definition = None
-            self.query_one("#detail-name", Static).update(Text.assemble((entry.name, PAPER)))
-            self.query_one("#detail-description", Static).update(Text.assemble((str(exc), FAULT)))
+            self.query_one("#detail-name", Static).update(Text.assemble((entry.name, palette.paper)))
+            self.query_one("#detail-description", Static).update(Text.assemble((str(exc), palette.fault)))
             self.query_one("#detail-flow", Static).update("")
             self.query_one("#start", Button).display = False
             return
         definition = self._definition
-        self.query_one("#detail-name", Static).update(Text.assemble((definition.name, PAPER)))
-        self.query_one("#detail-description", Static).update(Text.assemble((definition.description, FOG)))
+        self.query_one("#detail-name", Static).update(Text.assemble((definition.name, palette.paper)))
+        self.query_one("#detail-description", Static).update(Text.assemble((definition.description, palette.fog)))
         flow = " -> ".join(step.id for step in definition.steps)
-        self.query_one("#detail-flow", Static).update(Text.assemble((flow, COLD)))
+        self.query_one("#detail-flow", Static).update(Text.assemble((flow, palette.cold)))
         self.query_one("#workflow-picker").display = not self.configuring
         self.query_one("#launch-detail").display = self.configuring
         self.query_one("#launch-content").set_class(self.configuring, "configuring")
@@ -192,16 +203,21 @@ class LaunchScreen(AdaptiveScreen):
         branch = self.session.git.branch() or "unknown"
         dirty = self.session.git.is_dirty()
         detail = "dirty - confirmation required" if dirty else "clean"
-        tone = HOLD if dirty else SIGNAL
+        tone = palette.hold if dirty else palette.signal
         self.query_one("#launch-state", Static).update(
-            Text.assemble(("  BRANCH ", FOG), (branch, PAPER), ("   /   WORKTREE ", FOG), (detail, tone))
+            Text.assemble(
+                ("  BRANCH ", palette.fog),
+                (branch, palette.paper),
+                ("   /   WORKTREE ", palette.fog),
+                (detail, tone),
+            )
         )
 
     async def _build_form(self, inputs: tuple[InputSpec, ...]) -> None:
         form = self.query_one("#config-form", Vertical)
         await form.remove_children()
         if not inputs:
-            await form.mount(Static(Text.assemble(("This workflow declares no inputs.", FOG))))
+            await form.mount(Static(Text.assemble(("This workflow declares no inputs.", palette.fog))))
             return
         widgets = []
         for spec in inputs:
@@ -274,7 +290,7 @@ class LaunchScreen(AdaptiveScreen):
         _resolved, errors = self.session.validate(values)
         if errors:
             self.query_one("#validation", Static).update(
-                Text.assemble((errors[next(iter(errors))], FAULT))
+                Text.assemble((errors[next(iter(errors))], palette.fault))
             )
             self._first_field_focus()
             return
@@ -301,13 +317,13 @@ class LaunchScreen(AdaptiveScreen):
         resolved, errors = self.session.validate(values)
         if errors:
             self.query_one("#validation", Static).update(
-                Text.assemble((errors[next(iter(errors))], FAULT))
+                Text.assemble((errors[next(iter(errors))], palette.fault))
             )
             return
         try:
             self.session.start(resolved)
         except Exception as exc:
-            self.query_one("#validation", Static).update(Text.assemble((str(exc), FAULT)))
+            self.query_one("#validation", Static).update(Text.assemble((str(exc), palette.fault)))
             return
         from .cockpit import CockpitScreen
 

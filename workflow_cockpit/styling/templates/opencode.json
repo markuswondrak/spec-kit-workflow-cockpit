@@ -1,0 +1,22 @@
+{
+  "name": "opencode",
+  "label": "OpenCode",
+  "aliases": ["opencode"],
+  "tokens": {
+    "ink": "#0E0F13",
+    "deck": "#15171D",
+    "raised": "#1D2028",
+    "rail": "#2C313B",
+    "fog": "#939AA6",
+    "paper": "#E7EAF0",
+    "signal": "#7CE0B0",
+    "hold": "#E8BD79",
+    "fault": "#F08A90",
+    "cold": "#8FB8E0"
+  },
+  "accents": {
+    "selection": "#1E3038",
+    "focus": "#25404A",
+    "hover": "#233A43"
+  }
+}

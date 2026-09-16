@@ -1,0 +1,22 @@
+{
+  "name": "github-copilot",
+  "label": "GitHub Copilot",
+  "aliases": ["github copilot", "copilot"],
+  "tokens": {
+    "ink": "#0D1117",
+    "deck": "#161B22",
+    "raised": "#21262D",
+    "rail": "#30363D",
+    "fog": "#8B949E",
+    "paper": "#E6EDF3",
+    "signal": "#7EE787",
+    "hold": "#E3B341",
+    "fault": "#FF7B72",
+    "cold": "#79C0FF"
+  },
+  "accents": {
+    "selection": "#1B2A41",
+    "focus": "#213451",
+    "hover": "#1F3049"
+  }
+}

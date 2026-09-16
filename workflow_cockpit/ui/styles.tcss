@@ -1,22 +1,13 @@
-/* Flight Recorder / warm graphite, sage signal, amber attention. */
-$ink: #101312;
-$deck: #171C19;
-$raised: #202821;
-$rail: #303B34;
-$fog: #94A399;
-$paper: #E5E9DF;
-$signal: #9CD6AD;
-$hold: #E8BD79;
-$fault: #EF9387;
-$cold: #A1BFCE;
-
+/* Flight Recorder / warm graphite, sage signal, amber attention.
+ * The ten semantic tokens ($ink..$cold) and the accent tokens ($selection,
+ * $focus, $hover) are supplied by the active styling template's Textual theme. */
 Screen { background: $ink; color: $paper; }
 * { scrollbar-size: 1 1; scrollbar-background: $ink; scrollbar-color: $rail;
     scrollbar-color-hover: $fog; scrollbar-color-active: $cold; }
 Static { height: auto; }
 Button { min-width: 10; height: 3; border: none; background: $raised; color: $paper; text-style: none; }
-Button:hover { background: #354238; }
-Button:focus { text-style: bold; background: #34463D; color: $paper; }
+Button:hover { background: $hover; }
+Button:focus { text-style: bold; background: $focus; color: $paper; }
 Button.-primary { background: $signal; color: $ink; text-style: bold; }
 Button.-warning { background: $hold; color: $ink; text-style: bold; }
 Button.-error { background: $fault; color: $ink; text-style: bold; }
@@ -35,9 +26,11 @@ Checkbox > .toggle--button { color: $signal; background: $raised; }
 
 #masthead { height: 2; padding: 1 1 0 1; background: $deck; }
 #wordmark { width: 1fr; height: 1; }
+#style-field { width: 32; height: 1; color: $fog; text-align: right; padding-right: 1; }
 #run-status { width: 30; height: 1; text-align: right; }
 #help-hint { width: 12; height: 1; color: $fog; text-align: right; }
 #identity { height: 2; padding: 0 1; background: $deck; border-bottom: solid $rail; color: $fog; }
+#style-note { height: 1; padding: 0 2; background: $deck; color: $fog; }
 
 /* Launch */
 #launch-content { height: 1fr; padding: 2 7; align-horizontal: center; }
@@ -79,10 +72,11 @@ Checkbox > .toggle--button { color: $signal; background: $raised; }
 #workflow-name { text-style: bold; margin-bottom: 1; }
 #run-progress { height: 1; margin-bottom: 1; }
 #runway-graph { height: 1fr; }
+#runway-graph > .option-list--option-highlighted { background: transparent; }
 OptionList { background: transparent; border: none; padding: 0; }
 OptionList > .option-list--option { padding: 0 1; }
 OptionList > .option-list--option-highlighted { background: $raised; color: $paper; }
-OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color: $paper; }
+OptionList:focus > .option-list--option-highlighted { background: $selection; color: $paper; }
 #focus { width: 1fr; }
 #view-tabs { height: 2; border-bottom: solid $rail; padding: 0 2; }
 #view-label { width: 1fr; height: 1; }

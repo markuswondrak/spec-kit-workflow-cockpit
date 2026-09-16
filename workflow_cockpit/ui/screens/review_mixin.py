@@ -10,7 +10,7 @@ from textual.widgets import Input, Static
 from ...services.context_index import SKILL_GUIDANCE
 from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
-from ..palette import COLD, FAULT, FOG, HOLD, PAPER
+from ..palette import palette
 from ..view_model import gate_decision
 from ..widgets import FeatureFileList, GateOptions, MarkdownDocumentView, ReviewDocumentView
 
@@ -71,30 +71,35 @@ class ReviewMixin:
     def _render_gate(self, snapshot, step_label) -> None:
         decision = gate_decision(snapshot)
         self.query_one(GateOptions).update_options(decision.options, selectable=decision.selectable)
-        self.query_one("#view-label", Static).update(Text.assemble(("GATE / REVIEW", f"bold {HOLD}")))
-        tone = {"fog": FOG, "fault": FAULT, "hold": HOLD, "paper": PAPER}.get(decision.tone, FOG)
+        self.query_one("#view-label", Static).update(Text.assemble(("GATE / REVIEW", f"bold {palette.hold}")))
+        tone = {
+            "fog": palette.fog,
+            "fault": palette.fault,
+            "hold": palette.hold,
+            "paper": palette.paper,
+        }.get(decision.tone, palette.fog)
         phase = "running" if snapshot.process_live else "paused"
         parts: list = [
-            (f"{step_label}   /   engine {phase}\n\n", PAPER),
-            (decision.message + "\n\n", HOLD),
+            (f"{step_label}   /   engine {phase}\n\n", palette.paper),
+            (decision.message + "\n\n", palette.hold),
             (decision.notice + "\n\n", tone),
         ]
         diagnostic = self._diagnostic or snapshot.diagnostic
         if diagnostic:
-            parts.append((diagnostic + "\n\n", FAULT))
+            parts.append((diagnostic + "\n\n", palette.fault))
         if snapshot.context_error:
-            parts.append((snapshot.context_error + "\n\n", FAULT))
+            parts.append((snapshot.context_error + "\n\n", palette.fault))
         elif snapshot.context_path:
-            parts.append(("context ", FOG))
-            parts.append((snapshot.context_path + "\n", COLD))
-            parts.append((SKILL_GUIDANCE + "\n\n", FOG))
+            parts.append(("context ", palette.fog))
+            parts.append((snapshot.context_path + "\n", palette.cold))
+            parts.append((SKILL_GUIDANCE + "\n\n", palette.fog))
         self.query_one("#overview-content", Static).update(Text.assemble(*parts))
-        self.query_one("#decide-hint", Static).update(Text.assemble((decision.hint, FOG)))
+        self.query_one("#decide-hint", Static).update(Text.assemble((decision.hint, palette.fog)))
         self._render_review_status(snapshot)
         self._render_review_files(snapshot)
 
     def _render_changes(self, snapshot) -> None:
-        self.query_one("#view-label", Static).update(Text.assemble(("FEATURE FILES", f"bold {PAPER}")))
+        self.query_one("#view-label", Static).update(Text.assemble(("FEATURE FILES", f"bold {palette.paper}")))
         self._render_review_status(snapshot)
         self._render_review_files(snapshot)
 
@@ -103,17 +108,17 @@ class ReviewMixin:
         diagnostic = self._diagnostic or snapshot.diagnostic
         if review is None:
             text = "refreshing" if self._review_pending else "no review data"
-            tone = FOG
+            tone = palette.fog
         else:
             where = review.feature_dir or "feature folder"
             text = f"{review.count} file(s) in {where}"
-            tone = FOG
+            tone = palette.fog
             if review.status == "error":
                 text += "  /  refresh failed"
-                tone = FAULT
+                tone = palette.fault
         if diagnostic:
             text += "  /  " + diagnostic
-            tone = FAULT
+            tone = palette.fault
         self.query_one("#review-status", Static).update(Text.assemble((text, tone)))
 
     def _visible_files(self, snapshot):

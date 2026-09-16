@@ -117,7 +117,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertFalse(activity.display)
 
-    async def test_active_phase_rendered_bold(self):
+    async def test_current_node_rendered_bold_underline(self):
         session = FakeSession(status="running")
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(CockpitScreen(session))
@@ -128,7 +128,15 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
                 for option in runway.options
             }
             self.assertIn("bold", styles["prepare"])
-            self.assertNotIn("bold", styles["review"])
+            self.assertIn("underline", styles["prepare"])
+            self.assertNotIn("underline", styles["review"])
+
+    async def test_runway_is_display_only(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            self.assertFalse(self.app.screen.query_one("#runway-graph").can_focus)
 
     async def test_outcome_acknowledged_with_enter(self):
         session = FakeSession(status="success")
@@ -152,19 +160,14 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             commands = screen.query_one("#commands").render()
             self.assertIn("abort", str(commands).lower())
 
-    async def test_runway_selection_and_focus_mode_survive_refresh(self):
+    async def test_focus_mode_survives_refresh(self):
         session = FakeSession(status="running")
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(CockpitScreen(session))
             await pilot.pause()
             screen = self.app.screen
-            runway = screen.query_one("#runway-graph")
-            runway.focus()
-            await pilot.press("j")
-            await pilot.pause()
-            self.assertEqual(screen._selected_node_id, "review")
             screen._refresh()
-            self.assertEqual(screen._selected_node_id, "review")
+            await pilot.pause()
             session.status = "paused"
             session.gate = paused_gate()
             screen._refresh()

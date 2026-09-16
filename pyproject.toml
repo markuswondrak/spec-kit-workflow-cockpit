@@ -29,6 +29,7 @@ include = ["workflow_cockpit*"]
 
 [tool.setuptools.package-data]
 "workflow_cockpit.ui" = ["styles.tcss"]
+"workflow_cockpit.styling" = ["templates/*.json"]
 "workflow_cockpit.skills" = ["cockpit-run-context/SKILL.md"]
 
 [tool.ruff]

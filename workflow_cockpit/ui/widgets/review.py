@@ -8,7 +8,7 @@ from textual.widgets import Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ...services.review import ReviewDocument
-from ..palette import FAULT, FOG, HOLD, PAPER
+from ..palette import palette
 
 
 def _text(*parts) -> Text:
@@ -34,7 +34,7 @@ class FeatureFileList(OptionList):
         options: list[Option] = []
         for feature_file in files:
             suffix = "  (binary)" if feature_file.binary else ""
-            options.append(Option(_text((f"{feature_file.label}{suffix}", PAPER)), id=feature_file.path))
+            options.append(Option(_text((f"{feature_file.label}{suffix}", palette.paper)), id=feature_file.path))
         self.clear_options()
         self.add_options(options)
         if options:
@@ -53,21 +53,21 @@ class ReviewDocumentView(Static):
 
     def show(self, document: ReviewDocument | None) -> None:
         if document is None:
-            self.update(_text(("No feature files to review yet.", FOG)))
+            self.update(_text(("No feature files to review yet.", palette.fog)))
             return
         header = document.path
         if document.error:
-            self.update(_text((header + "\n\n", PAPER), (document.error, FAULT)))
+            self.update(_text((header + "\n\n", palette.paper), (document.error, palette.fault)))
             return
         if document.binary:
-            self.update(_text((header + "\n\n", PAPER), (document.note or "Binary file.", HOLD)))
+            self.update(_text((header + "\n\n", palette.paper), (document.note or "Binary file.", palette.hold)))
             return
         body = document.text or "(empty file)"
-        parts = [(header + "\n\n", PAPER), (body, PAPER)]
+        parts = [(header + "\n\n", palette.paper), (body, palette.paper)]
         if document.truncated:
             limit = document.limit_bytes or 0
-            parts.append(("\n\n", PAPER))
-            parts.append((f"Preview truncated at {limit} bytes; press f to load the full file.", HOLD))
+            parts.append(("\n\n", palette.paper))
+            parts.append((f"Preview truncated at {limit} bytes; press f to load the full file.", palette.hold))
         self.update(_text(*parts))
 
 
@@ -114,7 +114,7 @@ class GateOptions(OptionList):
         highlighted = self.highlighted_option
         selected = str(highlighted.id) if highlighted is not None and highlighted.id is not None else None
         scroll_y = self.scroll_y
-        tone = PAPER if self.selectable else FOG
+        tone = palette.paper if self.selectable else palette.fog
         items = [
             Option(_text((f"[{index}]  {option}", tone)), id=option)
             for index, option in enumerate(options, 1)

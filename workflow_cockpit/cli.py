@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
@@ -13,7 +14,10 @@ from .bootstrap.preflight import Preflight
 from .services.git import GitService
 from .session.cockpit_session import CockpitSession
 from .session.dependencies import CockpitEnvironment, CockpitServices
+from .styling.resolver import resolve_style
 from .ui.app import CockpitApp
+
+_LOG = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--check",
         action="store_true",
         help="Run preflight checks and exit without starting the UI.",
+    )
+    parser.add_argument(
+        "--style",
+        metavar="NAME",
+        help="Styling template to use instead of the project's default integration.",
     )
     return parser
 
@@ -65,7 +74,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         services = replace(CockpitServices.for_environment(environment), git=git)
         return CockpitSession(environment, services=services)
 
-    CockpitApp(preflight, session_factory).run()
+    style = resolve_style(project.root, override=args.style)
+    if style.fallback_reason:
+        _LOG.warning("style fallback: %s", style.fallback_reason)
+
+    CockpitApp(preflight, session_factory, style=style).run()
     return 0
 
 
