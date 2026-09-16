@@ -6,15 +6,10 @@
 
 **Let agents execute. Keep the decisions.**
 
-A terminal cockpit for Spec Kit workflows. Follow execution, review feature documents, and
+A terminal cockpit for [Spec Kit](https://github.com/github/spec-kit) workflows. Follow execution, review feature documents, and
 decide what happens next without leaving the terminal.
 
-<!-- Replace this block with the supplied screenshot of the shipped app at a review gate. -->
-> **Screenshot coming soon**
->
-> The cockpit at a review gate: workflow progress, a feature document, and your next decision.
-
-*One workflow. One worktree. Your call at every human gate.*
+<img width="1329" height="1060" alt="Bildschirmfoto vom 2026-09-16 08-45-59" src="https://github.com/user-attachments/assets/a544b8b8-1e5b-4f56-b734-6374ffe0fe17" />
 
 [Quickstart](#quickstart) | [Configuration](#configuration) |
 [Architecture](docs/architecture/README.md) | [Contributing](CONTRIBUTING.md)
