@@ -88,6 +88,18 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(session.aborted)
             self.assertFalse(self.app.is_running)
 
+    async def test_quit_requires_abort_confirmation_while_resize_guard_is_active(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.resize_terminal(80, 30)
+            await pilot.pause()
+            await pilot.press("q")
+            await pilot.pause()
+            self.assertFalse(session.aborted)
+            self.assertIn("Abort this run?", str(self.app.screen.query_one("#confirm-heading").render()))
+
     async def test_activity_indicator_tracks_live_state(self):
         session = FakeSession(status="running")
         async with self.app.run_test(size=(120, 40)) as pilot:
@@ -156,11 +168,13 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             session.status = "paused"
             session.gate = paused_gate()
             screen._refresh()
+            await pilot.pause()
             self.assertIn("GATE", str(screen.query_one("#view-label").render()))
             self.assertTrue(screen.query_one("#overview").display)
             session.status = "success"
             session.gate = None
             screen._refresh()
+            await pilot.pause()
             self.assertIn("RUN COMPLETE", str(screen.query_one("#view-label").render()))
 
     async def test_output_keeps_appending_after_tail_saturates(self):

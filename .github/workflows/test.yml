@@ -1,0 +1,35 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+      - name: Lint
+        run: ruff check workflow_cockpit tests
+      - name: Unit, Textual, contract, and PTY suites
+        # The real-engine contract tests skip unless a pinned specify executable is
+        # provisioned; every other suite is capability-gated by tests/support.py.
+        run: python -m pytest tests/unit tests/textual tests/contract tests/pty -q
+
+  # WSL equivalent: run the same capability-gated suite inside a WSL distribution
+  # (for example `wsl -d Ubuntu -- python -m pytest tests/unit tests/textual
+  # tests/contract tests/pty -q`) before declaring a release supported. It is not
+  # part of the GitHub-hosted matrix because WSL cannot be provisioned there.

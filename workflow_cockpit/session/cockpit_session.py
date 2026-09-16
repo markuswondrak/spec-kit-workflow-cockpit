@@ -25,11 +25,21 @@ from ..services.registry import WorkflowEntry
 from ..services.review import ReviewDocument, ReviewSnapshot
 from ..services.run_state import RunStateReader
 from ..services.snapshot import GateSnapshot, Outcome, OutcomeKind, RunSnapshot
+from .branch import BranchTracker
 from .dependencies import CockpitEnvironment, CockpitServices, EngineRuntime
 from .gate_decision import GateDecisionCoordinator, GateDecisionError, validate_shape
 
 #: Bounded post-write verification watch (about 40 ticks at the 250 ms cadence).
 SUBMISSION_WATCH_SECONDS = 10.0
+
+
+def _combine(*messages: str) -> str:
+    """Join distinct non-empty diagnostics in first-seen order."""
+    seen: list[str] = []
+    for message in messages:
+        if message and message not in seen:
+            seen.append(message)
+    return " ".join(seen)
 
 
 class SessionError(Exception):
@@ -75,7 +85,9 @@ class CockpitSession:
         self._reader: RunStateReader | None = None
         self._started = False
         self._ended_at: float | None = None
-        self._branch: str | None = None
+        self._branches = BranchTracker(self.git)
+        self._last_abort_result = None
+        self._lock = threading.RLock()
         self._contract_error: str | None = None
         self._graph: ControlFlowGraph | None = None
         self._projector = GraphProjector()
@@ -153,7 +165,7 @@ class CockpitSession:
         if errors:
             raise SessionError("Inputs are not valid: " + "; ".join(errors.values()))
 
-        self._branch = self.git.branch()
+        self.refresh_branch()
         run_id = generate_run_id(self.runs_dir)
         argv = build_run_argv(
             self.compatibility.executable,
@@ -176,7 +188,7 @@ class CockpitSession:
             result = self._context_writer.write(
                 run_id=run_id,
                 definition=self._definition,
-                branch=self._branch,
+                branch=self._branches.value,
                 executable=self.compatibility.executable,
             )
         except Exception as exc:  # noqa: BLE001 - context failure must not stop the run
@@ -184,10 +196,22 @@ class CockpitSession:
             return
         self._context_path = result.relative
 
+    @property
+    def last_abort_result(self):
+        """Cleanup result of the most recent Abort, if any."""
+        with self._lock:
+            return self._last_abort_result
+
+    def refresh_branch(self) -> str | None:
+        """Refresh the cached branch without letting a Git failure block a poll."""
+        return self._branches.refresh()
+
     def abort(self) -> RunSnapshot:
         if not self._started:
             raise SessionError("No active run to abort.")
-        self._supervisor.abort()
+        result = self._supervisor.abort()
+        with self._lock:
+            self._last_abort_result = result
         return self.snapshot()
 
     def _gate_attempt(self, state) -> int:
@@ -242,8 +266,9 @@ class CockpitSession:
             )
         except GateDecisionError as exc:
             raise SessionError(str(exc)) from exc
-        self._diagnostic = ""
-        self._ended_at = None
+        with self._lock:
+            self._diagnostic = ""
+            self._ended_at = None
         return self.snapshot()
 
     def refresh_review(self) -> ReviewSnapshot:
@@ -307,7 +332,7 @@ class CockpitSession:
             self._contract_error = "The persisted workflow definition does not match the launch model."
             self._supervisor.abort()
 
-    def _outcome(self, condition_reaped: bool) -> Outcome | None:
+    def _outcome(self, condition_reaped: bool, state=None) -> Outcome | None:
         if self._contract_error is not None and condition_reaped:
             return Outcome(
                 kind=OutcomeKind.FAILURE,
@@ -322,7 +347,6 @@ class CockpitSession:
             )
         if not condition_reaped:
             return None
-        state = self._reader.read() if self._reader else None
         persisted = state.status if state else "initializing"
         if persisted == "completed":
             return Outcome(kind=OutcomeKind.SUCCESS, engine_status=persisted)
@@ -346,97 +370,118 @@ class CockpitSession:
         if self._started:
             self._check_contract()
         condition = self._supervisor.condition()
-        if condition.reaped and self._ended_at is None:
-            self._ended_at = self._clock()
+        with self._lock:
+            if condition.reaped and self._ended_at is None:
+                self._ended_at = self._clock()
+            started = self._started
         run_id = self._supervisor.run_id or ""
-        if not self._started:
+        if not started:
             return RunSnapshot(run_id=run_id)
 
-        self._branch = self.git.branch()
-
+        # All blocking work happens outside the lock: file reads, the log
+        # aggregate, and the supervisor probe never serialize a decision.
         state = self._reader.read() if self._reader else None
         persisted = state.status if state else "initializing"
-        if self._supervisor.abort_requested:
-            status = "aborting" if not condition.reaped else "aborted"
-        elif condition.live and persisted == "paused":
-            # A resume has started but the engine has not replaced the previous
-            # paused state file yet.
-            status = "running"
-        else:
-            status = persisted
-        outcome = self._outcome(condition.reaped)
-        if outcome is not None:
-            status = outcome.kind.value
+        outcome = self._outcome(condition.reaped, state)
+        timings: dict = {}
+        aggregator_diag = ""
+        if self._log_aggregator is not None and run_id:
+            timings = self._log_aggregator.update(self.runs_dir / run_id / "log.jsonl")
+            aggregator_diag = self._log_aggregator.diagnostic
 
-        if (
-            condition.reaped
-            and self._supervisor.last_reaped_command == "resume"
-            and condition.exit_code not in (None, 0)
-            and persisted == "paused"
-        ):
-            self._diagnostic = (
-                f"Structured resume exited with code {condition.exit_code}; the persisted gate remains paused."
+        with self._lock:
+            if self._supervisor.abort_requested:
+                status = "aborting" if not condition.reaped else "aborted"
+            elif condition.live and persisted == "paused":
+                # A resume has started but the engine has not replaced the
+                # previous paused state file yet.
+                status = "running"
+            else:
+                status = persisted
+            if outcome is not None:
+                status = outcome.kind.value
+
+            if (
+                condition.reaped
+                and self._supervisor.last_reaped_command == "resume"
+                and condition.exit_code not in (None, 0)
+                and persisted == "paused"
+            ):
+                self._diagnostic = (
+                    f"Structured resume exited with code {condition.exit_code}; "
+                    "the persisted gate remains paused."
+                )
+            elif persisted != "paused":
+                self._diagnostic = ""
+
+            branch_error = self._branches.error
+            stale = bool(state.stale) if state else False
+            if branch_error:
+                stale = True
+            diagnostic = _combine(
+                state.diagnostic if state else "",
+                aggregator_diag,
+                self._diagnostic,
+                branch_error,
             )
-        elif persisted != "paused":
-            self._diagnostic = ""
 
-        elapsed = 0.0
-        if self._supervisor.started_at is not None:
-            end = self._ended_at if self._ended_at is not None else self._clock()
-            elapsed = max(0.0, end - self._supervisor.started_at)
+            elapsed = 0.0
+            if self._supervisor.started_at is not None:
+                end = self._ended_at if self._ended_at is not None else self._clock()
+                elapsed = max(0.0, end - self._supervisor.started_at)
 
-        workflow_name = self._definition.name if self._definition else ""
-        inputs_tuple = tuple(state.inputs.items()) if state else ()
-        timings = {}
-        if self._log_aggregator is not None and self.run_id:
-            timings = self._log_aggregator.update(self.runs_dir / self.run_id / "log.jsonl")
-        gate = None
-        if self._coordinator is not None:
-            declared_id = None
-            if self._graph is not None and state is not None:
-                declared_id = resolve_declared_id(state.current_step_id, self._graph.declared_ids)
-            gate_attempt = 0
-            if declared_id is not None:
-                timing = timings.get(declared_id)
-                gate_attempt = timing.attempts if timing is not None else 0
-            gate = self._coordinator.project(
-                state=state,
+            definition = self._definition
+            graph = self._graph
+            workflow_name = definition.name if definition else ""
+            inputs_tuple = tuple(state.inputs.items()) if state else ()
+            gate = None
+            if self._coordinator is not None:
+                declared_id = None
+                if graph is not None and state is not None:
+                    declared_id = resolve_declared_id(state.current_step_id, graph.declared_ids)
+                gate_attempt = 0
+                if declared_id is not None:
+                    timing = timings.get(declared_id)
+                    gate_attempt = timing.attempts if timing is not None else 0
+                gate = self._coordinator.project(
+                    state=state,
+                    run_id=run_id,
+                    condition=condition,
+                    gate_attempt=gate_attempt,
+                )
+            lifecycle_status = "paused" if gate is not None and outcome is None else status
+            projection = (
+                self._projector.project(
+                    graph, state, timings, lifecycle_status=lifecycle_status
+                )
+                if graph
+                else None
+            )
+            return RunSnapshot(
                 run_id=run_id,
-                condition=condition,
-                gate_attempt=gate_attempt,
+                workflow_id=definition.id if definition else "",
+                workflow_name=workflow_name,
+                status=status,
+                current_step_id=state.current_step_id if state else None,
+                branch=self._branches.value,
+                elapsed_seconds=elapsed,
+                output_tail=tuple(self._supervisor.output_lines),
+                partial_line=self._supervisor.partial_line,
+                output_emitted=self._supervisor.output_emitted,
+                process_live=condition.live,
+                engine_status=persisted,
+                engine_error=state.error if state else None,
+                outcome=outcome,
+                inputs=inputs_tuple,
+                graph_projection=projection,
+                gate=gate,
+                review=self._review,
+                reviewing=self._reviewing,
+                stale=stale,
+                diagnostic=diagnostic,
+                context_path=self._context_path,
+                context_error=self._context_error,
             )
-        lifecycle_status = "paused" if gate is not None and outcome is None else status
-        projection = (
-            self._projector.project(
-                self._graph, state, timings, lifecycle_status=lifecycle_status
-            )
-            if self._graph
-            else None
-        )
-        return RunSnapshot(
-            run_id=run_id,
-            workflow_id=self._definition.id if self._definition else "",
-            workflow_name=workflow_name,
-            status=status,
-            current_step_id=state.current_step_id if state else None,
-            branch=self._branch,
-            elapsed_seconds=elapsed,
-            output_tail=tuple(self._supervisor.output_lines),
-            partial_line=self._supervisor.partial_line,
-            output_emitted=self._supervisor.output_emitted,
-            process_live=condition.live,
-            engine_status=persisted,
-            engine_error=state.error if state else None,
-            outcome=outcome,
-            inputs=inputs_tuple,
-            graph_projection=projection,
-            gate=gate,
-            review=self._review,
-            reviewing=self._reviewing,
-            diagnostic=self._diagnostic,
-            context_path=self._context_path,
-            context_error=self._context_error,
-        )
 
     def close(self) -> None:
         self._supervisor.close()

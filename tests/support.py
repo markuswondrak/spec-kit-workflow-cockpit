@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import time
+import unittest
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -25,6 +28,39 @@ from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateState, RunSnapshot
 
 STYLES = Path(__file__).resolve().parents[1] / "workflow_cockpit" / "ui" / "styles.tcss"
+
+#: POSIX hosts expose process groups, catchable signals, and the ``pty`` module.
+POSIX = os.name == "posix"
+PTY = POSIX and hasattr(os, "openpty")
+CATCHABLE_SIGNALS = (signal.SIGINT, signal.SIGHUP, signal.SIGTERM) if POSIX else ()
+
+#: The one pinned real-``specify`` executable considered by contract tests.
+REAL_SPECIFY = next(
+    (
+        Path(path)
+        for path in (
+            os.environ.get("WORKFLOW_COCKPIT_REAL_SPECIFY"),
+            "/home/markus/workspace/spec-kit/.venv/bin/specify",
+        )
+        if path and Path(path).exists()
+    ),
+    None,
+)
+
+
+def requires_posix(test):
+    """Skip a test unless POSIX process/signal semantics are available."""
+    return unittest.skipUnless(POSIX, "requires a POSIX host")(test)
+
+
+def requires_pty(test):
+    """Skip a test unless an output PTY can be allocated."""
+    return unittest.skipUnless(PTY, "requires a PTY-capable host")(test)
+
+
+def requires_real_specify(test):
+    """Skip a test unless the pinned real ``specify`` executable is present."""
+    return unittest.skipUnless(REAL_SPECIFY is not None, "real specify executable is unavailable")(test)
 
 
 class StyledApp(App):
@@ -144,12 +180,20 @@ class FakeGit:
     head_value: str | None = "a" * 40
     branch_value: str | None = "main"
     dirty_value: bool = False
+    branch_error: str = ""
 
     def head(self):
         return self.head_value
 
     def branch(self):
         return self.branch_value
+
+    def branch_result(self):
+        from workflow_cockpit.services.git import BranchRead
+
+        if self.branch_error:
+            return BranchRead(value=None, ok=False, error=self.branch_error)
+        return BranchRead(value=self.branch_value)
 
     def is_dirty(self):
         return self.dirty_value
@@ -245,10 +289,18 @@ class FakeSupervisor:
         self.writes.append(bytes(data))
         return self.write_result
 
-    def abort(self) -> None:
+    def abort(self):
+        from workflow_cockpit.engine.supervisor import AbortResult
+
+        was_live = self._live
         self.abort_calls += 1
         self.abort_requested = True
         self._live = False
+        return AbortResult(
+            signalled=was_live,
+            reaped=True,
+            escalation="SIGINT" if was_live else None,
+        )
 
     def finish(self, exit_code: int = 0) -> None:
         self.exit_code = exit_code
@@ -299,6 +351,11 @@ class FakeSession:
         self.started = False
         self.aborted = False
         self.abort_delay = 0.0
+        self.run_id = "cockpit-abcdef123456"
+        self.last_abort_result = None
+        self.branch = "main"
+        self.stale = False
+        self.branch_refreshes = 0
         self.started_values: dict[str, Any] | None = None
         self.output_lines: list[str] = ["starting demo", "preparing"]
         self.output_emitted: int | None = None
@@ -373,6 +430,10 @@ class FakeSession:
         )
         return self.snapshot()
 
+    def refresh_branch(self):
+        self.branch_refreshes += 1
+        return self.branch
+
     def refresh_review(self):
         self.refreshed += 1
         return self.review
@@ -404,7 +465,7 @@ class FakeSession:
             workflow_name="Demo Workflow",
             status=self.status,
             current_step_id="prepare",
-            branch="main",
+            branch=self.branch,
             elapsed_seconds=12,
             output_tail=tuple(self.output_lines),
             output_emitted=(
@@ -420,6 +481,7 @@ class FakeSession:
             gate=self.gate,
             review=self.review,
             reviewing=self.reviewing,
+            stale=self.stale,
             diagnostic=self.diagnostic,
             context_path=self.context_path,
             context_error=self.context_error,

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from .graph import resolve_declared_id
+
+#: Bytes read from the log per ``update`` so a growing file cannot stall a poll.
+MAX_READ_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
@@ -19,14 +23,36 @@ class StepTiming:
 
 
 class RunLogAggregator:
-    """Keep bounded per-step timing aggregates while accepting partial writes."""
+    """Keep bounded per-step timing aggregates while accepting partial writes.
 
-    def __init__(self, declared_ids: frozenset[str]) -> None:
+    Each incremental read is capped, and the unread offset plus the trailing
+    partial record are retained so the next call resumes where the previous one
+    stopped. A complete, newline-delimited malformed event increments a
+    diagnostic counter but never discards prior timing data. A private lock
+    covers the bounded I/O and the cache update.
+    """
+
+    def __init__(
+        self, declared_ids: frozenset[str], *, max_read_bytes: int = MAX_READ_BYTES
+    ) -> None:
         self._declared_ids = declared_ids
+        self._max_read_bytes = max_read_bytes
+        self._lock = threading.RLock()
         self._signature: tuple[int, int] | None = None
         self._offset = 0
         self._partial = b""
         self._timings: dict[str, StepTiming] = {}
+        self._malformed = 0
+
+    @property
+    def diagnostic(self) -> str:
+        with self._lock:
+            if not self._malformed:
+                return ""
+            return (
+                f"log.jsonl contains {self._malformed} malformed event(s); "
+                "showing the last good timings."
+            )
 
     @staticmethod
     def _timestamp(value: object) -> datetime | None:
@@ -42,33 +68,38 @@ class RunLogAggregator:
         self._offset = 0
         self._partial = b""
         self._timings = {}
+        self._malformed = 0
 
     def update(self, path: Path) -> dict[str, StepTiming]:
-        try:
-            stat = path.stat()
-        except OSError:
-            return dict(self._timings)
-        signature = (stat.st_ino, stat.st_dev)
-        if self._signature != signature or stat.st_size < self._offset:
-            self._reset(signature)
-        try:
-            with path.open("rb") as handle:
-                handle.seek(self._offset)
-                chunk = handle.read()
-        except OSError:
-            return dict(self._timings)
-        self._offset += len(chunk)
-        data = self._partial + chunk
-        lines = data.split(b"\n")
-        self._partial = lines.pop()
-        for line in lines:
+        with self._lock:
             try:
-                event = json.loads(line.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if isinstance(event, dict):
-                self._record(event)
-        return dict(self._timings)
+                stat = path.stat()
+            except OSError:
+                return dict(self._timings)
+            signature = (stat.st_ino, stat.st_dev)
+            if self._signature != signature or stat.st_size < self._offset:
+                self._reset(signature)
+            try:
+                with path.open("rb") as handle:
+                    handle.seek(self._offset)
+                    chunk = handle.read(self._max_read_bytes)
+            except OSError:
+                return dict(self._timings)
+            self._offset += len(chunk)
+            data = self._partial + chunk
+            lines = data.split(b"\n")
+            self._partial = lines.pop()
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._malformed += 1
+                    continue
+                if isinstance(event, dict):
+                    self._record(event)
+            return dict(self._timings)
 
     def _record(self, event: dict[str, object]) -> None:
         event_type = event.get("event")

@@ -20,6 +20,7 @@ __all__ = [
     "BounceIndicator",
     "CommandRail",
     "EngineOutput",
+    "ErrorStrip",
     "FeatureFileList",
     "GateOptions",
     "HeaderRail",
@@ -58,6 +59,9 @@ class HeaderRail(Vertical):
     def update_snapshot(self, snapshot: RunSnapshot) -> None:
         symbol, word = state_grammar(snapshot.status)
         tone = SELF_TONE.get(snapshot.status, PAPER)
+        if snapshot.stale:
+            word = f"{word} / STALE"
+            tone = HOLD
         self.query_one("#run-status", Static).update(_text((f"{symbol} {word}", f"bold {tone}")))
         branch = snapshot.branch or "unknown"
         elapsed = _elapsed(snapshot)
@@ -189,6 +193,7 @@ class CommandRail(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield Static(id="commands")
+        yield Static(id="feedback")
         yield Button("x  Abort run", id="abort")
 
     def set_actions(self, commands: str, abort_label: str | None, abort_variant: str = "error") -> None:
@@ -200,6 +205,29 @@ class CommandRail(Horizontal):
             button.display = True
             button.label = abort_label
             button.variant = abort_variant
+
+    def set_feedback(self, message: str) -> None:
+        """Transient success feedback, shown on the rail for a short while."""
+        self.query_one("#feedback", Static).update(_text((message, SIGNAL)) if message else "")
+
+
+class ErrorStrip(Static):
+    """Persistent, actionable error strip above the command rail.
+
+    The strip states the failed operation, the authoritative run state, and the
+    next available action. It stays visible until every source clears.
+    """
+
+    def on_mount(self) -> None:
+        self.display = False
+
+    def show(self, message: str) -> None:
+        self.update(_text((f"  {message}", FAULT)))
+        self.display = True
+
+    def clear(self) -> None:
+        self.update("")
+        self.display = False
 
 
 class ResizeGuard(Static):

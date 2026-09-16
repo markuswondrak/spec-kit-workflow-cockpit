@@ -15,6 +15,7 @@ from ...services.registry import RegistryError
 from ..widgets import ResizeGuard
 from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
+from .help import HelpScreen
 
 FOG = "#94A399"
 PAPER = "#E5E9DF"
@@ -43,6 +44,7 @@ class LaunchScreen(AdaptiveScreen):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("escape", "back", "Workflows"),
+        Binding("question_mark", "help", "Help"),
     ]
 
     def __init__(self, session, report=None) -> None:
@@ -246,11 +248,11 @@ class LaunchScreen(AdaptiveScreen):
     def _render_commands(self) -> None:
         commands = self.query_one("#launch-commands", Static)
         if self.configuring:
-            commands.update(" Tab / Shift+Tab  move     Enter  activate     Esc  workflows     q  quit")
+            commands.update(" Tab / Shift+Tab  move     Enter  activate     Esc  workflows     ?  help     q  quit")
         elif self._entries and not self._registry_error:
-            commands.update(" Up/Down or j/k  choose workflow     Enter  configure     q  quit")
+            commands.update(" Up/Down or j/k  choose workflow     Enter  configure     ?  help     q  quit")
         else:
-            commands.update(" q  quit")
+            commands.update(" ?  help     q  quit")
 
     def _first_field_focus(self) -> None:
         form = self.query_one("#config-form", Vertical)
@@ -318,6 +320,9 @@ class LaunchScreen(AdaptiveScreen):
         self.query_one("#validation", Static).update("")
         await self.update_selection()
         self.query_one("#workflows", OptionList).focus()
+
+    def action_help(self) -> None:
+        self.app.push_screen(HelpScreen())
 
     def action_quit(self) -> None:
         self.app.exit()

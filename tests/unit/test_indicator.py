@@ -8,12 +8,12 @@ class BounceIndicatorTests(unittest.TestCase):
         start = BounceIndicator._blends(0.0)
         self.assertEqual(start[0], 0.0)
         self.assertEqual(start[-1], 1.0)
-        self.assertTrue(all(a <= b for a, b in zip(start, start[1:])))
+        self.assertTrue(all(a <= b for a, b in zip(start, start[1:], strict=False)))
 
         peak = BounceIndicator._blends(BounceIndicator.SPAN / BounceIndicator.RATE)
         self.assertEqual(peak[0], 1.0)
         self.assertEqual(peak[-1], 0.0)
-        self.assertTrue(all(a >= b for a, b in zip(peak, peak[1:])))
+        self.assertTrue(all(a >= b for a, b in zip(peak, peak[1:], strict=False)))
 
         back = BounceIndicator._blends(2 * BounceIndicator.SPAN / BounceIndicator.RATE)
         self.assertEqual(start, back)

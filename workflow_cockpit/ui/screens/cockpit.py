@@ -11,8 +11,7 @@ from textual.widgets import Input, Static
 
 from ...services.context_index import SKILL_GUIDANCE
 from ...services.review import ReviewDocument
-from ...services.snapshot import OutcomeKind
-from ...session.polling import PollingLoop
+from ...services.snapshot import OutcomeKind, RunSnapshot
 from ..editor import default_editor_launcher, editor_environment
 from ..palette import COLD, FAULT, FOG, PAPER, SIGNAL
 from ..view_model import default_focus_mode, format_elapsed, gate_decision
@@ -20,6 +19,7 @@ from ..widgets import (
     TRUNCATION_MARKER,
     CommandRail,
     EngineOutput,
+    ErrorStrip,
     FeatureFileList,
     GateOptions,
     HeaderRail,
@@ -32,9 +32,10 @@ from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
 from .help import HelpScreen
 from .review_mixin import ReviewMixin
+from .run_poll_mixin import BRANCH_REFRESH_SECONDS, RunPollMixin
 
 
-class CockpitScreen(ReviewMixin, AdaptiveScreen):
+class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
     BINDINGS = [
         Binding("x", "abort", "Abort"),
         Binding("q", "quit", "Exit"),
@@ -54,9 +55,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
 
     def __init__(self, session, *, editor_launcher=None, editor_env=None) -> None:
         super().__init__()
-        self.session = session
-        self._loop = PollingLoop(session)
-        self._snapshot = None
+        self._init_run_poll(session)
         self._editor_launcher = editor_launcher or default_editor_launcher
         self._editor_env = editor_env or editor_environment
         self._written = 0
@@ -103,22 +102,24 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
                         yield GateOptions(id="gate-options")
                         yield Static(id="decide-hint")
                     yield EngineOutput(id="output")
+            yield ErrorStrip(id="error-strip")
             yield CommandRail(id="command-rail")
         yield ResizeGuard(id="resize-guard")
 
     def on_mount(self) -> None:
         super().on_mount()
         self._refresh()
-        self.set_interval(0.25, self._refresh)
-
-    def _snapshot_now(self):
-        if self._snapshot is None:
-            self._snapshot = self._loop.tick()
-        return self._snapshot
+        # The timer only requests a poll; snapshot production runs in a
+        # single-exclusive worker so rendering is never blocked by Git or I/O.
+        self.set_interval(0.25, self._request_poll)
+        self.set_interval(BRANCH_REFRESH_SECONDS, self._request_branch)
 
     def _refresh(self) -> None:
-        snapshot = self._loop.tick()
-        self._snapshot = snapshot
+        self._request_poll(force=True)
+
+    def _apply_snapshot(self, snapshot: RunSnapshot) -> None:
+        if snapshot is None:
+            return
         self.query_one(HeaderRail).update_snapshot(snapshot)
         definition = getattr(self.session, "definition", None)
         if definition is not None:
@@ -169,6 +170,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
         else:
             self._render_output_mode(snapshot, step_label)
         self._update_commands(snapshot)
+        self._render_error_strip(snapshot)
 
     def _set_focus_mode(self, mode: str) -> None:
         snapshot = self._snapshot_now()
@@ -280,17 +282,24 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
 
     def _update_commands(self, snapshot) -> None:
         rail = self.query_one(CommandRail)
+        stale = "STALE  /  " if snapshot.stale else ""
         if snapshot.terminal:
-            rail.set_actions("  enter  close", None)
+            rail.set_actions(f"  {stale}enter  close", None)
             return
         decision = gate_decision(snapshot)
         if decision.selectable:
             digits = " ".join(str(index) for index in range(1, min(9, len(decision.options)) + 1))
-            rail.set_actions(f"  {digits}  decide     c  changes     s  state     x  abort", "x  Abort run")
+            rail.set_actions(
+                f"  {stale}{digits}  decide     c  changes     s  state     x  abort", "x  Abort run"
+            )
         elif snapshot.gate is not None:
-            rail.set_actions("  c  changes     s  state     l  output     x  abort run", "x  Abort run")
+            rail.set_actions(
+                f"  {stale}c  changes     s  state     l  output     x  abort run", "x  Abort run"
+            )
         else:
-            rail.set_actions("  l  output     x  abort run     ?  help", "x  Abort run")
+            rail.set_actions(
+                f"  {stale}l  output     x  abort run     ?  help", "x  Abort run"
+            )
 
     def action_expand_output(self) -> None:
         snapshot = self._snapshot_now()
@@ -396,6 +405,8 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
     def _after_submission(self, error: str) -> None:
         if error:
             self._diagnostic = error
+        else:
+            self._show_transient("Choice submitted once.")
         self._review_loaded = False
         self._refresh()
 
@@ -407,7 +418,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
             self.query_one(Runway).selected_node_id = self._selected_node_id
             self._update_focus(self._snapshot_now())
             event.stop()
-        elif event.option_list.id == "changed-files":
+        elif event.option_list.id in ("feature-files", "changed-files"):
             self._selected_review_path = str(event.option.id)
             self._full_file = False
             self._load_document(self._selected_review_path)
@@ -442,7 +453,7 @@ class CockpitScreen(ReviewMixin, AdaptiveScreen):
             self.app.call_from_thread(self.app.exit)
 
     def action_quit(self) -> None:
-        if self.is_small() or self._snapshot_now().terminal:
+        if self._snapshot_now().terminal:
             self.app.exit()
             return
         self.action_abort()

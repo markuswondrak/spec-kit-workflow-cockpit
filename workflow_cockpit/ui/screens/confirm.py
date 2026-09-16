@@ -8,11 +8,14 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
+from .help import HelpScreen
+
 
 class ConfirmScreen(ModalScreen[bool]):
     BINDINGS = [
         Binding("escape", "cancel", show=False),
         Binding("enter", "confirm", show=False, priority=True),
+        Binding("question_mark", "help", "Help", show=False),
     ]
 
     def __init__(
@@ -53,3 +56,6 @@ class ConfirmScreen(ModalScreen[bool]):
 
     def action_cancel(self) -> None:
         self.dismiss(False)
+
+    def action_help(self) -> None:
+        self.app.push_screen(HelpScreen())

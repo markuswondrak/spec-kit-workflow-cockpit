@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,9 +17,17 @@ class FakeRunner:
     def __init__(self, responses):
         self.responses = responses
 
-    def __call__(self, argv, cwd):
+    def __call__(self, argv, cwd, *, timeout=30.0):
         key = tuple(argv[1:])
         return self.responses.get(key, Output("", returncode=1))
+
+
+class RaisingRunner:
+    def __init__(self, error):
+        self.error = error
+
+    def __call__(self, argv, cwd, *, timeout=30.0):
+        raise self.error
 
 
 class GitTests(unittest.TestCase):
@@ -55,6 +64,25 @@ class GitTests(unittest.TestCase):
     def test_unborn_head_is_none(self):
         runner = FakeRunner({("rev-parse", "HEAD"): Output("", returncode=128)})
         self.assertIsNone(GitService(self.root, runner=runner).head())
+
+    def test_branch_timeout_is_classified_not_raised(self):
+        service = GitService(self.root, runner=RaisingRunner(subprocess.TimeoutExpired("git", 2.0)))
+        result = service.branch_result()
+        self.assertFalse(result.ok)
+        self.assertIsNone(result.value)
+        self.assertIn("timed out", result.error)
+
+    def test_branch_oserror_is_classified_not_raised(self):
+        service = GitService(self.root, runner=RaisingRunner(OSError("git missing")))
+        result = service.branch_result()
+        self.assertFalse(result.ok)
+        self.assertIn("git missing", result.error)
+
+    def test_branch_nonzero_status_is_a_normal_missing_branch(self):
+        runner = FakeRunner({("rev-parse", "--abbrev-ref", "HEAD"): Output("", returncode=128)})
+        result = GitService(self.root, runner=runner).branch_result()
+        self.assertTrue(result.ok)
+        self.assertIsNone(result.value)
 
 
 if __name__ == "__main__":

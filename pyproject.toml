@@ -15,6 +15,12 @@ dependencies = [
     "packaging>=23.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0,<10.0",
+    "ruff>=0.6",
+]
+
 [project.scripts]
 workflow-cockpit = "workflow_cockpit.cli:main"
 

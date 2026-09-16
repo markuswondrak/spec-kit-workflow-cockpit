@@ -4,6 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
+from tests.support import requires_posix
 from workflow_cockpit.engine.pty_session import WriteOutcome
 from workflow_cockpit.engine.supervisor import (
     EngineSupervisor,
@@ -22,6 +23,7 @@ def wait_for(predicate, timeout=5.0):
     return False
 
 
+@requires_posix
 class SupervisorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -44,6 +46,8 @@ class SupervisorTests(unittest.TestCase):
         self.assertIn("hello from child", supervisor.output_lines)
         self.assertEqual(supervisor.condition().exit_code, 0)
         self.assertFalse(supervisor.verify_live())
+        self.assertIsNone(supervisor._proc)
+        self.assertIsNone(supervisor._pgid)
 
     def test_second_start_rejected_while_live(self):
         supervisor = EngineSupervisor(Path(sys.executable), self.root)
@@ -57,9 +61,12 @@ class SupervisorTests(unittest.TestCase):
 
     def test_abort_without_process_sends_no_signal(self):
         supervisor = EngineSupervisor(Path(sys.executable), self.root)
-        supervisor.abort()
+        result = supervisor.abort()
         self.assertTrue(supervisor.abort_requested)
         self.assertFalse(supervisor.verify_live())
+        self.assertFalse(result.signalled)
+        self.assertIsNone(result.escalation)
+        self.assertTrue(result.ok)
 
     def test_abort_interrupts_live_group(self):
         supervisor = EngineSupervisor(
@@ -67,9 +74,13 @@ class SupervisorTests(unittest.TestCase):
         )
         supervisor.start("run-1", [sys.executable, "-c", "import time; print('up'); time.sleep(30)"])
         self.assertTrue(wait_for(lambda: supervisor.verify_live()))
-        supervisor.abort()
+        result = supervisor.abort()
         self.assertTrue(wait_for(lambda: supervisor.condition().reaped, timeout=6))
         self.assertFalse(supervisor.verify_live())
+        self.assertTrue(result.signalled)
+        self.assertTrue(result.reaped)
+        self.assertEqual(result.escalation, "SIGINT")
+        self.assertTrue(result.ok)
 
 
     def test_resume_requires_owned_run(self):

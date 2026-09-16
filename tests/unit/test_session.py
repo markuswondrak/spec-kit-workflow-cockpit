@@ -151,6 +151,50 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(final.outcome.kind.value, "abort")
         self.assertEqual(self.supervisor.abort_calls, 1)
 
+    def test_partial_state_preserves_last_good_then_recovers(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        run_id = snapshot.run_id
+        write_run(self.root, run_id, status="running", current_step_id="prepare")
+        good = session.snapshot()
+        self.assertEqual(good.status, "running")
+        self.assertFalse(good.stale)
+
+        state_path = self.root / ".specify" / "workflows" / "runs" / run_id / "state.json"
+        state_path.write_text('{"status": "run', encoding="utf-8")
+        stale = session.snapshot()
+        self.assertTrue(stale.stale)
+        self.assertEqual(stale.status, "running")
+        self.assertIn("state.json", stale.diagnostic)
+
+        write_run(self.root, run_id, status="paused")
+        recovered = session.snapshot()
+        self.assertFalse(recovered.stale)
+        self.assertEqual(recovered.engine_status, "paused")
+
+    def test_missing_state_after_good_read_is_stale(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        run_id = snapshot.run_id
+        write_run(self.root, run_id, status="running")
+        self.assertFalse(session.snapshot().stale)
+        (self.root / ".specify" / "workflows" / "runs" / run_id / "state.json").unlink()
+        stale = session.snapshot()
+        self.assertTrue(stale.stale)
+        self.assertEqual(stale.status, "running")
+
+    def test_abort_records_cleanup_result(self):
+        session = self.make_session()
+        session.select("demo")
+        session.start({"spec": "search"})
+        session.abort()
+        result = session.last_abort_result
+        self.assertIsNotNone(result)
+        self.assertTrue(result.reaped)
+        self.assertEqual(self.supervisor.abort_calls, 1)
+
     def test_paused_with_exited_process_is_not_terminal(self):
         session = self.make_session()
         session.select("demo")
@@ -296,8 +340,25 @@ class SessionTests(unittest.TestCase):
         snapshot = session.start({"spec": "search"})
         write_run(self.root, snapshot.run_id, status="running")
         git.branch_value = "feature/runway"
+        session.refresh_branch()
         refreshed = session.snapshot()
         self.assertEqual(refreshed.branch, "feature/runway")
+
+    def test_git_failure_preserves_previous_branch_and_marks_stale(self):
+        git = FakeGit(branch_value="main")
+        session = self.make_session(git=git)
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        write_run(self.root, snapshot.run_id, status="running")
+        git.branch_error = "Git branch lookup timed out."
+        session.refresh_branch()
+        refreshed = session.snapshot()
+        self.assertEqual(refreshed.branch, "main")
+        self.assertTrue(refreshed.stale)
+        self.assertIn("timed out", refreshed.diagnostic)
+        git.branch_error = ""
+        session.refresh_branch()
+        self.assertFalse(session.snapshot().stale)
 
 
 class InteractiveSessionTests(unittest.TestCase):

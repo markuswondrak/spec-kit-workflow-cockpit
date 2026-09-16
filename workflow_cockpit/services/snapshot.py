@@ -77,12 +77,16 @@ class RunSnapshot:
     engine_status: str | None = None
     engine_error: str | None = None
     outcome: Outcome | None = None
+    #: True when a previously good background source could not be re-read; the
+    #: last good graph and status are preserved and a STALE marker is shown.
     stale: bool = False
     inputs: tuple[tuple[str, Any], ...] = field(default_factory=tuple)
     graph_projection: GraphProjection | None = None
     gate: GateSnapshot | None = None
     review: ReviewSnapshot | None = None
     reviewing: bool = False
+    #: Actionable description of the latest recoverable failure, if any. The UI
+    #: renders it on the persistent error strip.
     diagnostic: str = ""
     context_path: str = ""
     context_error: str = ""

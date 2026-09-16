@@ -12,15 +12,19 @@ from .compatibility import Compatibility, CompatibilityError, CompatibilityResul
 from .discovery import ProjectInfo
 
 
-def _is_supported_platform() -> tuple[bool, str]:
-    if sys.platform.startswith("linux"):
-        release = platform.release().lower()
-        if "microsoft" in release:
+def _is_supported_platform(
+    platform_name: str | None = None, release: str | None = None
+) -> tuple[bool, str]:
+    """Classify the host platform; native Windows is explicitly unsupported."""
+    name = sys.platform if platform_name is None else platform_name
+    kernel = platform.release() if release is None else release
+    if name.startswith("linux"):
+        if "microsoft" in kernel.lower():
             return True, "WSL"
         return True, "Linux"
-    if sys.platform == "darwin":
+    if name == "darwin":
         return True, "macOS"
-    return False, f"{sys.platform} (use Linux, macOS, or WSL)"
+    return False, f"{name} (use Linux, macOS, or WSL)"
 
 
 @dataclass(frozen=True)

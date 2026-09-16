@@ -26,6 +26,43 @@ class PollingTests(unittest.TestCase):
         loop.tick()
         self.assertIs(loop.last_snapshot, loop._snapshot)
 
+    def test_begin_suppresses_overlapping_polls(self):
+        clock = Clock()
+        loop = PollingLoop(FakeSession(), interval=0.25, clock=clock)
+        self.assertTrue(loop.begin())
+        self.assertFalse(loop.begin())
+        self.assertTrue(loop.pending)
+        loop.produce()
+        self.assertFalse(loop.pending)
+
+    def test_begin_respects_the_cadence(self):
+        clock = Clock()
+        loop = PollingLoop(FakeSession(), interval=0.25, clock=clock)
+        loop.produce()
+        self.assertFalse(loop.begin())
+        clock.value = 0.25
+        self.assertTrue(loop.begin())
+
+    def test_failed_snapshot_keeps_last_good_and_records_error(self):
+        class FlakySession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def snapshot(self):
+                self.calls += 1
+                if self.calls == 2:
+                    raise RuntimeError("boom")
+                return super().snapshot()
+
+        loop = PollingLoop(FlakySession())
+        good = loop.produce()
+        self.assertIsNotNone(good)
+        after = loop.produce()
+        self.assertIs(after, good)
+        self.assertIn("boom", loop.last_error)
+        self.assertFalse(loop.pending)
+
 
 if __name__ == "__main__":
     unittest.main()

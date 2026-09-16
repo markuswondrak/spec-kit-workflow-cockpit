@@ -42,6 +42,26 @@ class ProcessCondition:
     stdin_pty: bool = False
 
 
+@dataclass(frozen=True)
+class AbortResult:
+    """Explicit outcome of one bounded Abort attempt.
+
+    ``signalled`` records whether a verified live group received a signal;
+    ``reaped`` whether the owned child was reaped before the bounds elapsed;
+    ``escalation`` the highest signal used, if any. ``ok`` is false only when a
+    live group was signalled but the child was not reaped within the bounds, so
+    a caller can report an unsuccessful best-effort cleanup and exit.
+    """
+
+    signalled: bool = False
+    reaped: bool = False
+    escalation: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.reaped or not self.signalled
+
+
 def build_run_argv(
     executable: Path, workflow_id: str, input_argv: Sequence[str]
 ) -> list[str]:
@@ -254,6 +274,10 @@ class EngineSupervisor:
             self._exit_code = code
             self._last_reaped_command = command_kind
             self._reaped_event.set()
+            # A reaped child is no longer signalable. Keep only its immutable
+            # exit evidence; live PID/PGID ownership ends under this lock.
+            self._proc = None
+            self._pgid = None
             if self._pty is not None:
                 self._pty.close()
                 self._pty = None
@@ -322,21 +346,36 @@ class EngineSupervisor:
         except OSError:
             return False
 
-    def abort(self) -> None:
-        """SIGINT then TERM/KILL a verified live group; otherwise record locally."""
+    def abort(self) -> AbortResult:
+        """SIGINT then TERM/KILL a verified live group; otherwise record locally.
+
+        The method stays bounded by the configured grace periods and returns an
+        explicit result instead of raising, so a signal-driven shutdown can
+        report an exhausted escalation as best-effort cleanup before exiting.
+        """
         with self._lock:
             self._abort_requested = True
         if not self.verify_live():
-            return
-        self._signal_group(signal.SIGINT)
+            return AbortResult(signalled=False, reaped=self._reaped_event.is_set())
+
+        signalled = self._signal_group(signal.SIGINT)
+        escalation = "SIGINT" if signalled else None
         if self._wait_until_reaped(self.grace_interrupt):
-            return
+            return AbortResult(signalled=signalled, reaped=True, escalation=escalation)
         if self._signal_group(signal.SIGTERM):
+            signalled = True
+            escalation = "SIGTERM"
             if self._wait_until_reaped(self.grace_term):
-                return
-        if self.verify_live():
-            self._signal_group(signal.SIGKILL)
+                return AbortResult(signalled=True, reaped=True, escalation=escalation)
+        if self.verify_live() and self._signal_group(signal.SIGKILL):
+            signalled = True
+            escalation = "SIGKILL"
             self._wait_until_reaped(self.grace_term)
+        return AbortResult(
+            signalled=signalled,
+            reaped=self._reaped_event.is_set(),
+            escalation=escalation,
+        )
 
     def close(self) -> None:
         if self.is_live():

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tests.support import FakeGit, compatibility_result
 from workflow_cockpit.bootstrap.discovery import ProjectInfo
-from workflow_cockpit.bootstrap.preflight import Preflight
+from workflow_cockpit.bootstrap.preflight import Preflight, _is_supported_platform
 
 
 class FakeCompatibility:
@@ -54,6 +54,30 @@ class PreflightTests(unittest.TestCase):
         self.assertFalse(report.ok)
         check = next(c for c in report.checks if c.key == "specify")
         self.assertTrue(check.repair)
+
+
+class PlatformLabelTests(unittest.TestCase):
+    def test_linux_is_supported(self):
+        supported, label = _is_supported_platform("linux", "6.8.0-generic")
+        self.assertTrue(supported)
+        self.assertEqual(label, "Linux")
+
+    def test_wsl_is_supported(self):
+        supported, label = _is_supported_platform(
+            "linux", "5.15.90.1-microsoft-standard-WSL2"
+        )
+        self.assertTrue(supported)
+        self.assertEqual(label, "WSL")
+
+    def test_macos_is_supported(self):
+        supported, label = _is_supported_platform("darwin", "23.5.0")
+        self.assertTrue(supported)
+        self.assertEqual(label, "macOS")
+
+    def test_native_windows_is_refused_with_guidance(self):
+        supported, label = _is_supported_platform("win32", "10")
+        self.assertFalse(supported)
+        self.assertIn("use Linux, macOS, or WSL", label)
 
 
 if __name__ == "__main__":

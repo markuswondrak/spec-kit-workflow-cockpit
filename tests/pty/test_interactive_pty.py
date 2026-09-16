@@ -4,6 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
+from tests.support import requires_pty
 from workflow_cockpit.engine.pty_session import WriteOutcome
 from workflow_cockpit.engine.supervisor import EngineSupervisor, StdinPolicy
 
@@ -25,6 +26,7 @@ PROMPT_SCRIPT = (
 )
 
 
+@requires_pty
 class InteractivePtyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

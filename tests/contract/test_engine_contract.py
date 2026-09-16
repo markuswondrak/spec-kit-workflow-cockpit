@@ -8,7 +8,14 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from tests.support import FakeGit, compatibility_result, write_registry, write_run, write_workflow
+from tests.support import (
+    FakeGit,
+    compatibility_result,
+    requires_posix,
+    write_registry,
+    write_run,
+    write_workflow,
+)
 from workflow_cockpit.bootstrap.compatibility import Compatibility
 from workflow_cockpit.engine.supervisor import EngineSupervisor
 from workflow_cockpit.session.cockpit_session import CockpitSession, SessionError
@@ -30,6 +37,7 @@ def wait_for(predicate, timeout=8.0):
     return False
 
 
+@requires_posix
 class EngineContractTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

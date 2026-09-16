@@ -8,7 +8,7 @@ deterministic shell workflows so no agent integration is needed.
 from __future__ import annotations
 
 import json
-import os
+import subprocess
 import tempfile
 import time
 import unittest
@@ -17,18 +17,10 @@ from pathlib import Path
 import yaml
 from packaging.version import Version
 
+from tests.support import REAL_SPECIFY, requires_real_specify
 from workflow_cockpit.bootstrap.compatibility import CompatibilityResult
 from workflow_cockpit.session.cockpit_session import CockpitSession
 from workflow_cockpit.session.dependencies import CockpitEnvironment
-
-_CANDIDATES = [
-    os.environ.get("WORKFLOW_COCKPIT_REAL_SPECIFY"),
-    "/home/markus/workspace/spec-kit/.venv/bin/specify",
-]
-REAL_SPECIFY = next(
-    (Path(path) for path in _CANDIDATES if path and Path(path).exists()),
-    None,
-)
 
 
 def _workflow(steps):
@@ -40,7 +32,7 @@ def _workflow(steps):
     }
 
 
-@unittest.skipUnless(REAL_SPECIFY is not None, "real specify executable is unavailable")
+@requires_real_specify
 class RealEngineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -51,6 +43,12 @@ class RealEngineTests(unittest.TestCase):
                 {"schema_version": "1.0", "workflows": {"demo": {"name": "Demo", "enabled": True}}}
             ),
             encoding="utf-8",
+        )
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        subprocess.run(
+            ["git", "-c", "user.email=t@example.com", "-c", "user.name=Test", "commit", "--allow-empty", "-qm", "init"],
+            cwd=self.root,
+            check=True,
         )
         self.compatibility = CompatibilityResult(
             executable=REAL_SPECIFY,
@@ -196,6 +194,79 @@ class RealEngineTests(unittest.TestCase):
         final = self._until_terminal(session)
         self.assertIsNotNone(final.outcome)
         self.assertEqual(final.engine_status, "aborted")
+
+    def test_branch_creation_is_observed(self):
+        self._install(
+            [
+                {"id": "branch", "type": "shell", "run": "git checkout -b feature/runway"},
+                {"id": "done", "type": "shell", "run": "echo done"},
+            ]
+        )
+        session = self._session()
+        session.start({"spec": "world"})
+        final = self._until_terminal(session)
+        self.assertEqual(final.outcome.kind.value, "success")
+        session.refresh_branch()
+        self.assertEqual(session.snapshot().branch, "feature/runway")
+
+    def test_no_gate_execution_never_surfaces_a_gate(self):
+        self._install(
+            [
+                {"id": "first", "type": "shell", "run": "echo first"},
+                {"id": "second", "type": "shell", "run": "echo second"},
+            ]
+        )
+        session = self._session()
+        session.start({"spec": "world"})
+        saw_gate = False
+        deadline = time.monotonic() + 30.0
+        snapshot = session.snapshot()
+        while time.monotonic() < deadline and not snapshot.terminal:
+            if snapshot.gate is not None:
+                saw_gate = True
+            time.sleep(0.1)
+            snapshot = session.snapshot()
+        self.assertFalse(saw_gate)
+        self.assertEqual(snapshot.outcome.kind.value, "success")
+
+    def test_gate_over_empty_feature_directory(self):
+        (self.root / ".specify" / "feature.json").write_text(
+            json.dumps({"feature_directory": "specs/empty"}), encoding="utf-8"
+        )
+        (self.root / "specs" / "empty").mkdir(parents=True)
+        self._install_gate()
+        session = self._session()
+        session.start({"spec": "world"})
+        paused = self._until_paused(session)
+        self.assertIsNotNone(paused.gate)
+        self.assertTrue(paused.gate.selectable)
+        review = session.refresh_review()
+        self.assertTrue(review.empty)
+        self.assertEqual(review.count, 0)
+
+    def test_no_cockpit_history_outside_engine_metadata(self):
+        self._install([{"id": "only", "type": "shell", "run": "echo only"}])
+        before = self._tree()
+        session = self._session()
+        started = session.start({"spec": "world"})
+        self._until_terminal(session)
+        run_prefix = f".specify/workflows/runs/{started.run_id}/"
+        allowed = {".specify/workflows/runs/current_run"}
+        unexpected = {
+            path
+            for path in self._tree() - before
+            if not path.startswith(run_prefix)
+            and path not in allowed
+            and not path.startswith(".git/")
+        }
+        self.assertEqual(unexpected, set(), f"Cockpit wrote unexpected history: {unexpected}")
+
+    def _tree(self) -> set[str]:
+        return {
+            path.relative_to(self.root).as_posix()
+            for path in self.root.rglob("*")
+            if path.is_file()
+        }
 
 
 if __name__ == "__main__":

@@ -14,6 +14,19 @@ from ...services.context_index import CONTEXT_INDEX_RELATIVE, SKILL_NAME
 HOLD = "#E8BD79"
 COLD = "#A1BFCE"
 
+#: Platform and cleanup boundary shown in the Help overlay and asserted by tests.
+RESILIENCE_GUIDANCE = (
+    "PLATFORMS\n"
+    "Linux, macOS, and WSL are supported. Native Windows is unsupported; use WSL.\n"
+    "Below the minimum size a resize message replaces the layout without exiting.\n\n"
+    "SIGNALS AND GUARANTEES\n"
+    "Catchable SIGINT, SIGHUP, and SIGTERM abort and clean up the engine group without"
+    " confirmation.\n"
+    "There is no cleanup guarantee for SIGKILL, host loss, power loss, or interpreter"
+    " failure.\n"
+    "Background read failures keep the last good state and mark it STALE.\n"
+)
+
 
 class HelpScreen(ModalScreen):
     BINDINGS = [Binding("escape,question_mark", "close", show=False)]
@@ -43,6 +56,7 @@ class HelpScreen(ModalScreen):
                     "Persisted engine state is authoritative; Cockpit waits for it to advance.\n",
                     "If state does not advance the choice cannot be resent; only Abort remains.\n",
                     "A gate Cockpit cannot decide is read-only and never writes.\n\n",
+                    (RESILIENCE_GUIDANCE + "\n", COLD),
                     ("EXTERNAL AGENT\n", HOLD),
                     f"Invoke the {SKILL_NAME} skill in your own agent with the context path\n"
                     f"({CONTEXT_INDEX_RELATIVE.as_posix()}).\n"

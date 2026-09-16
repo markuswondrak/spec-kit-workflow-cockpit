@@ -9,6 +9,25 @@ modified and its internals are never imported.
 See [`requirements/README.md`](requirements/README.md) for the product and design contract, and
 [`AGENTS.md`](AGENTS.md) for the repository layout and rules.
 
+## Supported platforms and resilience
+
+Workflow Cockpit supports Linux, macOS, and WSL. Native Windows is explicitly unsupported; run
+under WSL instead. The test matrix runs the capability-gated unit, Textual, fake-engine contract,
+and PTY suites on Linux and macOS. The real-`specify` contract suite skips unless a pinned
+executable for the declared version range is provisioned.
+
+Catchable `SIGINT`, `SIGHUP`, and `SIGTERM` delivered to the Cockpit process trigger a bounded
+best-effort abort and cleanup of the recorded engine process group without a confirmation
+prompt. There is **no cleanup guarantee** for `SIGKILL`, host loss, power loss, or interpreter
+failure: Cockpit cannot run cleanup it never receives, and the engine process group may be left
+running.
+
+Run the capability-gated suite under WSL with the same command used by CI:
+
+```bash
+python -m pytest tests/unit tests/textual tests/contract tests/pty
+```
+
 ## Preset: Lean Workflow Cockpit
 
 The bundled [`presets/lean-workflow`](presets/lean-workflow) preset makes the core Spec Kit

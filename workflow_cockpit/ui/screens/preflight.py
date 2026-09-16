@@ -11,6 +11,7 @@ from textual.widgets import Static
 from ...bootstrap.preflight import Preflight
 from ..widgets import ResizeGuard
 from .base import AdaptiveScreen
+from .help import HelpScreen
 from .launch import LaunchScreen
 
 FOG = "#94A399"
@@ -23,6 +24,7 @@ class PreflightScreen(AdaptiveScreen):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "rerun", "Re-check"),
+        Binding("question_mark", "help", "Help"),
     ]
 
     def __init__(self, preflight: Preflight, session_factory) -> None:
@@ -41,7 +43,7 @@ class PreflightScreen(AdaptiveScreen):
                 yield Static("00 / PREFLIGHT", classes="section-label")
                 yield Static(id="preflight-list")
                 yield Static(id="preflight-repair")
-            yield Static(" q  quit     r  re-check", id="launch-commands")
+            yield Static(" q  quit     r  re-check     ?  help", id="launch-commands")
         yield ResizeGuard(id="resize-guard")
 
     def on_mount(self) -> None:
@@ -79,6 +81,9 @@ class PreflightScreen(AdaptiveScreen):
 
     def action_rerun(self) -> None:
         self._evaluate()
+
+    def action_help(self) -> None:
+        self.app.push_screen(HelpScreen())
 
     def action_quit(self) -> None:
         self.app.exit()

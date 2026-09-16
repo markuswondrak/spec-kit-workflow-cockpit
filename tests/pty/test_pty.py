@@ -4,6 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
+from tests.support import requires_pty
 from workflow_cockpit.engine.pty_session import PtySession
 from workflow_cockpit.engine.supervisor import EngineSupervisor
 
@@ -17,6 +18,7 @@ def wait_for(predicate, timeout=5.0):
     return False
 
 
+@requires_pty
 class PtyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
