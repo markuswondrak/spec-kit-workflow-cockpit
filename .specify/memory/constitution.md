@@ -46,5 +46,14 @@
 [GOVERNANCE_RULES]
 <!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
 
+## Development Guidance
+
+Runtime guidance is maintained outside this generated file:
+
+- [`AGENTS.md`](../../AGENTS.md) - always-on repository rules, quality goals, and commands.
+- [`docs/architecture/README.md`](../../docs/architecture/README.md) - arc42 architecture context.
+- [`docs/decisions/README.md`](../../docs/decisions/README.md) - numbered architecture decisions.
+- [`docs/glossary.md`](../../docs/glossary.md) - pinned domain vocabulary.
+
 **Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
 <!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->

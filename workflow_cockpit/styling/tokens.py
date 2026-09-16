@@ -1,8 +1,8 @@
 """Semantic token set, the ``StylingTemplate`` model, and template validation.
 
-Templates are data only: a named set of the ten required UI_DESIGN palette roles
-plus optional accent roles. This module imports no Textual so it is unit-testable
-headlessly.
+Templates are data only: a named set of the ten required palette roles plus
+optional accent roles (see ``docs/architecture/08-crosscutting-concepts.md``).
+This module imports no Textual so it is unit-testable headlessly.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-#: The ten semantic palette roles every template must define (`UI_DESIGN.md` 2).
+#: The ten semantic palette roles every template must define.
 REQUIRED_TOKENS: tuple[str, ...] = (
     "ink",
     "deck",

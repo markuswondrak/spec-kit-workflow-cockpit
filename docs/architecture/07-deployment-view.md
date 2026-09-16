@@ -1,0 +1,61 @@
+# 7. Deployment View
+
+| Field | Value |
+|---|---|
+| arc42 | 7. Deployment View |
+| Tier | 2 |
+
+## Distribution
+
+The repository has one `pyproject.toml` declaring the `workflow-cockpit` console script, bounded
+Python/runtime dependencies, and packaged Textual CSS. An isolated wheel smoke test verifies the
+executable and package data.
+
+```mermaid
+flowchart LR
+    repo[repository] -->|python -m build| wheel[wheel / sdist]
+    wheel -->|pip install| env[clean environment]
+    env -->|workflow-cockpit| cli[console script]
+    cli --> project[initialized Spec Kit project]
+```
+
+| Artifact | Contents |
+|---|---|
+| `workflow_cockpit` package | All runtime code and `ui/styles.tcss`. |
+| Package data | `styling/templates/*.json`, `skills/cockpit-run-context/SKILL.md`. |
+| Console script | `workflow-cockpit = workflow_cockpit.cli:main`. |
+
+Repo-only tooling is deliberately not packaged: `presets/lean-workflow/`, `workflows/lean-flow/`,
+`extensions/arc42-context/`, `workflow_ui/prototype/`, and `requirements/`.
+
+## Project layout
+
+```
+AGENTS.md                     always-on agent context
+docs/architecture/            arc42 sections (this set)
+docs/decisions/               numbered ADRs
+docs/glossary.md              pinned vocabulary
+requirements/                 story index, story slices, epic
+workflow_cockpit/             application source
+tests/                        unit, textual, contract, pty, docs
+presets/lean-workflow/        dogfooding preset
+workflows/lean-flow/          dogfooding workflow
+extensions/arc42-context/     documentation-update extension
+```
+
+A run deploys nothing: the application reads and writes inside the target project's
+`.specify/` tree only.
+
+## CI and platforms
+
+`.github/workflows/test.yml` runs `ruff check workflow_cockpit tests` and the full suite on
+`ubuntu-latest` and `macos-latest` for Python 3.10 and 3.12:
+
+```bash
+python -m pip install -e ".[test]"
+ruff check workflow_cockpit tests
+python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q
+```
+
+The real-`specify` contract suite skips unless a pinned executable is provisioned; every other
+suite is capability-gated. WSL uses the same command and is validated manually.

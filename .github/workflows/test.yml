@@ -24,10 +24,10 @@ jobs:
           python -m pip install -e ".[test]"
       - name: Lint
         run: ruff check workflow_cockpit tests
-      - name: Unit, Textual, contract, and PTY suites
+      - name: Unit, Textual, contract, PTY, and docs suites
         # The real-engine contract tests skip unless a pinned specify executable is
         # provisioned; every other suite is capability-gated by tests/support.py.
-        run: python -m pytest tests/unit tests/textual tests/contract tests/pty -q
+        run: python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q
 
   # WSL equivalent: run the same capability-gated suite inside a WSL distribution
   # (for example `wsl -d Ubuntu -- python -m pytest tests/unit tests/textual

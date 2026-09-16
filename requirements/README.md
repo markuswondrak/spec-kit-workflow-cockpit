@@ -1,48 +1,31 @@
 # Requirements - Workflow Cockpit
 
-These files define the standalone Python/Textual application `workflow-cockpit`. One invocation
-owns one Spec Kit workflow run in one project/worktree. Engine output is rendered inside the
-application; external agents remain independent.
+The product and design contract now lives in the architecture set under
+[`docs/architecture/`](../docs/architecture/README.md), starting at
+[`docs/architecture/README.md`](../docs/architecture/README.md). This folder keeps the product
+backlog: the deferred epic and the remaining story slices.
 
-`PRD.md` is the product contract. `TUI_DESIGN.md` defines runtime architecture.
-`UI_DESIGN.md` defines visual language and interaction.
+- [`AGENTS.md`](../AGENTS.md) is the always-on agent context.
+- [`docs/architecture/`](../docs/architecture/README.md) holds intent and constraints mapped to
+  arc42, including the functional requirements in [§1](../docs/architecture/01-introduction-and-goals.md).
+- [`docs/decisions/`](../docs/decisions/README.md) holds numbered ADRs.
+- [`docs/glossary.md`](../docs/glossary.md) pins the vocabulary.
 
 ## Story index
 
+Delivered slices (`S01`-`S08`) were retired as their design documents were absorbed into the
+architecture set. Open and deferred work:
+
 | # | Vertical slice | Requirements | File |
 |---|---|---|---|
-| S1 | Own one workflow run | FR-1, FR-2 basic, FR-6 basic | [Implementation plan](S01-implementation-plan.md) |
-| S2 | Workflow runway | FR-2 | [Implementation plan](S02-implementation-plan.md) |
-| S3 | Review and decide a structured gate | FR-3, FR-5 | [Implementation plan](S03-implementation-plan.md) |
-| S4 | Decide interactive gates | FR-5 | [S04](S04-interactive-gates.md) |
-| S5 | Cockpit skill and run context | FR-4 | [S05](S05-cockpit-skill.md) |
-| S6 | Resilient operation | FR-6, NFRs | [S06](S06-resilience.md) |
-| S7 | Agent-matched styling templates | FR-7 | [S07](S07-agent-styling-templates.md) |
-| S8 | Render Markdown in the review view | FR-2, FR-3 | [S08](S08-markdown-review.md) |
 | S9 | Release polish for publishing | Quality requirements | [S09](S09-release-polish.md) |
 | S10 | arc42 context layer for agents | Quality requirements; architecture context | [S10](S10-arc42-context-layer.md) |
+| E1 | Optional OpenCode adapter (deferred epic) | Discovery and design only | [E01](E01-opencode-adapter.md) |
 
-Dependencies: S1 -> S2 -> S3 -> S4; S5 depends on S1; S6 depends on S1-S5; S7 depends on S1 and
-themes the S2-S6 surfaces; S8 depends on S3; S9 depends on S1-S8; S10 depends on S1-S6 and
-coordinates with the S9 CI workflow.
-
-## Deferred epics
-
-| # | Epic | Status | File |
-|---|---|---|---|
-| E1 | Optional OpenCode adapter | Deferred; discovery and design only | [E01](E01-opencode-adapter.md) |
-
+Dependencies: S9 depends on S1-S8; S10 depends on S1-S6 and coordinates with the S9 CI workflow.
 E1 depends on the completed first-release slices and a stable public session/read-model boundary.
 It must not alter the standalone Cockpit's lifecycle ownership or make OpenCode a required
 dependency.
-
-## First-release boundary
-
-S1-S6 deliver workflow selection and inputs, owned process lifecycle, integrated output, the
-workflow graph, Feature Files, both gate paths, the external-agent context bridge, and robust
-shutdown behavior. S7 is a cross-cutting presentation slice layered over the core loop. S8
-refines the S3 review surface, S9 is the publication gate over the complete slice set, and S10
-makes the architecture context agent-navigable for ongoing development.
 
 ## Global definition of done
 
@@ -51,22 +34,5 @@ makes the architecture context agent-navigable for ongoing development.
 - One Engine Supervisor owns at most one active engine process group.
 - Unit tests, Textual `App.run_test()` tests, and subprocess/PTY integration tests pass.
 - English UI and keyboard-accessible controls with in-app help.
-
-## Removed scope
-
-- Multi-run and historical-run navigation.
-- Workflow authoring, installation, and management.
-- Multi-project operation and Cockpit-owned persistence.
-- Embedded or managed coding agents.
-- External notifications, localization, and native Windows.
-- Terminal emulation and terminal multiplexer integration.
-
-## Pre-implementation validation
-
-1. Supported `specify` range: initial minimum `>=1.0`. Document registry, input, state, pause,
-   resume, and interrupt/abort contracts. (Range decided; contracts documented during the S1
-   engine spike.)
-2. Verify process behavior for structured and interactive gates, including PTY prompt readiness
-   and choice mapping.
-3. Verify Git comparison behavior across branch changes and dirty/untracked files.
-4. Minimum terminal size: **88 x 36** (validated by the prototype).
+- Documentation is living: a changed constraint, boundary, or decision updates the matching
+  architecture document in the same commit.

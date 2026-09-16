@@ -6,8 +6,10 @@ worktree changes at gates, and submit the workflow's declared decision. It uses 
 `specify` CLI for writes and the engine's persisted run files for reads; the engine is never
 modified and its internals are never imported.
 
-See [`requirements/README.md`](requirements/README.md) for the product and design contract, and
-[`AGENTS.md`](AGENTS.md) for the repository layout and rules.
+See [`docs/architecture/README.md`](docs/architecture/README.md) for the architecture context,
+[`docs/decisions/README.md`](docs/decisions/README.md) for the decision log, and
+[`AGENTS.md`](AGENTS.md) for the repository rules and commands. The product backlog lives in
+[`requirements/README.md`](requirements/README.md).
 
 ## Supported platforms and resilience
 

@@ -1,0 +1,25 @@
+schema_version: "1.0"
+
+extension:
+  id: "arc42"
+  name: "arc42 Documentation Update"
+  version: "1.0.0"
+  description: "Reconcile the arc42 architecture context, ADRs, and glossary with an implementation"
+  category: "docs"
+  effect: "read-write"
+  author: "workflow-cockpit"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=1.0.0"
+
+provides:
+  commands:
+    - name: "speckit.arc42.update-docs"
+      file: "commands/update-docs.md"
+      description: "Update the affected architecture documents in the same change as the code"
+
+tags:
+  - "docs"
+  - "arc42"
+  - "workflow-cockpit"

@@ -60,7 +60,7 @@ class PromptContract:
 
 #: Verified contracts keyed by exact ``packaging.Version`` identity. The dev
 #: and released ``1.0.6`` builds were both confirmed against the interactive
-#: prompt (see ``requirements/engine-contract.md`` section 10). Index mapping
+#: prompt (see ``docs/architecture/03-context-and-scope.md``, Engine contract). Index mapping
 #: is recorded because the engine accepts a 1-based decimal index and it emits
 #: only ASCII digits, so an option label can never be injected.
 _SUPPORTED: dict[Version, PromptContract] = {

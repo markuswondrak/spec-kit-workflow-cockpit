@@ -85,8 +85,9 @@ unverified PTY submission, output normalization, polling, or real editor access.
 Those states need follow-up interaction designs and engine integration tests;
 the redesigned visual frame is not evidence that they are complete.
 
-The original `UI_DESIGN.md` retains its product-level interaction requirements.
-Its palette and layout have been updated to match this iteration. Prototype-only
+The product-level interaction requirements now live in
+[`docs/architecture/`](../../docs/architecture/README.md) (see
+[§8 Crosscutting Concepts](../../docs/architecture/08-crosscutting-concepts.md)). Prototype-only
 navigation is documented here and must not leak into the production lifecycle.
 
 ## Verify
