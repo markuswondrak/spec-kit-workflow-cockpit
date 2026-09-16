@@ -1,5 +1,9 @@
 # Spec Kit Workflow Cockpit
 
+[![Test](https://github.com/markuswondrak/spec-kit-workflow-cockpit/actions/workflows/test.yml/badge.svg)](https://github.com/markuswondrak/spec-kit-workflow-cockpit/actions/workflows/test.yml)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2EA44F)](LICENSE)
+
 **Let agents execute. Keep the decisions.**
 
 A terminal cockpit for Spec Kit workflows. Follow execution, review feature documents, and
