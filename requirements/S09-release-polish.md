@@ -27,6 +27,8 @@
 - Development follows the dogfooding principle: changes to this repository are driven through
   the bundled [`presets/lean-workflow`](../presets/lean-workflow) preset and observed/decided in
   the cockpit itself, and `CONTRIBUTING.md` documents this as the preferred development path.
+- The README describes the arc42 documentation layout and links to
+  [the documentation context article](https://markus.wondrax.cloud/articles/documentation-agentic-coding.html).
 
 ## Tests
 

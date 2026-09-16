@@ -8,8 +8,9 @@
 ## Distribution
 
 The repository has one `pyproject.toml` declaring the `workflow-cockpit` console script, bounded
-Python/runtime dependencies, and packaged Textual CSS. An isolated wheel smoke test verifies the
-executable and package data.
+Python/runtime dependencies, complete distribution metadata, a root MIT `LICENSE`, and packaged
+Textual CSS. `python -m build` produces an sdist and wheel; an isolated smoke check installs the
+wheel and verifies the executable.
 
 ```mermaid
 flowchart LR
@@ -48,13 +49,17 @@ A run deploys nothing: the application reads and writes inside the target projec
 
 ## CI and platforms
 
-`.github/workflows/test.yml` runs `ruff check workflow_cockpit tests` and the full suite on
-`ubuntu-latest` and `macos-latest` for Python 3.10 and 3.12:
+`.github/workflows/test.yml` runs on pushes and pull requests. Its test matrix runs
+`ruff check workflow_cockpit tests` and the full suite on `ubuntu-latest` and `macos-latest` for
+Python 3.10 and 3.12. A dependent distribution job builds both artifacts and installs the wheel in
+a fresh virtual environment:
 
 ```bash
 python -m pip install -e ".[test]"
 ruff check workflow_cockpit tests
 python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q
+python -m build
+python tests/release/smoke.py dist
 ```
 
 The real-`specify` contract suite skips unless a pinned executable is provisioned; every other

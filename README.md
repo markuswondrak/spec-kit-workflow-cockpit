@@ -1,77 +1,212 @@
-# Workflow Cockpit
+# Spec Kit Workflow Cockpit
 
-A standalone Python + Textual TUI that owns exactly one Spec Kit workflow run in one
-project/worktree. It lets a user select and start a workflow, observe its execution, review
-worktree changes at gates, and submit the workflow's declared decision. It uses an installed
-`specify` CLI for writes and the engine's persisted run files for reads; the engine is never
-modified and its internals are never imported.
+**Let agents execute. Keep the decisions.**
 
-See [`docs/architecture/README.md`](docs/architecture/README.md) for the architecture context,
-[`docs/decisions/README.md`](docs/decisions/README.md) for the decision log, and
-[`AGENTS.md`](AGENTS.md) for the repository rules and commands. The product backlog lives in
-[`requirements/README.md`](requirements/README.md).
+A terminal cockpit for Spec Kit workflows. Follow execution, review feature documents, and
+decide what happens next without leaving the terminal.
 
-## Supported platforms and resilience
+<!-- Replace this block with the supplied screenshot of the shipped app at a review gate. -->
+> **Screenshot coming soon**
+>
+> The cockpit at a review gate: workflow progress, a feature document, and your next decision.
 
-Workflow Cockpit supports Linux, macOS, and WSL. Native Windows is explicitly unsupported; run
-under WSL instead. The test matrix runs the capability-gated unit, Textual, fake-engine contract,
-and PTY suites on Linux and macOS. The real-`specify` contract suite skips unless a pinned
-executable for the declared version range is provisioned.
+*One workflow. One worktree. Your call at every human gate.*
+
+[Quickstart](#quickstart) | [Configuration](#configuration) |
+[Architecture](docs/architecture/README.md) | [Contributing](CONTRIBUTING.md)
+
+## Why Cockpit?
+
+An automated workflow still needs a place for human judgment. Workflow Cockpit puts execution
+context and review in the same interface:
+
+- **Know where you are.** See the branch, current node, engine status, and workflow Runway.
+- **Review before deciding.** Browse Feature Files and read formatted Markdown at a gate.
+- **Choose explicitly.** Submit only the workflow's declared options, with confirmation.
+- **Follow execution.** Watch bounded live Engine Output without treating it as workflow state.
+- **Keep ownership clear.** Each Cockpit session owns exactly one run in one project/worktree.
+
+Cockpit is a standalone Python + Textual application. It invokes the installed `specify` CLI for
+workflow actions and reads persisted run files for authoritative state. It never modifies the
+engine or imports its internals. Feature Files show the current feature directory, not a Git diff.
+
+### Relationship to AgentMux
+
+[AgentMux](https://github.com/markuswondrak/AgentMux) is a deterministic multi-agent
+software-development pipeline that coordinates CLI-based agents through tmux. Cockpit complements
+that approach with a focused interface for owning, observing, reviewing, and deciding one Spec Kit
+workflow run.
+
+Cockpit is not an AgentMux plugin or replacement, and does not require AgentMux. There is no implied
+automatic handoff between the projects. Ongoing development of AgentMux remains part of the broader
+project direction alongside this standalone cockpit.
+
+## Prerequisites
+
+- **Python 3.10 or newer** and Git.
+- **Linux, macOS, and WSL** are supported. Native Windows is explicitly unsupported; use WSL.
+- **A terminal at least 88 columns by 36 rows.** Smaller windows show a resize prompt.
+- **A workflow-capable `specify` CLI**, installed separately. Cockpit accepts `>=1.0,<2.0` and
+  probes for the required workflow commands and flags; a version number alone is not sufficient.
+- **An initialized Spec Kit project** containing `.specify/`, in a Git worktree with at least
+  one commit.
+- **An enabled, installed workflow** and the coding-agent integration it needs, configured and
+  authenticated before starting a run.
+
+Use your Spec Kit distribution's installation and initialization instructions. Cockpit does not
+install the engine, initialize projects, or configure agent credentials. The supported CLI
+contract is described in [Context and Scope](docs/architecture/03-context-and-scope.md).
+
+## Installation
+
+From the root of a source checkout of `spec-kit-workflow-cockpit`:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
+workflow-cockpit --help
+```
+
+Keep this environment active when using the commands below. The repository is named
+`spec-kit-workflow-cockpit`; the Python distribution and terminal command are `workflow-cockpit`.
+
+To build and install a wheel instead, start from the checkout in an activated environment:
+
+```bash
+python -m pip install build
+python -m build
+python -m pip install dist/workflow_cockpit-*.whl
+```
+
+Use a fresh `dist/` directory so the wildcard selects one wheel. This installation path does not
+assume a PyPI release is available. See [Contributing](CONTRIBUTING.md) for the clean-environment
+artifact smoke check and editable development setup.
+
+## Quickstart
+
+In your **initialized Spec Kit project**, with a compatible `specify` on `PATH` and a workflow
+already installed:
+
+```bash
+workflow-cockpit --check
+workflow-cockpit
+```
+
+The first command checks the platform, Git worktree, project initialization, and engine
+compatibility without opening the UI. Resolve any reported failures before continuing. It does
+not check agent authentication or whether all workflow commands are installed.
+
+1. Select a workflow with the arrow keys or `j`/`k`, then press Enter to configure it.
+2. Fill in its required inputs and activate **START RUN**. A dirty worktree requires confirmation.
+3. Follow progress in the Runway and Engine Output.
+4. At a gate, review the Feature Files, choose a declared option, and confirm your decision.
+5. Follow the run to its outcome, or use Cockpit's Abort action to stop it.
+
+To target a project from elsewhere, pass `--project /path/to/project`. To use a particular engine
+installation, pass `--specify /path/to/specify`. Both options also work with `--check`.
+
+### Try the Bundled Lean Flow
+
+The repository includes a workflow for developing changes with specification and plan review gates:
+
+```text
+Specify -> Spec Review -> Plan -> Plan Review -> Tasks -> Implement -> Update Docs
+```
+
+From an initialized Spec Kit project **at this checkout's root**, with the base lean commands and
+your chosen agent integration already configured, register the bundled components:
+
+```bash
+specify preset add --dev ./presets/lean-workflow --priority 1
+specify extension add --dev ./extensions/arc42
+specify workflow add --dev ./workflows/lean-flow
+```
+
+Then follow the quickstart above, choose **Lean Flow**, and describe your change in the required
+`spec` input. The `integration` input defaults to `auto`, using the project's initialized
+integration. Both review gates offer `approve` or `reject`; rejection aborts this workflow.
+
+The [lean-workflow preset](presets/lean-workflow/README.md) supplies unattended runtime instructions
+and lets the agent name its feature directory under `specs/`. Priority `1` takes precedence over
+the base lean preset's `10`. The [arc42 extension](extensions/arc42/README.md) supplies the final
+living-documentation step. These are source-checkout tooling, not contents of the wheel.
+
+See [Contributing](CONTRIBUTING.md#preferred-development-path) for the preferred dogfooding path
+and how to refresh installed components after edits.
+
+## Configuration
+
+Workflow selection and input values are configured in the UI. There is no general Cockpit
+configuration file.
+
+| Setting | Purpose and default |
+|---|---|
+| `--project PATH` | Project root; otherwise discover the nearest `.specify/` in the current directory or its parents. |
+| `--specify PATH` | Engine executable; takes precedence over `WORKFLOW_COCKPIT_SPECIFY`, then `specify` on `PATH`. |
+| `--check` | Print preflight results and exit without opening the UI. |
+| `--style NAME` | Override appearance; otherwise use the project's default integration, with neutral fallback. |
+| `EDITOR` | Optional external editor for Feature Files while paused at a gate. |
+
+Built-in styles are `cockpit`, `claude`, `github-copilot`, and `opencode`. Styles change colors,
+not the agent integration or workflow behavior. Project defaults come from
+`.specify/integration.json`; custom styling templates live in `.specify/cockpit/templates/`.
+Use the [neutral template](workflow_cockpit/styling/templates/cockpit.json) as a schema example.
+Custom templates should use their own names; they do not override built-ins.
+
+Use `specify` to manage installed workflows and their definitions under `.specify/workflows/`.
+Persisted files in `.specify/workflows/runs/<run-id>/` remain the authoritative run state, while
+`.specify/feature.json` identifies the feature directory used for review. See
+[Crosscutting Concepts](docs/architecture/08-crosscutting-concepts.md) for styling and read-model
+conventions.
+
+## Safety and Limits
+
+Cockpit owns one engine process group, not a fleet of agents or multiple concurrent runs. It is
+not a sandbox: workflow steps and agents operate with the permissions of the environment in which
+you launch them. Review your workflow and agent configuration before starting.
 
 Catchable `SIGINT`, `SIGHUP`, and `SIGTERM` delivered to the Cockpit process trigger a bounded
-best-effort abort and cleanup of the recorded engine process group without a confirmation
-prompt. There is **no cleanup guarantee** for `SIGKILL`, host loss, power loss, or interpreter
-failure: Cockpit cannot run cleanup it never receives, and the engine process group may be left
-running.
+best-effort abort and cleanup of its recorded engine process group without a confirmation prompt.
+There is **no cleanup guarantee** for `SIGKILL`, host loss, power loss, or interpreter failure:
+Cockpit cannot run cleanup it never receives, and the engine process group may be left running.
 
-Run the capability-gated suite under WSL with the same command used by CI:
+## Documentation and Requirements
 
-```bash
-python -m pytest tests/unit tests/textual tests/contract tests/pty
-```
+Documentation follows **arc42**, with twelve sections indexed in
+[`docs/architecture/README.md`](docs/architecture/README.md), numbered decisions alongside it,
+and a shared glossary. The layout is designed for focused reading by both people and coding
+agents, not for loading the entire documentation set into every conversation.
 
-## Preset: Lean Workflow Cockpit
+| Start here | What it contains |
+|---|---|
+| [Architecture index](docs/architecture/README.md) | Goals, constraints, boundaries, components, runtime, deployment, and quality context. |
+| [Functional requirements](docs/architecture/01-introduction-and-goals.md) | Product promise, goals, and functional requirements. |
+| [Quality requirements](docs/architecture/10-quality-requirements.md) | Quality scenarios and acceptance targets. |
+| [Backlog](requirements/README.md) | Open story slices and deferred work, including [S09 release polish](requirements/S09-release-polish.md). |
+| [Decision log](docs/decisions/README.md) | Numbered architecture decision records. |
+| [Glossary](docs/glossary.md) | Pinned terms such as Run, Gate, Feature File, and Runway. |
+| [Agent instructions](AGENTS.md) | Always-on repository constraints and commands. |
 
-The bundled [`presets/lean-workflow`](presets/lean-workflow) preset makes the core Spec Kit
-commands safe to run unattended inside a workflow:
+`AGENTS.md` is the only always-on context. Load the matching architecture section on demand;
+strategy, quality scenarios, and the AI Debt Register are reference-only. Code establishes
+behavior; documentation establishes intent and constraints. Conflicts should be surfaced rather
+than silently reconciled.
 
-- `speckit.specify` is replaced so the agent names the feature itself and always creates
-  `specs/<feature-name>` (writing `.specify/feature.json` for the downstream commands).
-- `speckit.plan`, `speckit.tasks`, and `speckit.implement` keep their lean bodies and gain a shared
-  **Workflow Runtime** preamble: never ask questions, never request permissions, make informed
-  defaults, and report a blocker instead of hanging.
+For the rationale behind this documentation approach, read the
+[documentation context article](https://markus.wondrax.cloud/articles/documentation-agentic-coding.html).
 
-### Install
+## Contributing
 
-From the repository root, with an initialized Spec Kit project:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, exact lint and test commands, artifact
+verification, and the preferred dogfooding workflow. Develop repository changes through the bundled
+Lean Flow and review its gates in Cockpit whenever practical.
 
-```bash
-# priority 1 < lean's 10, so this preset's commands win over the lean originals
-specify preset add --dev ./presets/lean-workflow --priority 1
-```
-
-Verify:
-
-```bash
-specify preset list
-specify preset resolve speckit.specify
-specify preset resolve speckit.tasks
-```
-
-Remove:
-
-```bash
-specify preset remove lean-workflow
-```
-
-Re-apply after editing the preset, since the installed `.specify/presets/<id>/` and
-`.opencode/commands/` copies are generated scaffolding:
-
-```bash
-specify preset remove lean-workflow
-specify preset add --dev ./presets/lean-workflow --priority 1
-```
+[CI](.github/workflows/test.yml) runs Ruff and the unit, Textual, contract, PTY, and documentation
+suites on Linux and macOS with Python 3.10 and 3.12. A dependent job builds the sdist and wheel,
+then checks installation in a fresh environment. WSL verification is run locally using the same
+quality commands in the contributor guide.
 
 ## License
 
-MIT
+[MIT](LICENSE).
