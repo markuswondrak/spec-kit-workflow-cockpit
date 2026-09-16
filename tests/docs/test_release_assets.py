@@ -39,7 +39,7 @@ class ReleaseAssetTests(unittest.TestCase):
             "https://github.com/markuswondrak/AgentMux",
             "deterministic multi-agent",
             "docs/architecture/README.md",
-            "requirements/README.md",
+            "https://github.com/markuswondrak/spec-kit-workflow-cockpit/issues",
             "https://markus.wondrax.cloud/articles/documentation-agentic-coding.html",
             "[CONTRIBUTING.md](CONTRIBUTING.md)",
             "[MIT](LICENSE)",

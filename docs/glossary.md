@@ -31,8 +31,8 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Skill** | `cockpit-run-context`, invoked in a user-chosen external agent. | A Cockpit-managed process. |
 | **Overlay** | An enabled modification applied to a workflow definition before resolution. | A theme or styling template. |
 | **Control Flow Graph** | The declared nodes, edges, branches, loops, and gates of a workflow. | Runtime status. |
-| **Story slice** | A vertical implementation slice (`S01`-`S10`) under `requirements/`. | An epic (`E01`). |
-| **ADR** | A numbered architecture decision record under `docs/decisions/`. | A requirements document. |
+| **Story slice** | A vertical implementation slice (`S01`-`S10`) tracked as a GitHub issue. | An epic (`E01`). |
+| **ADR** | A numbered architecture decision record under `docs/decisions/`. | A backlog issue. |
 | **AI Debt Register** | This set's §11 list of patterns that must not be replicated. | A general backlog. |
 | **Tier** | The load policy of an architecture section (1 entry, 2 on demand, 3 reference). | Priority. |
 

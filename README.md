@@ -192,7 +192,7 @@ agents, not for loading the entire documentation set into every conversation.
 | [Architecture index](docs/architecture/README.md) | Goals, constraints, boundaries, components, runtime, deployment, and quality context. |
 | [Functional requirements](docs/architecture/01-introduction-and-goals.md) | Product promise, goals, and functional requirements. |
 | [Quality requirements](docs/architecture/10-quality-requirements.md) | Quality scenarios and acceptance targets. |
-| [Backlog](requirements/README.md) | Open story slices and deferred work, including [S09 release polish](requirements/S09-release-polish.md). |
+| [Backlog](https://github.com/markuswondrak/spec-kit-workflow-cockpit/issues) | Open story slices and deferred work, including the [E01 OpenCode adapter](https://github.com/markuswondrak/spec-kit-workflow-cockpit/issues/1). |
 | [Decision log](docs/decisions/README.md) | Numbered architecture decision records. |
 | [Glossary](docs/glossary.md) | Pinned terms such as Run, Gate, Feature File, and Runway. |
 | [Agent instructions](AGENTS.md) | Always-on repository constraints and commands. |

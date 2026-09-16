@@ -27,7 +27,7 @@ flowchart LR
 | Console script | `workflow-cockpit = workflow_cockpit.cli:main`. |
 
 Repo-only tooling is deliberately not packaged: `presets/lean-workflow/`, `workflows/lean-flow/`,
-`extensions/arc42-context/`, `workflow_ui/prototype/`, and `requirements/`.
+`extensions/arc42-context/` and `workflow_ui/prototype/`.
 
 ## Project layout
 
@@ -36,7 +36,6 @@ AGENTS.md                     always-on agent context
 docs/architecture/            arc42 sections (this set)
 docs/decisions/               numbered ADRs
 docs/glossary.md              pinned vocabulary
-requirements/                 story index, story slices, epic
 workflow_cockpit/             application source
 tests/                        unit, textual, contract, pty, docs
 presets/lean-workflow/        dogfooding preset

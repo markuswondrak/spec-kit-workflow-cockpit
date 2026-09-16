@@ -61,7 +61,6 @@ executable. Development is dogfooded through `presets/lean-workflow` + `workflow
 
 - `workflow_cockpit/` - application source.
 - `docs/` - architecture context, decisions, glossary.
-- `requirements/` - backlog: story index, open story slices, deferred epic.
 - `tests/` - unit, Textual, contract, PTY, and docs tests.
 - `workflow_ui/prototype/` - visual-only prototype, not shipped.
 - `presets/`, `workflows/`, `extensions/` - dogfooding tooling.
