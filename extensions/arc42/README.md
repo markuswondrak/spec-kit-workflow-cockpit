@@ -4,7 +4,7 @@ A Spec Kit extension that keeps the repository's architecture context in sync wi
 provides one command, `speckit.arc42.update-docs`, which reconciles `docs/architecture/`,
 `docs/decisions/`, and `docs/glossary.md` with the implementation that just happened.
 
-The repository's `lean-flow` workflow runs it as the final `update-documentation` step, after
+The repository's `lean-flow` workflow runs it as the final `update-docs` step, after
 `implement`. It can also be invoked directly.
 
 ## Install

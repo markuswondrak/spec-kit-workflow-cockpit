@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from workflow_cockpit.services.graph import WorkflowDefinitionParser, resolve_declared_id
@@ -107,7 +107,7 @@ class GraphParserTests(unittest.TestCase):
 class LogProjectionTests(unittest.TestCase):
     def setUp(self):
         self.graph = WorkflowDefinitionParser().parse(WORKFLOW)
-        self.now = datetime(2026, 9, 13, 12, 0, tzinfo=UTC)
+        self.now = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
 
     def test_projects_status_attempts_active_path_and_durations(self):
         timing_start = self.now - timedelta(seconds=8)
@@ -186,7 +186,7 @@ class LogProjectionTests(unittest.TestCase):
             timing = aggregate.update(path)["verify"]
             self.assertEqual(timing.attempts, 2)
             self.assertEqual(timing.status, "running")
-            self.assertEqual(timing.started_at, datetime(2026, 9, 13, 12, 0, 5, tzinfo=UTC))
+            self.assertEqual(timing.started_at, datetime(2026, 9, 13, 12, 0, 5, tzinfo=timezone.utc))
 
 
 if __name__ == "__main__":

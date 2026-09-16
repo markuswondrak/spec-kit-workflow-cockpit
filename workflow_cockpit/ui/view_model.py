@@ -135,7 +135,7 @@ def _middle_truncate(value: str, limit: int) -> str:
     return f"{value[:left]}...{value[-(limit - 3 - left) :]}"
 
 
-def render_runway(projection: GraphProjection | None, *, width: int = 29) -> list[RunwayRow]:
+def render_runway(projection: GraphProjection | None, *, width: int = 36) -> list[RunwayRow]:
     """Render graph data into stable, terminal-sized runway rows."""
     if projection is None:
         return []

@@ -96,6 +96,6 @@ and power loss carry no cleanup guarantee.
 ## Dogfooding workflow
 
 Repository changes run through `workflows/lean-flow/workflow.yml`:
-`specify -> review-spec -> plan -> review-plan -> tasks -> implement -> update-documentation`. The
+`specify -> review-spec -> plan -> review-plan -> tasks -> implement -> update-docs`. The
 final step invokes the `arc42-context` extension command `speckit.arc42.update-docs`, which updates
 the affected architecture documents in the same change. See [§7 Deployment View](07-deployment-view.md).

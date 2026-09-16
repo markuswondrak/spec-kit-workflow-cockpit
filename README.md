@@ -36,14 +36,19 @@ engine or imports its internals. Feature Files show the current feature director
 
 ### Relationship to AgentMux
 
-[AgentMux](https://github.com/markuswondrak/AgentMux) is a deterministic multi-agent
-software-development pipeline that coordinates CLI-based agents through tmux. Cockpit complements
-that approach with a focused interface for owning, observing, reviewing, and deciding one Spec Kit
-workflow run.
+If you're familiar with [AgentMux](https://github.com/markuswondrak/AgentMux), you might wonder why 
+there’s another tool. 
 
-Cockpit is not an AgentMux plugin or replacement, and does not require AgentMux. There is no implied
-automatic handoff between the projects. Ongoing development of AgentMux remains part of the broader
-project direction alongside this standalone cockpit.
+AgentMux was my initial attempt at building a deterministic multi-agent pipeline via tmux. Even back 
+then, I wanted to combine AgentMux with Spec Kit. But while I was working on it, Spec Kit introduced 
+its own native workflows — which solved the underlying pipeline problem much more cleanly and even
+introduces the flexibility I actually was looking for. 
+
+Instead of forcing Spec Kit into AgentMux, it made far more sense to just build a dedicated TUI 
+directly on top of the workflow engine. 
+
+So for Spec Kit projects, Cockpit essentially replaces AgentMux. AgentMux remains available as a 
+standalone experiment for custom multi-agent setups outside of Spec Kit.
 
 ## Prerequisites
 

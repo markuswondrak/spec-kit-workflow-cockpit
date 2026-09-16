@@ -1,5 +1,5 @@
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.log_aggregator import StepTiming
@@ -13,7 +13,7 @@ WORKFLOW = (
     {"id": "review", "type": "gate", "message": "Review", "options": ["approve", "reject"]},
 )
 
-NOW = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
+NOW = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
 START = NOW - timedelta(seconds=7)
 
 

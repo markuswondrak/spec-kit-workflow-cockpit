@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "lean-flow"
   name: "Lean Flow"
-  version: "1.0.2"
+  version: "1.0.3"
   author: "workflow-cockpit"
   description: "Lean specify → plan → tasks → implement with review gates and a documentation step"
 
@@ -69,7 +69,7 @@ steps:
     input:
       args: ""
 
-  - id: update-documentation
+  - id: update-docs
     command: speckit.arc42.update-docs
     integration: "{{ inputs.integration }}"
     input:

@@ -68,7 +68,7 @@ Checkbox > .toggle--button { color: $signal; background: $raised; }
 /* Cockpit */
 #header { height: 4; }
 #workspace { height: 1fr; }
-#runway { width: 29; padding: 1 1 0 1; border-right: solid $rail; }
+#runway { width: 36; padding: 1 1 0 1; border-right: solid $rail; }
 #workflow-name { text-style: bold; margin-bottom: 1; }
 #run-progress { height: 1; margin-bottom: 1; }
 #runway-graph { height: 1fr; }
