@@ -10,10 +10,18 @@ from .review import FeatureFile, ReviewDocument, ReviewSnapshot
 FEATURE_JSON = Path(".specify") / "feature.json"
 DEFAULT_PREVIEW_BYTES = 200_000
 _BINARY_SAMPLE_BYTES = 8_000
+MARKDOWN_SUFFIXES = frozenset({".md", ".markdown"})
 
 
 def is_binary_bytes(data: bytes) -> bool:
     return b"\x00" in data[:_BINARY_SAMPLE_BYTES]
+
+
+def is_markdown_path(path: str | None) -> bool:
+    """Return whether a path carries a Markdown extension (case-insensitive)."""
+    if not path:
+        return False
+    return Path(path).suffix.lower() in MARKDOWN_SUFFIXES
 
 
 def resolve_feature_directory(project_root: Path) -> str | None:
@@ -114,4 +122,5 @@ class FeatureReviewService:
             truncated=truncated,
             limit_bytes=DEFAULT_PREVIEW_BYTES if truncated else None,
             total_bytes=size,
+            markdown=is_markdown_path(path),
         )

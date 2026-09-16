@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual import work
+from textual.containers import VerticalScroll
 from textual.widgets import Input, Static
 
 from ...services.context_index import SKILL_GUIDANCE
@@ -11,7 +12,7 @@ from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
 from ..palette import COLD, FAULT, FOG, HOLD, PAPER
 from ..view_model import gate_decision
-from ..widgets import FeatureFileList, GateOptions, ReviewDocumentView
+from ..widgets import FeatureFileList, GateOptions, MarkdownDocumentView, ReviewDocumentView
 
 
 class ReviewMixin:
@@ -130,14 +131,14 @@ class ReviewMixin:
             self._selected_review_path = None
             self._current_document = None
             if snapshot.review is not None and snapshot.review.status == "error":
-                self.query_one(ReviewDocumentView).show(
+                self._show_document(
                     ReviewDocument(
                         path="Feature Files",
                         error=snapshot.review.error or "Unable to refresh Feature Files.",
                     )
                 )
             else:
-                self.query_one(ReviewDocumentView).show(None)
+                self._show_document(None)
             return
         file_list.update_files(files, self._selected_review_path)
         self._selected_review_path = file_list.selected_path
@@ -149,10 +150,33 @@ class ReviewMixin:
         self._filter = event.value
         self._render_review_files(self._snapshot_now())
 
+    def _show_document(self, document: ReviewDocument | None) -> None:
+        """Render one document, swapping the plain and Markdown viewers.
+
+        Scroll is preserved across a same-path refresh and reset when a
+        different path (or the empty state) is shown.
+        """
+        plain = self.query_one(ReviewDocumentView)
+        markdown = self.query_one(MarkdownDocumentView)
+        path = document.path if document is not None else None
+        same_path = path is not None and path == self._rendered_document_path
+        scroll = self.query_one("#review-scroll", VerticalScroll)
+        offset = scroll.scroll_y if same_path else 0
+        if document is not None and document.markdown and not (document.binary or document.error):
+            markdown.show(document)
+            plain.display = False
+            markdown.display = True
+        else:
+            markdown.display = False
+            plain.display = True
+            plain.show(document)
+        self._rendered_document_path = path
+        self.call_after_refresh(lambda: scroll.scroll_to(y=offset, animate=False))
+
     def _load_document(self, path: str | None) -> None:
         if not path:
             self._current_document = None
-            self.query_one(ReviewDocumentView).show(None)
+            self._show_document(None)
             return
         review = self._snapshot_now().review
         revision = review.revision if review is not None else -1
@@ -186,7 +210,7 @@ class ReviewMixin:
             return
         self._current_document = document
         self._document_key = key
-        self.query_one(ReviewDocumentView).show(document)
+        self._show_document(document)
 
     # -- view actions --------------------------------------------------
 

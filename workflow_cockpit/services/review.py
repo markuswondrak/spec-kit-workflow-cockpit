@@ -34,6 +34,7 @@ class ReviewDocument:
     total_bytes: int | None = None
     note: str = ""
     error: str = ""
+    markdown: bool = False
 
 
 @dataclass(frozen=True)

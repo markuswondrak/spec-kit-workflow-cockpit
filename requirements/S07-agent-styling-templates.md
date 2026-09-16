@@ -11,8 +11,8 @@
 
 ## Acceptance criteria
 
-- Cockpit ships named styling templates: a neutral `cockpit` default and at least one coding
-  agent template (`opencode`), each a self-contained set of theme tokens.
+- Cockpit ships named styling templates: a neutral `cockpit` default and at least three coding
+  agent template (`opencode`, `github copilot`, `claude`), each a self-contained set of theme tokens.
 - The active template is selected from the project's default integration in
   `.specify/integration.json`; an explicit override is available at launch.
 - An unknown, missing, or malformed template falls back to the default with a non-fatal notice.

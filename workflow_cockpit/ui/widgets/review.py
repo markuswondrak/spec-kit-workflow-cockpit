@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual.binding import Binding
-from textual.widgets import OptionList, Static
+from textual.widgets import Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ...services.review import ReviewDocument
@@ -40,7 +40,8 @@ class FeatureFileList(OptionList):
         if options:
             index_by_path = {str(option.id): index for index, option in enumerate(options)}
             preferred = live_path or selected_path or self.selected_path
-            self.highlighted = index_by_path.get(preferred or "", 0)
+            with self.prevent(OptionList.OptionHighlighted):
+                self.highlighted = index_by_path.get(preferred or "", 0)
             self.selected_path = str(options[self.highlighted].id)
             self.scroll_to(y=scroll_y, animate=False)
         else:
@@ -68,6 +69,28 @@ class ReviewDocumentView(Static):
             parts.append(("\n\n", PAPER))
             parts.append((f"Preview truncated at {limit} bytes; press f to load the full file.", HOLD))
         self.update(_text(*parts))
+
+
+class MarkdownDocumentView(Markdown):
+    """Formatted, read-only rendering of a Markdown feature file.
+
+    The selected path leads as a bold line; the bounded preview and full-load
+    semantics match the plain viewer. Links render styled but stay inert so the
+    review surface never leaves the terminal.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("open_links", False)
+        super().__init__(*args, **kwargs)
+        self.display = False
+
+    def show(self, document: ReviewDocument) -> None:
+        parts = [f"**{document.path}**", "", document.text or "(empty file)"]
+        if document.truncated:
+            limit = document.limit_bytes or 0
+            parts.append("")
+            parts.append(f"_Preview truncated at {limit} bytes; press f to load the full file._")
+        self.update("\n".join(parts))
 
 
 class GateOptions(OptionList):

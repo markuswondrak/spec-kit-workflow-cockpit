@@ -97,6 +97,9 @@ OptionList:focus > .option-list--option-highlighted { background: #2B3D32; color
 #changed-files { width: 100%; height: 1fr; padding: 0 1; }
 #review-scroll { width: 1fr; height: 1fr; }
 #review-document { padding: 1 2; }
+#review-markdown { padding: 1 2; height: auto; }
+#review-markdown .link { color: $cold; text-style: underline; }
+#review-markdown MarkdownTable { border: solid $rail; }
 #decide-bar { display: none; height: auto; max-height: 10; border-top: solid $rail; padding: 0 2; }
 #decide-label { width: 9; height: 1; color: $fog; }
 #gate-options { width: 1fr; height: auto; max-height: 9; }

@@ -6,6 +6,7 @@ from pathlib import Path
 from workflow_cockpit.services.feature_review import (
     DEFAULT_PREVIEW_BYTES,
     FeatureReviewService,
+    is_markdown_path,
     resolve_feature_directory,
 )
 
@@ -79,12 +80,43 @@ class FeatureReviewTests(unittest.TestCase):
         self.assertEqual(snapshot.status, "error")
         self.assertIn("feature.json", snapshot.error)
 
+    def test_markdown_detection_is_extension_based(self):
+        for path in ("a.md", "a.markdown", "a.MD", "nested/x.Markdown"):
+            with self.subTest(path=path):
+                self.assertTrue(is_markdown_path(path))
+        for path in ("a.txt", "a.mdx", "README", "", None):
+            with self.subTest(path=path):
+                self.assertFalse(is_markdown_path(path))
+
     def test_document_renders_text(self):
         (self.feature / "spec.md").write_text("hello\n", encoding="utf-8")
         document = self.service.document("specs/demo/spec.md")
         self.assertEqual(document.text, "hello\n")
         self.assertFalse(document.binary)
         self.assertFalse(document.truncated)
+
+    def test_markdown_flag_is_set_for_markdown_extensions(self):
+        (self.feature / "spec.md").write_text("# Title\n", encoding="utf-8")
+        (self.feature / "notes.txt").write_text("plain\n", encoding="utf-8")
+        self.assertTrue(self.service.document("specs/demo/spec.md").markdown)
+        self.assertFalse(self.service.document("specs/demo/notes.txt").markdown)
+
+    def test_binary_markdown_stays_metadata_only(self):
+        (self.feature / "spec.md").write_bytes(b"\x00\x01\x02binary")
+        document = self.service.document("specs/demo/spec.md")
+        self.assertTrue(document.binary)
+        self.assertEqual(document.text, "")
+
+    def test_large_markdown_honors_bounded_preview_then_full(self):
+        big = "# Heading\n\n" + ("line\n" * (DEFAULT_PREVIEW_BYTES // 4))
+        (self.feature / "spec.md").write_text(big, encoding="utf-8")
+        preview = self.service.document("specs/demo/spec.md")
+        self.assertTrue(preview.markdown)
+        self.assertTrue(preview.truncated)
+        self.assertEqual(preview.limit_bytes, DEFAULT_PREVIEW_BYTES)
+        full = self.service.document("specs/demo/spec.md", full=True)
+        self.assertTrue(full.markdown)
+        self.assertFalse(full.truncated)
 
     def test_binary_file_reports_metadata(self):
         (self.feature / "blob.bin").write_bytes(b"\x00\x01\x02binary")

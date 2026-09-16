@@ -13,7 +13,7 @@ from ...services.snapshot import RunSnapshot
 from ..palette import FAULT, FOG, HOLD, PAPER, SIGNAL
 from ..view_model import render_runway, state_grammar
 from .indicator import BounceIndicator
-from .review import FeatureFileList, GateOptions, ReviewDocumentView
+from .review import FeatureFileList, GateOptions, MarkdownDocumentView, ReviewDocumentView
 
 __all__ = [
     "TRUNCATION_MARKER",
@@ -24,6 +24,7 @@ __all__ = [
     "FeatureFileList",
     "GateOptions",
     "HeaderRail",
+    "MarkdownDocumentView",
     "ResizeGuard",
     "ReviewDocumentView",
     "Runway",

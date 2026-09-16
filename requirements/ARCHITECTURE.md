@@ -58,7 +58,7 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 | `RunStateReader` | Tolerant reads of independently written `state.json`, `inputs.json`, and `log.jsonl`; skip unchanged files while detecting atomic replacements. |
 | `GraphProjector` | Combine static `ControlFlowGraph` with runtime state into node status, active path, attempts, and timings. |
 | `GitService` | Read `HEAD`, branch, and dirty state of the project worktree. |
-| `FeatureReviewService` | Resolve the declared feature directory; list its files; detect binary and large files; read current content. |
+| `FeatureReviewService` | Resolve the declared feature directory; list its files; detect binary, large, and Markdown files; read current content. |
 | `ContextIndexWriter` | Write the stable `current_run` context index after Start; failure is reported but never interrupts the run. |
 | `EditorLauncher` | Suspend and restore Textual around `$EDITOR` at a paused gate only. |
 
@@ -81,6 +81,7 @@ architecture in `TUI_DESIGN.md`; it does not change the product contract in `PRD
 | `HeaderRail` | Product, state, branch, elapsed, workflow, run ID. |
 | `Runway` | Scrollable control-flow graph with runtime overlay. |
 | `Focus` | State, Files, Gate, and Outcome surfaces showing feature-file content. |
+| `MarkdownDocumentView` | Read-only formatted rendering of Markdown feature files; non-Markdown text keeps the plain viewer and binary files stay metadata-only. |
 | `EngineOutput` | Bounded, read-only `RichLog` fed from the supervisor. |
 | `CommandRail` | Actions valid in the current state, including dynamic gate choices. |
 | `CockpitViewModel` | Map `RunSnapshot` to renderable state; preserve selection, focus, and scroll across refreshes. |
@@ -243,6 +244,7 @@ retry/skip, empty changes, no-gate runs, failure, abort, and termination signals
 | S4 Interactive gate | `InternalPtyDecider`, `PtySession`, unverified-submission state |
 | S5 Skill and context | `ContextIndexWriter`, `cockpit-skill` |
 | S6 Resilience | `PollingLoop`, `SignalHandler`, error handling across services |
+| S8 Markdown review | `FeatureReviewService` detection, `MarkdownDocumentView`, scroll-preserving dispatch |
 
 ## 8. Resolved decisions
 

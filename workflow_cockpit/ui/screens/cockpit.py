@@ -23,6 +23,7 @@ from ..widgets import (
     FeatureFileList,
     GateOptions,
     HeaderRail,
+    MarkdownDocumentView,
     ResizeGuard,
     ReviewDocumentView,
     Runway,
@@ -71,6 +72,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
         self._review_pending = False
         self._full_file = False
         self._current_document: ReviewDocument | None = None
+        self._rendered_document_path: str | None = None
         self._document_key: tuple | None = None
         self._document_pending_key: tuple | None = None
         self._diagnostic = ""
@@ -97,6 +99,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
                             yield FeatureFileList(id="feature-files")
                         with VerticalScroll(id="review-scroll"):
                             yield ReviewDocumentView(id="review-document")
+                            yield MarkdownDocumentView(id="review-markdown")
                     with Horizontal(id="decide-bar"):
                         yield Static("DECIDE", id="decide-label")
                         yield GateOptions(id="gate-options")

@@ -286,7 +286,8 @@ than showing a detached modal. Engine Output collapses to a short tail and can b
 - Gate message is never silently truncated.
 - The file list shows project-relative paths; there is no change status marker.
 - The file list remains narrow; document content receives most horizontal space.
-- Text files show their current content.
+- Text files show their current content; Markdown files render as formatted documents with the
+  same bounded preview and `load full` action.
 - Binary files show path and size.
 - Large files show preview limits and a deliberate `load full` action.
 - The context path is selectable terminal text; clipboard integration remains terminal-owned.
@@ -325,7 +326,7 @@ Files mode is available whenever useful; editor actions appear only at a paused 
 
 - File order: lexical project-relative path.
 - Show file count and the declared feature directory.
-- Text files show their current content; there is no diff view.
+- Text files show their current content; Markdown files render formatted; there is no diff view.
 - `/` filters feature paths.
 - Empty state: `No feature files to review yet`.
 - Undeclared feature directory state: a persistent error with the `.specify/feature.json` guidance.
