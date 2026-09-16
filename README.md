@@ -75,6 +75,18 @@ workflow-cockpit --help
 Keep this environment active when using the commands below. The repository is named
 `spec-kit-workflow-cockpit`; the Python distribution and terminal command are `workflow-cockpit`.
 
+To install without cloning, pull the package straight from the repository:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install "git+https://github.com/markuswondrak/spec-kit-workflow-cockpit.git"
+workflow-cockpit --help
+```
+
+Pin a revision for reproducibility by appending `@<ref>` to the URL, for example
+`...workflow-cockpit.git@main` or a commit hash.
+
 To build and install a wheel instead, start from the checkout in an activated environment:
 
 ```bash
