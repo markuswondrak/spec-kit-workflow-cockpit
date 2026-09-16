@@ -12,5 +12,6 @@ rejected. The set is indexed from [§9 Architecture Decisions](../architecture/0
 | [0005](0005-preallocated-run-identity.md) | Run identity is preallocated and passed via `SPECKIT_WORKFLOW_RUN_ID` | Accepted |
 | [0006](0006-signal-only-live-group.md) | A process group is signalable only while its owned child is verified live | Accepted |
 | [0007](0007-effective-definition-launch-model.md) | The launch model is the effective base-plus-overlay definition | Accepted |
+| [0008](0008-install-run-context-skill.md) | The run-context skill installs into the project integration at startup | Accepted |
 
 An ADR test asserts every file here is listed and every listed ADR resolves to a file.

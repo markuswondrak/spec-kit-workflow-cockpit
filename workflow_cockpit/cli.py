@@ -12,6 +12,7 @@ from .bootstrap.compatibility import Compatibility
 from .bootstrap.discovery import ProjectDiscovery, ProjectDiscoveryError
 from .bootstrap.preflight import Preflight
 from .services.git import GitService
+from .services.skill_install import SkillInstaller
 from .session.cockpit_session import CockpitSession
 from .session.dependencies import CockpitEnvironment, CockpitServices
 from .styling.resolver import resolve_style
@@ -77,6 +78,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     style = resolve_style(project.root, override=args.style)
     if style.fallback_reason:
         _LOG.warning("style fallback: %s", style.fallback_reason)
+
+    install = SkillInstaller(project.root).install()
+    _LOG.log(
+        logging.INFO if install.ok else logging.WARNING,
+        "run-context skill %s: %s",
+        install.action,
+        install.relative or install.reason,
+    )
 
     CockpitApp(preflight, session_factory, style=style).run()
     return 0

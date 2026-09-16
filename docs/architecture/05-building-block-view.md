@@ -34,7 +34,8 @@ flowchart TB
 
 | Component | Responsibility |
 |---|---|
-| `cli` | `workflow-cockpit` entry point, argument parsing (`--project`), app startup; no config file. |
+| `cli` | `workflow-cockpit` entry point, argument parsing (`--project`), skill installation, app startup; no config file. |
+| `SkillInstaller` | Copy the bundled run-context skill into the project integration's skills directory at start; skip an existing directory; never fatal. |
 | `ProjectDiscovery` | Locate the nearest Spec Kit project root from the current directory. |
 | `Preflight` | Validate platform, Git worktree with `HEAD`, project initialization, and prerequisites with actionable errors. |
 | `Compatibility` | Resolve and retain one `specify` executable; enforce `>=1.0,<2.0` and run non-mutating capability probes. |
@@ -97,7 +98,7 @@ flowchart TB
 | `TemplateRepository` | Data-only discovery of built-in and project-local templates; deterministic name/alias index. |
 | `IntegrationDescriptor` | Tolerant read of `.specify/integration.json` `default_integration`; never raises. |
 | `StylingResolver` | Resolve override -> integration -> `cockpit` default, with a non-fatal fallback notice. |
-| `cockpit-skill` | Markdown skill for a user-chosen external agent; consumes only the context-index path. |
+| `cockpit-skill` | Markdown skill for a user-chosen external agent; consumes only the context-index path; installed into the project integration at start. |
 
 Source lives in `workflow_cockpit/{bootstrap,engine,services,session,ui,styling,skills}/`. The visual
 prototype in `workflow_ui/prototype/` is not shipped.

@@ -19,6 +19,7 @@ section is the index; each ADR records context, the decision, consequences, and 
 | [0005](../decisions/0005-preallocated-run-identity.md) | Run identity is preallocated and passed via `SPECKIT_WORKFLOW_RUN_ID`. |
 | [0006](../decisions/0006-signal-only-live-group.md) | A process group is signalable only while its owned child is verified live. |
 | [0007](../decisions/0007-effective-definition-launch-model.md) | The launch model is the effective base-plus-overlay definition. |
+| [0008](../decisions/0008-install-run-context-skill.md) | The run-context skill installs into the project integration at startup. |
 
 ## How to add an ADR
 

@@ -42,5 +42,7 @@ instead of working around it.
 - `RunStateReader`, `WorkflowRegistry`, and `WorkflowDefinitionResolver` are the only readers of
   their persisted/catalog/definition files.
 - `ContextIndexWriter` is the only Cockpit writer inside `.specify/`.
+- `SkillInstaller` may write the shipped skill into the project's integration skills directory; it
+  never writes run state.
 
 See [§8 Crosscutting Concepts](08-crosscutting-concepts.md) for how these are enforced.

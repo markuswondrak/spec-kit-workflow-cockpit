@@ -28,7 +28,7 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Runway** | The scrollable control-flow graph with runtime overlay. | A linear step list. |
 | **Focus** | The single state-driven canvas (State, Files, Gate, Output, Outcome). | A fixed set of panes. |
 | **Context index** | The stable `current_run` Markdown index of authoritative sources. | A copied live snapshot. |
-| **Skill** | `cockpit-run-context`, invoked in a user-chosen external agent. | A Cockpit-managed process. |
+| **Skill** | `cockpit-run-context`, installed at start into the project integration's skills directory and invoked in a user-chosen external agent. | A Cockpit-managed process. |
 | **Overlay** | An enabled modification applied to a workflow definition before resolution. | A theme or styling template. |
 | **Control Flow Graph** | The declared nodes, edges, branches, loops, and gates of a workflow. | Runtime status. |
 | **Story slice** | A vertical implementation slice (`S01`-`S10`) tracked as a GitHub issue. | An epic (`E01`). |

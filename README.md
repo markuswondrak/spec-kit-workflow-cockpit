@@ -122,6 +122,23 @@ not check agent authentication or whether all workflow commands are installed.
 To target a project from elsewhere, pass `--project /path/to/project`. To use a particular engine
 installation, pass `--specify /path/to/specify`. Both options also work with `--check`.
 
+### Run Context for Your Agent
+
+At start, Cockpit installs its bundled `cockpit-run-context` skill into your project's agent so it
+can read the current run. The destination follows `.specify/integration.json`:
+
+| Integration | Installed to |
+|---|---|
+| `claude` | `.claude/skills/cockpit-run-context/SKILL.md` |
+| `github-copilot` | `.github/skills/cockpit-run-context/SKILL.md` |
+| `opencode` | `.opencode/skills/cockpit-run-context/SKILL.md` |
+| other / undeclared | `.agents/skills/cockpit-run-context/SKILL.md` |
+
+An existing skill directory is left untouched, so local edits are never overwritten. `--check` does
+not install anything. The installed file is an ordinary worktree change; commit or ignore it as you
+prefer. The skill reads the stable index at `.specify/workflows/runs/current_run`, which Cockpit
+rewrites after each Start.
+
 ### Try the Bundled Lean Flow
 
 The repository includes a workflow for developing changes with specification and plan review gates:

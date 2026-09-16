@@ -15,6 +15,7 @@ sequenceDiagram
     participant R as run files
     U->>C: workflow-cockpit [--project PATH]
     C->>C: discover root, preflight, compatibility
+    C->>C: install run-context skill into the project integration
     C->>C: list workflows, present inputs
     U->>C: Start
     C->>C: generate run ID, verify run dir absent
@@ -23,8 +24,9 @@ sequenceDiagram
     S->>R: write state.json / inputs.json / log.jsonl
 ```
 
-A dirty worktree warns but does not block Start. The run ID is allocated before spawn and passed
-through `SPECKIT_WORKFLOW_RUN_ID`; directory scanning never claims ownership.
+Skill installation happens only for a real TUI start, not `--check`. A dirty worktree warns but does
+not block Start. The run ID is allocated before spawn and passed through `SPECKIT_WORKFLOW_RUN_ID`;
+directory scanning never claims ownership.
 
 ## Observe
 
