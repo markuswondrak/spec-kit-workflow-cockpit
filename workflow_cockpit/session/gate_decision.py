@@ -93,8 +93,8 @@ def validate_shape(
         return ShapeSupport(
             False,
             StdinPolicy.DEVNULL,
-            f"Interactive gates are not verified for specify {version}; this workflow "
-            "would be undecidable. Upgrade or use a workflow with verdict_input gates.",
+            f"Could not determine the specify version from {version!r}; interactive gates "
+            "cannot be mapped. Reinstall a supported CLI or use verdict_input gates.",
         )
     for node in non_verdict:
         if _nested_in_parallel(graph, node):
@@ -288,8 +288,8 @@ class GateDecisionCoordinator:
     ) -> str:
         if self._contract is None:
             return (
-                f"Interactive prompt readiness is not verified for specify {self._version}; "
-                "only Abort is available."
+                f"The specify version {self._version!r} could not be mapped to an interactive "
+                "prompt; only Abort is available."
             )
         if not state.complete or state.status != "running":
             return "The engine is not waiting at this gate; only Abort is available."

@@ -5,28 +5,27 @@ from packaging.version import Version
 from workflow_cockpit.engine.interactive_contract import (
     PromptContract,
     resolve_contract,
-    verified_releases,
 )
 
 
 class ResolveContractTests(unittest.TestCase):
-    def test_released_version_resolves_by_exact_identity(self):
+    def test_supported_versions_resolve_to_the_recorded_contract(self):
+        for version in ("1.0.5", "1.0.5.dev0", "1.0.6", "1.0.6.dev0", "1.0.6.post1", "1.0.6+local"):
+            with self.subTest(version=version):
+                contract = resolve_contract(version)
+                self.assertIsNotNone(contract)
+                self.assertEqual(contract.strategy, "index")
+                self.assertEqual(contract.terminator, b"\n")
+
+    def test_released_version_parses_version_object(self):
         contract = resolve_contract(Version("1.0.6"))
         self.assertIsNotNone(contract)
         self.assertEqual(contract.release, (1, 0, 6))
-        self.assertEqual(contract.strategy, "index")
-        self.assertEqual(contract.terminator, b"\n")
 
-    def test_dev_version_resolves_by_exact_identity(self):
-        contract = resolve_contract("1.0.6.dev0")
-        self.assertIsNotNone(contract)
-        self.assertEqual(contract.release, (1, 0, 6))
-
-    def test_unverified_versions_are_none_not_a_guess(self):
-        for version in ("1.0.5", "2.0.0", "1.0.6.dev1", "1.0.6.post1", "1.0.6+local", "not-a-version"):
+    def test_unparseable_version_is_none(self):
+        for version in ("not-a-version", None, ""):
             with self.subTest(version=version):
                 self.assertIsNone(resolve_contract(version))
-        self.assertNotIn(Version("9.9.9"), verified_releases())
 
 
 class MapChoiceTests(unittest.TestCase):

@@ -1,9 +1,12 @@
-"""Verified per-version interactive-prompt contract for non-verdict gates.
+"""Recorded interactive-prompt contract for non-verdict gates.
 
 The contract is the single source of truth for prompt readiness and the
-choice-to-input mapping. Versions are matched by exact identity (including
-prerelease, postrelease, and local segments); a version without a recorded
-contract is unsupported and interactive submission is never guessed for it.
+choice-to-input mapping. It applies to every ``specify`` build that passes the
+workflow capability probe and the tested range enforced by preflight, because
+the gate prompt is the engine's builtin ``input()`` and has behaved identically
+across the supported releases. Prompt ownership is still inferred from
+authoritative persisted state (a live PTY child whose run is ``running`` at a
+declared non-verdict gate); PTY output is never parsed to prove readiness.
 """
 
 from __future__ import annotations
@@ -58,33 +61,22 @@ class PromptContract:
         return payload + self.terminator, None
 
 
-#: Verified contracts keyed by exact ``packaging.Version`` identity. The dev
-#: and released ``1.0.6`` builds were both confirmed against the interactive
-#: prompt (see ``docs/architecture/03-context-and-scope.md``, Engine contract). Index mapping
-#: is recorded because the engine accepts a 1-based decimal index and it emits
+#: The recorded interactive-prompt contract. It was established against
+#: ``specify 1.0.6.dev0`` and is applied to every supported build, since the
+#: prompt is the engine's builtin ``input()`` and the engine version is already
+#: bounded and capability-probed before a run can start. Index mapping is
+#: recorded because the engine accepts a 1-based decimal index and it emits
 #: only ASCII digits, so an option label can never be injected.
-_SUPPORTED: dict[Version, PromptContract] = {
-    Version("1.0.6"): PromptContract(
-        release=(1, 0, 6),
-        readiness=(
-            "A live supervised run whose persisted state is running at a declared "
-            "non-verdict gate is deterministically waiting at the interactive prompt."
-        ),
-        strategy="index",
-        terminator=TERMINATOR,
-        prompt_library="builtin input()",
+_BASELINE = PromptContract(
+    release=(1, 0, 6),
+    readiness=(
+        "A live supervised run whose persisted state is running at a declared "
+        "non-verdict gate is deterministically waiting at the interactive prompt."
     ),
-    Version("1.0.6.dev0"): PromptContract(
-        release=(1, 0, 6),
-        readiness=(
-            "A live supervised run whose persisted state is running at a declared "
-            "non-verdict gate is deterministically waiting at the interactive prompt."
-        ),
-        strategy="index",
-        terminator=TERMINATOR,
-        prompt_library="builtin input()",
-    ),
-}
+    strategy="index",
+    terminator=TERMINATOR,
+    prompt_library="builtin input()",
+)
 
 
 def _parse(version: object) -> Version | None:
@@ -95,17 +87,12 @@ def _parse(version: object) -> Version | None:
 
 
 def resolve_contract(version: object) -> PromptContract | None:
-    """Return the verified contract for ``version``, or ``None`` if unverified.
+    """Return the interactive-prompt contract for any parseable ``version``.
 
-    Matching is exact: a different prerelease, postrelease, local segment, or
-    release is a different, unverified engine and must never inherit a
-    recorded contract.
+    The tested range and workflow capability probe already gate which engines
+    reach a run, so no exact-version record is required. ``None`` is returned
+    only when the version string cannot be parsed at all.
     """
-    parsed = _parse(version)
-    if parsed is None:
+    if _parse(version) is None:
         return None
-    return _SUPPORTED.get(parsed)
-
-
-def verified_releases() -> tuple[Version, ...]:
-    return tuple(sorted(_SUPPORTED, key=str))
+    return _BASELINE

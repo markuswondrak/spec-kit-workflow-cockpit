@@ -20,6 +20,7 @@ section is the index; each ADR records context, the decision, consequences, and 
 | [0006](../decisions/0006-signal-only-live-group.md) | A process group is signalable only while its owned child is verified live. |
 | [0007](../decisions/0007-effective-definition-launch-model.md) | The launch model is the effective base-plus-overlay definition. |
 | [0008](../decisions/0008-install-run-context-skill.md) | The run-context skill installs into the project integration at startup. |
+| [0009](../decisions/0009-universal-interactive-contract.md) | The interactive gate contract applies to any workflow-capable engine. |
 
 ## How to add an ADR
 

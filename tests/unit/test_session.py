@@ -409,13 +409,12 @@ class InteractiveSessionTests(unittest.TestCase):
         session.start({"spec": "search"})
         self.assertIs(self.supervisor.stdin_policy, StdinPolicy.DEVNULL)
 
-    def test_unverified_version_is_rejected_before_start(self):
+    def test_unsupported_version_uses_the_recorded_contract(self):
         session = self.make_session("1.0.5")
         session.select("demo")
-        self.assertIn("not verified", session.compatibility_error)
-        with self.assertRaisesRegex(SessionError, "not verified"):
-            session.start({"spec": "search"})
-        self.assertIsNone(self.supervisor.started_argv)
+        self.assertEqual(session.compatibility_error, "")
+        session.start({"spec": "search"})
+        self.assertIs(self.supervisor.stdin_policy, StdinPolicy.PTY)
 
     def test_live_non_verdict_gate_is_ready(self):
         session, _ = self._start_live_gate()

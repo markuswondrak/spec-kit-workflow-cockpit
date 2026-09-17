@@ -286,12 +286,12 @@ class GateCoordinatorInteractiveTests(unittest.TestCase):
         self.assertEqual(gate.state, GateState.BLOCKED)
         self.assertIn("interactive prompt", gate.reason)
 
-    def test_unverified_version_blocks(self):
+    def test_any_supported_version_uses_the_recorded_contract(self):
         gate = self.make(version="1.0.5").project(
             state=live_state(), run_id="run-1", condition=self._live(), gate_attempt=1
         )
-        self.assertEqual(gate.state, GateState.BLOCKED)
-        self.assertIn("not verified", gate.reason)
+        self.assertEqual(gate.state, GateState.READY)
+        self.assertEqual(gate.options, ("approve", "reject"))
 
     def test_watch_expiry_marks_unverified_and_stays_consumed(self):
         coordinator = self.make()
@@ -396,10 +396,10 @@ class ShapeValidationTests(unittest.TestCase):
         self.assertTrue(support.ok)
         self.assertEqual(support.stdin, StdinPolicy.PTY)
 
-    def test_unverified_version_is_rejected(self):
+    def test_any_supported_version_enables_interactive_pty(self):
         support = validate_shape(graph_for(INTERACTIVE_STEPS), "1.0.5")
-        self.assertFalse(support.ok)
-        self.assertIn("not verified", support.error)
+        self.assertTrue(support.ok)
+        self.assertEqual(support.stdin, StdinPolicy.PTY)
 
     def test_mixed_gates_are_rejected(self):
         steps = (

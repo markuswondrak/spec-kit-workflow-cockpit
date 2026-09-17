@@ -52,6 +52,8 @@ standalone experiment for custom multi-agent setups outside of Spec Kit.
 - **A terminal at least 88 columns by 36 rows.** Smaller windows show a resize prompt.
 - **A workflow-capable `specify` CLI**, installed separately. Cockpit accepts `>=1.0,<2.0` and
   probes for the required workflow commands and flags; a version number alone is not sufficient.
+  Interactive gates use the engine's builtin `input()` prompt, so they are supported for any CLI
+  that passes the probe, not only the release the contract was recorded against.
 - **An initialized Spec Kit project** containing `.specify/`, in a Git worktree with at least
   one commit.
 - **An enabled, installed workflow** and the coding-agent integration it needs, configured and

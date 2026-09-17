@@ -51,7 +51,8 @@ at `.specify/workflows/runs/current_run`.
 
 ## Engine contract
 
-Verified against `specify 1.0.6.dev0`; every row is covered by a Cockpit test or a code reference.
+Recorded against `specify 1.0.6.dev0` and applied to every build that passes the range check and
+workflow capability probe; every row is covered by a Cockpit test or a code reference.
 
 - **Version.** `specify --version` prints `specify <pep440>`. Tested range `>=1.0,<2.0`; prereleases
   in range are accepted, `0.16.1` and `2.0.0` are refused. Probes are non-mutating:
@@ -64,8 +65,9 @@ Verified against `specify 1.0.6.dev0`; every row is covered by a Cockpit test or
   `state.json`/`inputs.json` (temp file + `os.replace`) and append-only `log.jsonl`. Cockpit
   refuses to spawn when the run directory already exists.
 - **Gates.** `verdict_input` gates resume with `resume -i <name>=<choice> --json`; gates without it
-  are answered by one write to the managed PTY. The engine exposes no abort command, so Abort uses
-  signals.
+  are answered by one write to the managed PTY. The recorded prompt contract applies to any
+  supported engine, so interactive gates are not restricted to a single release. The engine exposes
+  no abort command, so Abort uses signals.
 
 Out of scope: workflow authoring/installation, built-in multi-run history, hosted services,
 launching or managing coding agents, notifications, localization, and native Windows.
