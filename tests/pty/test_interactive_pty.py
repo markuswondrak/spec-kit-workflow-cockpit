@@ -1,12 +1,19 @@
+import stat
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
+from packaging.version import Version
+
 from tests.support import requires_pty
 from workflow_cockpit.engine.pty_session import WriteOutcome
 from workflow_cockpit.engine.supervisor import EngineSupervisor, StdinPolicy
+from workflow_cockpit.services.graph import WorkflowDefinitionParser
+from workflow_cockpit.services.run_state import RunStateData
+from workflow_cockpit.services.snapshot import GateState
+from workflow_cockpit.session.gate_decision import GateDecisionCoordinator, GateDecisionError
 
 
 def wait_for(predicate, timeout=5.0):
@@ -55,6 +62,78 @@ class InteractivePtyTests(unittest.TestCase):
         supervisor.start("run-pty", [sys.executable, "-c", "print('done')"], stdin=StdinPolicy.PTY)
         self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
         self.assertIs(supervisor.write_input(b"approve\n"), WriteOutcome.NOT_WRITTEN)
+
+
+@requires_pty
+class AdoptedInteractiveGateTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / ".specify" / "workflows" / "runs" / "existing").mkdir(parents=True)
+        self.result = self.root / "adopted-input.txt"
+        self.script = self.root / "fake-resume"
+        self.script.write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "print('gate prompt', flush=True)\n"
+            f"open({str(self.result)!r}, 'w').write(sys.stdin.readline().strip())\n",
+            encoding="utf-8",
+        )
+        self.script.chmod(self.script.stat().st_mode | stat.S_IEXEC)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_adopted_interactive_gate_spawns_once_and_writes_once(self):
+        supervisor = EngineSupervisor(self.script, self.root)
+        supervisor.bind_existing("existing")
+        graph = WorkflowDefinitionParser().parse(
+            (
+                {"id": "prepare", "command": "demo.prepare"},
+                {
+                    "id": "review",
+                    "type": "gate",
+                    "message": "Review it",
+                    "options": ["approve", "reject"],
+                    "on_reject": "skip",
+                },
+                {"id": "finish", "command": "demo.finish"},
+            )
+        )
+        state = RunStateData(status="paused", current_step_id="review")
+        coordinator = GateDecisionCoordinator(
+            graph=graph,
+            supervisor=supervisor,
+            executable=self.script,
+            version=Version("1.0.6"),
+            clock=time.monotonic,
+            adopted=True,
+        )
+        condition = supervisor.condition()
+        gate = coordinator.project(
+            state=state, run_id="existing", condition=condition
+        )
+        self.assertEqual(gate.state, GateState.READY)
+        coordinator.submit(
+            choice="approve",
+            token=gate.token,
+            state=state,
+            run_id="existing",
+            condition=condition,
+        )
+        self.assertTrue(
+            wait_for(lambda: self.result.exists() and self.result.read_text() == "1")
+        )
+        # The reserved attempt is consumed: no second resume or write.
+        with self.assertRaises(GateDecisionError):
+            coordinator.submit(
+                choice="reject",
+                token=gate.token,
+                state=state,
+                run_id="existing",
+                condition=supervisor.condition(),
+            )
+        supervisor.close()
 
 
 if __name__ == "__main__":

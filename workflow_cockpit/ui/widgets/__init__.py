@@ -74,16 +74,19 @@ class HeaderRail(Vertical):
         branch = snapshot.branch or "unknown"
         elapsed = _elapsed(snapshot)
         run = snapshot.abbreviated_run_id or "—"
-        self.query_one("#identity", Static).update(
-            _text(
-                ("  BRANCH ", palette.fog),
-                (branch, palette.paper),
-                ("   /   ELAPSED ", palette.fog),
-                (elapsed, palette.paper),
-                ("   /   RUN ", palette.fog),
-                (run, palette.fog),
-            )
-        )
+        parts = [
+            ("  BRANCH ", palette.fog),
+            (branch, palette.paper),
+            ("   /   ELAPSED ", palette.fog),
+            (elapsed, palette.paper),
+            ("   /   RUN ", palette.fog),
+            (run, palette.fog),
+        ]
+        if snapshot.adopted:
+            parts.extend([("   /   ", palette.fog), ("ADOPTED", f"bold {palette.hold}")])
+        elif snapshot.read_only:
+            parts.extend([("   /   ", palette.fog), ("VIEW ONLY", f"bold {palette.cold}")])
+        self.query_one("#identity", Static).update(_text(*parts))
 
     def on_mount(self) -> None:
         self.update_style()

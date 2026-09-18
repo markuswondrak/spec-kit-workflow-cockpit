@@ -10,6 +10,7 @@ from workflow_cockpit.engine.supervisor import (
     EngineSupervisor,
     StdinPolicy,
     SupervisorError,
+    build_interactive_resume_argv,
     build_resume_argv,
 )
 
@@ -205,6 +206,63 @@ class SupervisorTests(unittest.TestCase):
         finally:
             supervisor.abort()
             supervisor.close()
+
+
+@requires_posix
+class BindExistingTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / ".specify" / "workflows" / "runs" / "existing").mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_bind_existing_spawns_nothing(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.bind_existing("existing")
+        self.assertEqual(supervisor.run_id, "existing")
+        self.assertIsNone(supervisor.started_at)
+        self.assertFalse(supervisor.verify_live())
+        self.assertTrue(supervisor.condition().reaped)
+
+    def test_bind_existing_refuses_missing_directory(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        with self.assertRaises(SupervisorError):
+            supervisor.bind_existing("absent")
+
+    def test_bind_existing_refuses_after_start(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.start("run-1", [sys.executable, "-c", "print('x')"])
+        try:
+            with self.assertRaises(SupervisorError):
+                supervisor.bind_existing("existing")
+        finally:
+            supervisor.close()
+
+    def test_start_after_bind_is_refused(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.bind_existing("existing")
+        with self.assertRaises(SupervisorError):
+            supervisor.start("run-2", [sys.executable, "-c", "print('x')"])
+
+    def test_resume_after_bind_runs_the_child(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.bind_existing("existing")
+        supervisor.resume("existing", [sys.executable, "-c", "print('resumed')"])
+        self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+        self.assertIn("resumed", supervisor.output_lines)
+
+    def test_abort_after_bind_sends_no_signal(self):
+        supervisor = EngineSupervisor(Path(sys.executable), self.root)
+        supervisor.bind_existing("existing")
+        result = supervisor.abort()
+        self.assertFalse(result.signalled)
+        self.assertTrue(result.reaped)
+
+    def test_interactive_resume_argv(self):
+        argv = build_interactive_resume_argv(Path("/usr/bin/specify"), "run-1")
+        self.assertEqual(argv, ["/usr/bin/specify", "workflow", "resume", "run-1"])
 
 
 if __name__ == "__main__":

@@ -83,6 +83,11 @@ def build_resume_argv(
     ]
 
 
+def build_interactive_resume_argv(executable: Path, run_id: str) -> list[str]:
+    """Interactive resume: no verdict input; the choice is written over the PTY."""
+    return [str(executable), "workflow", "resume", run_id]
+
+
 class EngineSupervisor:
     """Own one engine child under a PTY and its own process group."""
 
@@ -177,6 +182,22 @@ class EngineSupervisor:
                     f"Run directory already exists for {run_id!r}; refusing to reuse it."
                 )
             self._spawn(run_id, argv, env, command_kind="run", stdin=stdin)
+
+    def bind_existing(self, run_id: str) -> None:
+        """Claim an existing run ID without spawning, enabling a later resume.
+
+        Refuses when this supervisor already owns or owned a process, or when
+        the run directory does not exist. No process is spawned and no run file
+        is written here (FR-007, FR-009).
+        """
+        with self._lock:
+            if self._run_id is not None or self._proc is not None or self._reaped_event.is_set():
+                raise SupervisorError("This supervisor has already owned a run.")
+            if not self._run_dir(run_id).is_dir():
+                raise SupervisorError(f"Run directory does not exist for {run_id!r}.")
+            self._run_id = run_id
+            # No process is owned, so a later resume is legal immediately.
+            self._reaped_event.set()
 
     def resume(
         self,

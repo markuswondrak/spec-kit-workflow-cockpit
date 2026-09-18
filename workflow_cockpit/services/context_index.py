@@ -146,7 +146,9 @@ class ContextIndexWriter:
             "",
             "## Lifecycle ownership",
             "",
-            "- Workflow Cockpit alone starts, resumes, decides, and aborts this run.",
+            "- Workflow Cockpit alone owns this run: it starts a new run or adopts an existing",
+            "  paused run, then resumes, decides, and aborts it.",
+            "- An adopted run's launch-copy `workflow.yml` and persisted run files stay authoritative.",
             "- Never run `specify workflow run`, `specify workflow resume`, or any decision or",
             "  abort command. Inspection is read-only and safe.",
             f"- {SKILL_GUIDANCE}",
@@ -197,3 +199,22 @@ class ContextIndexWriter:
         except OSError as exc:
             raise ContextIndexError(f"Could not write the context index: {exc}") from exc
         return ContextIndex(path=index_path, relative=self.relative_path)
+
+    def clear_if_current(self, run_id: str) -> bool:
+        """Remove the index when it names ``run_id``; return whether it was removed.
+
+        Used after a run directory is deleted so the stable index never points at
+        a missing run. A missing or unreadable index is not an error.
+        """
+        try:
+            run_id = _validate_run_id(run_id)
+            text = self.index_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError, ContextIndexError):
+            return False
+        if f"- Run ID: `{run_id}`" not in text:
+            return False
+        try:
+            self.index_path.unlink()
+        except OSError:
+            return False
+        return True

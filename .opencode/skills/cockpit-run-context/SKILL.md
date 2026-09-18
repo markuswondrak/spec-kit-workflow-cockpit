@@ -51,7 +51,7 @@ approve/reject semantics the workflow does not declare.
 
 ## Lifecycle ownership
 
-Workflow Cockpit alone starts, resumes, decides, and aborts a run.
+Workflow Cockpit alone owns a run: it starts a new run or adopts an existing paused run, then resumes, decides, and aborts it.
 
 - Never invoke `specify workflow run`, `specify workflow resume`, or any gate
   decision or abort command. You are read-only with respect to the lifecycle.

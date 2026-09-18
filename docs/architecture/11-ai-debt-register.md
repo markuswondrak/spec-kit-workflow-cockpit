@@ -29,12 +29,13 @@ are known debt. They stay until fixed deliberately; no change may replicate them
   (`WORKFLOW_COCKPIT_REAL_SPECIFY`) and skip when it is unset.
 
 ### D-2: Source files over the 500-line limit
-- Location: `tests/unit/test_session.py` (531), `tests/support.py` (504)
+- Location: `tests/unit/test_session.py` (530)
 - Why it is debt: large files resist focused review and hide unrelated responsibilities; the
   project rule caps files at 500 lines.
 - Do not replicate: do not keep growing an over-limit file by appending cases.
 - Safe alternative: split by functional domain (for example one module per session concern) and
-  share fixtures from a smaller support module.
+  share fixtures from a smaller support module. `tests/support.py` was split this way: the doubles
+  moved to `tests/fakes.py`, and new session concerns go to `tests/unit/test_session_runs.py`.
 
 ### D-3: Prototype test module inside a package directory
 - Location: `workflow_ui/prototype/test_prototype.py`

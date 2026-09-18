@@ -5,6 +5,7 @@ from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.log_aggregator import StepTiming
 from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
+from workflow_cockpit.services.snapshot import RunSnapshot
 from workflow_cockpit.ui.view_model import DURATION_COLUMN, render_runway
 
 WORKFLOW = (
@@ -67,6 +68,14 @@ class RenderRunwayTests(unittest.TestCase):
         columns = [len(row.text) - DURATION_COLUMN for row in rows]
         self.assertEqual(columns[0], columns[1])
         self.assertIn("#3", rows[0].text)
+
+
+class SnapshotDefaultsTests(unittest.TestCase):
+    def test_adopted_defaults_to_false(self):
+        self.assertFalse(RunSnapshot(run_id="cockpit-1").adopted)
+
+    def test_read_only_defaults_to_false(self):
+        self.assertFalse(RunSnapshot(run_id="cockpit-1").read_only)
 
 
 if __name__ == "__main__":

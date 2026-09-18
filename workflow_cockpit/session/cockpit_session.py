@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import secrets
 import threading
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from ..engine.supervisor import StdinPolicy, build_run_argv
 from ..services.definition import (
     WorkflowDefinition,
-    definition_signature,
     inputs_to_argv,
-    normalized_signature,
     validate_inputs,
 )
 from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser, resolve_declared_id
@@ -23,36 +18,25 @@ from ..services.log_aggregator import RunLogAggregator
 from ..services.projection import GraphProjector
 from ..services.registry import WorkflowEntry
 from ..services.review import ReviewDocument, ReviewSnapshot
+from ..services.run_catalog import RunCatalog, RunDescriptor
+from ..services.run_claim import RunClaimStore
 from ..services.run_state import RunStateReader
-from ..services.snapshot import GateSnapshot, Outcome, OutcomeKind, RunSnapshot
+from ..services.run_store import RunStore
+from ..services.snapshot import RunSnapshot
+from .adoption import AdoptError, RunAdopter
 from .branch import BranchTracker
 from .dependencies import CockpitEnvironment, CockpitServices, EngineRuntime
 from .gate_decision import GateDecisionCoordinator, GateDecisionError, validate_shape
+from .identity import generate_run_id, owner_id
+from .lifecycle import check_launch_contract, classify_outcome, write_context_index
+from .lifecycle import combine as _combine
 
 #: Bounded post-write verification watch (about 40 ticks at the 250 ms cadence).
 SUBMISSION_WATCH_SECONDS = 10.0
 
 
-def _combine(*messages: str) -> str:
-    """Join distinct non-empty diagnostics in first-seen order."""
-    seen: list[str] = []
-    for message in messages:
-        if message and message not in seen:
-            seen.append(message)
-    return " ".join(seen)
-
-
 class SessionError(Exception):
     """Raised for invalid session lifecycle calls."""
-
-
-def generate_run_id(runs_dir: Path) -> str:
-    """Return a collision-resistant run ID whose directory does not exist."""
-    for _ in range(100):
-        candidate = f"cockpit-{secrets.token_hex(6)}"
-        if not (runs_dir / candidate).exists():
-            return candidate
-    raise SessionError("Could not allocate a unique run ID.")
 
 
 class CockpitSession:
@@ -81,6 +65,14 @@ class CockpitSession:
         self._clock = engine.clock
         self._context_path = ""
         self._context_error = ""
+        self._owner_id = owner_id()
+        self._claims = RunClaimStore(self.project_root)
+        self._catalog = RunCatalog(self.project_root, owner_id=self._owner_id, claim_store=self._claims)
+        self._adopter = RunAdopter(self.project_root, catalog=self._catalog, claims=self._claims)
+        self._run_store = RunStore(self.project_root, owner_id=self._owner_id, claims=self._claims)
+        self._adopted = False
+        self._read_only = False
+        self._inspect_run_id = ""
         self._definition: WorkflowDefinition | None = None
         self._reader: RunStateReader | None = None
         self._started = False
@@ -103,7 +95,12 @@ class CockpitSession:
 
     @property
     def run_id(self) -> str | None:
-        return self._supervisor.run_id
+        return self._inspect_run_id if self._read_only else self._supervisor.run_id
+
+    @property
+    def read_only(self) -> bool:
+        """True when this session is inspecting an existing run read-only."""
+        return self._read_only
 
     @property
     def definition(self) -> WorkflowDefinition | None:
@@ -131,8 +128,24 @@ class CockpitSession:
     def list_workflows(self) -> tuple[WorkflowEntry, ...]:
         return self.registry.list_runnable()
 
+    def list_existing_runs(self) -> tuple[RunDescriptor, ...]:
+        """Bounded, read-only discovery of existing runs in this project."""
+        return self._catalog.list_runs()
+
+    @property
+    def adopted(self) -> bool:
+        """True when this session bound an existing run instead of starting one."""
+        return self._adopted
+
     def select(self, workflow_id: str) -> WorkflowDefinition:
         definition = self.resolver.resolve(workflow_id)
+        self._activate_definition(definition)
+        return definition
+
+    def _activate_definition(
+        self, definition: WorkflowDefinition, *, adopted: bool = False, read_only: bool = False
+    ) -> None:
+        """Build the graph, gate projection, and coordinator for one definition."""
         self._definition = definition
         self._graph = WorkflowDefinitionParser().parse(definition.effective_steps)
         self._log_aggregator = RunLogAggregator(self._graph.declared_ids)
@@ -146,8 +159,54 @@ class CockpitSession:
             version=self.compatibility.version,
             clock=self._clock,
             watch_seconds=self._watch_seconds,
+            adopted=adopted,
+            read_only=read_only,
         )
-        return definition
+
+    def adopt(self, run_id: str) -> RunSnapshot:
+        """Bind an existing paused run without spawning the engine (FR-007/009)."""
+        if self._started:
+            raise SessionError("This session has already started a run.")
+        try:
+            binding = self._adopter.prepare(
+                run_id, self._owner_id, branch=self._branches.value
+            )
+        except AdoptError as exc:
+            raise SessionError(str(exc)) from exc
+        self._activate_definition(binding.definition, adopted=True)
+        try:
+            self._supervisor.bind_existing(run_id)
+        except Exception as exc:  # noqa: BLE001 - release the claim on any bind failure
+            self._claims.release(run_id, self._owner_id)
+            raise SessionError(str(exc)) from exc
+        self._reader = RunStateReader(self.project_root, run_id)
+        self._write_context_index(run_id)
+        self._started = True
+        self._adopted = True
+        return self.snapshot()
+
+    def inspect(self, run_id: str) -> RunSnapshot:
+        """Observe an existing run read-only without ownership or engine interaction."""
+        if self._started:
+            raise SessionError("This session has already started a run.")
+        try:
+            _descriptor, definition = self._adopter.prepare_inspect(run_id)
+        except AdoptError as exc:
+            raise SessionError(str(exc)) from exc
+        self._inspect_run_id = run_id
+        self._read_only = True
+        self._activate_definition(definition, read_only=True)
+        self._reader = RunStateReader(self.project_root, run_id)
+        self._started = True
+        return self.snapshot()
+
+    def delete_existing_run(self, run_id: str) -> None:
+        """Delete one stale run directory with explicit single-owner safety."""
+        protected = self.run_id if self._started else None
+        result = self._run_store.delete(run_id, protected_run_id=protected)
+        if not result.deleted:
+            raise SessionError(result.reason)
+        self._context_writer.clear_if_current(run_id)
 
     def validate(self, values: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
         if self._definition is None:
@@ -180,21 +239,13 @@ class CockpitSession:
 
     def _write_context_index(self, run_id: str) -> None:
         """Write the stable context index; failure is reported, never fatal."""
-        self._context_path = ""
-        self._context_error = ""
-        if self._definition is None:
-            return
-        try:
-            result = self._context_writer.write(
-                run_id=run_id,
-                definition=self._definition,
-                branch=self._branches.value,
-                executable=self.compatibility.executable,
-            )
-        except Exception as exc:  # noqa: BLE001 - context failure must not stop the run
-            self._context_error = f"Context index unavailable: {exc}"
-            return
-        self._context_path = result.relative
+        self._context_path, self._context_error = write_context_index(
+            self._context_writer,
+            run_id=run_id,
+            definition=self._definition,
+            branch=self._branches.value,
+            executable=self.compatibility.executable,
+        )
 
     @property
     def last_abort_result(self):
@@ -209,6 +260,8 @@ class CockpitSession:
     def abort(self) -> RunSnapshot:
         if not self._started:
             raise SessionError("No active run to abort.")
+        if self._read_only:
+            raise SessionError("Cannot abort a run viewed in read-only mode.")
         result = self._supervisor.abort()
         with self._lock:
             self._last_abort_result = result
@@ -230,18 +283,6 @@ class CockpitSession:
         timing = timings.get(declared_id)
         return timing.attempts if timing is not None else 0
 
-    def current_gate(self) -> GateSnapshot | None:
-        """The unified gate snapshot for the latest persisted state, if any."""
-        if not self._started or self._reader is None or self._coordinator is None:
-            return None
-        state = self._reader.read()
-        return self._coordinator.project(
-            state=state,
-            run_id=self.run_id,
-            condition=self._supervisor.condition(),
-            gate_attempt=self._gate_attempt(state),
-        )
-
     def submit_decision(self, choice: str, token: str | None) -> RunSnapshot:
         """Submit one confirmed declared gate choice through the coordinator.
 
@@ -251,6 +292,8 @@ class CockpitSession:
         """
         if not self._started or self._reader is None or self._coordinator is None:
             raise SessionError("No active run to decide.")
+        if self._read_only:
+            raise SessionError("Cannot submit decisions in read-only mode.")
         if self._supervisor.abort_requested:
             raise SessionError("This run was aborted and cannot resume in this session.")
         state = self._reader.read()
@@ -312,69 +355,17 @@ class CockpitSession:
             return "aborting" if not condition.reaped else "aborted"
         return persisted
 
-    def _check_contract(self) -> None:
-        """Compare the persisted workflow.yml with the launch model once complete."""
-        if self._contract_error is not None or self._definition is None:
-            return
-        run_id = self._supervisor.run_id
-        if not run_id:
-            return
-        path = self.runs_dir / run_id / "workflow.yml"
-        if not path.is_file():
-            return
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError):
-            return
-        if not isinstance(data, dict):
-            return
-        if normalized_signature(data) != definition_signature(self._definition):
-            self._contract_error = "The persisted workflow definition does not match the launch model."
-            self._supervisor.abort()
-
-    def _outcome(self, condition_reaped: bool, state=None) -> Outcome | None:
-        if self._contract_error is not None and condition_reaped:
-            return Outcome(
-                kind=OutcomeKind.FAILURE,
-                detail=self._contract_error,
-                engine_status="contract-error",
-            )
-        if self._supervisor.abort_requested and condition_reaped:
-            return Outcome(
-                kind=OutcomeKind.ABORT,
-                detail="Aborted by you. The engine is no longer running.",
-                engine_status="aborted",
-            )
-        if not condition_reaped:
-            return None
-        persisted = state.status if state else "initializing"
-        if persisted == "completed":
-            return Outcome(kind=OutcomeKind.SUCCESS, engine_status=persisted)
-        if persisted in ("failed", "aborted"):
-            return Outcome(
-                kind=OutcomeKind.FAILURE,
-                detail=(state.error if state and state.error else f"Engine status: {persisted}"),
-                step_id=state.current_step_id if state else None,
-                engine_status=persisted,
-            )
-        if persisted == "paused":
-            return None
-        return Outcome(
-            kind=OutcomeKind.FAILURE,
-            detail="The engine process exited without a terminal run state.",
-            step_id=state.current_step_id if state else None,
-            engine_status=persisted,
-        )
-
     def snapshot(self) -> RunSnapshot:
-        if self._started:
-            self._check_contract()
+        run_id = self.run_id or ""
+        if self._started and not self._read_only and self._contract_error is None and self._definition and run_id:
+            reason = check_launch_contract(self._definition, self.runs_dir / run_id, self._supervisor)
+            if reason is not None:
+                self._contract_error = reason
         condition = self._supervisor.condition()
         with self._lock:
             if condition.reaped and self._ended_at is None:
                 self._ended_at = self._clock()
             started = self._started
-        run_id = self._supervisor.run_id or ""
         if not started:
             return RunSnapshot(run_id=run_id)
 
@@ -382,7 +373,14 @@ class CockpitSession:
         # aggregate, and the supervisor probe never serialize a decision.
         state = self._reader.read() if self._reader else None
         persisted = state.status if state else "initializing"
-        outcome = self._outcome(condition.reaped, state)
+        outcome = classify_outcome(
+            contract_error=self._contract_error,
+            abort_requested=self._supervisor.abort_requested,
+            reaped=condition.reaped,
+            state=state,
+            owned_process=self._supervisor.started_at is not None,
+            read_only=self._read_only,
+        )
         timings: dict = {}
         aggregator_diag = ""
         if self._log_aggregator is not None and run_id:
@@ -477,6 +475,8 @@ class CockpitSession:
                 gate=gate,
                 review=self._review,
                 reviewing=self._reviewing,
+                adopted=self._adopted,
+                read_only=self._read_only,
                 stale=stale,
                 diagnostic=diagnostic,
                 context_path=self._context_path,
@@ -485,3 +485,7 @@ class CockpitSession:
 
     def close(self) -> None:
         self._supervisor.close()
+        if self._adopted and self.run_id:
+            # An adopted run this session owns releases its claim; a crash leaves
+            # the claim for liveness-based recovery (FR-013).
+            self._claims.release(self.run_id, self._owner_id)

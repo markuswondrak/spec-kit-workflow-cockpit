@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Supersedes: -
+- Amended by: [0010](0010-adopt-paused-runs.md)
 
 ## Context
 

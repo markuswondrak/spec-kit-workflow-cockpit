@@ -143,6 +143,61 @@ class EngineContractTests(unittest.TestCase):
         self.assertEqual(final.outcome.kind.value, "success")
         self.assertEqual(final.engine_status, "completed")
 
+    def test_adopt_paused_run_and_submit_one_structured_decision(self):
+        import yaml
+
+        from tests.support import LINEAR_WORKFLOW
+
+        run_id = "paused-run"
+        run_dir = write_run(
+            self.root,
+            run_id,
+            status="paused",
+            current_step_id="review",
+            step_results={
+                "review": {
+                    "type": "gate",
+                    "output": {
+                        "message": "Review it",
+                        "options": ["approve", "reject"],
+                        "on_reject": "retry",
+                    },
+                }
+            },
+        )
+        (run_dir / "workflow.yml").write_text(
+            yaml.safe_dump(LINEAR_WORKFLOW, sort_keys=False), encoding="utf-8"
+        )
+
+        record = self.root / "adopt-resume-record.json"
+        supervisor = EngineSupervisor(self.fake, self.root)
+        result = replace(compatibility_result("1.0.6"), executable=self.fake)
+        env = {"COCKPIT_TEST_RECORD": str(record), "PATH": os.environ.get("PATH", "")}
+        with mock.patch.dict(os.environ, env, clear=False):
+            environment = CockpitEnvironment(self.root, result)
+            services = replace(CockpitServices.for_environment(environment), git=FakeGit())
+            session = CockpitSession(
+                environment,
+                services=services,
+                engine=EngineRuntime(supervisor=supervisor, clock=time.monotonic),
+            )
+            snapshot = session.adopt(run_id)
+            self.assertEqual(snapshot.run_id, run_id)
+            self.assertTrue(snapshot.adopted)
+            self.assertIsNone(supervisor.started_at)
+            gate = session.snapshot().gate
+            self.assertTrue(gate.selectable)
+            session.submit_decision("approve", gate.token)
+            self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+            final = session.snapshot()
+
+        payload = json.loads(record.read_text(encoding="utf-8"))
+        self.assertEqual(payload["argv"][:3], ["workflow", "resume", run_id])
+        self.assertIn("review_verdict=approve", payload["argv"])
+        self.assertIn("--json", payload["argv"])
+        self.assertEqual(final.outcome.kind.value, "success")
+        self.assertEqual(final.engine_status, "completed")
+
     def test_structured_resume_uses_exact_argv(self):
         record = self.root / "resume-record.json"
         supervisor = EngineSupervisor(self.fake, self.root)

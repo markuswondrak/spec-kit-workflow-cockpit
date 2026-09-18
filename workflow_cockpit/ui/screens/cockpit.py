@@ -200,6 +200,8 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
             (f"run {snapshot.run_id}\n", palette.cold),
             (f"status {snapshot.status}\n", palette.fog),
         ]
+        if snapshot.adopted:
+            parts.append(("ownership ADOPTED existing run\n", f"bold {palette.hold}"))
         parts.extend(self._context_lines(snapshot))
         self.query_one("#overview-content", Static).update(Text.assemble(*parts))
 
@@ -287,6 +289,14 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
     def _update_commands(self, snapshot) -> None:
         rail = self.query_one(CommandRail)
         stale = "STALE  /  " if snapshot.stale else ""
+        if snapshot.read_only:
+            if snapshot.terminal:
+                rail.set_actions(f"  {stale}enter / q  close", None)
+            elif snapshot.gate is not None:
+                rail.set_actions(f"  {stale}c  changes     s  state     l  output     q  quit", None)
+            else:
+                rail.set_actions(f"  {stale}l  output     ?  help     q  quit", None)
+            return
         if snapshot.terminal:
             rail.set_actions(f"  {stale}enter  close", None)
             return
@@ -424,7 +434,8 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
             event.stop()
 
     def action_abort(self) -> None:
-        if self._snapshot_now().terminal:
+        snapshot = self._snapshot_now()
+        if snapshot.terminal or snapshot.read_only:
             self.app.exit()
             return
         self.app.push_screen(
@@ -452,7 +463,8 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
             self.app.call_from_thread(self.app.exit)
 
     def action_quit(self) -> None:
-        if self._snapshot_now().terminal:
+        snapshot = self._snapshot_now()
+        if snapshot.terminal or snapshot.read_only:
             self.app.exit()
             return
         self.action_abort()

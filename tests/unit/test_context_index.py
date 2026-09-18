@@ -100,7 +100,7 @@ class ContextIndexTests(unittest.TestCase):
         writer = ContextIndexWriter(self.root)
         content = writer.render(run_id="cockpit-abc123", definition=self.definition)
         for rule in (
-            "Workflow Cockpit alone starts, resumes, decides, and aborts",
+            "Workflow Cockpit alone owns this run",
             "`specify workflow run`",
             "`specify workflow resume`",
             "Gate check before editing",
@@ -118,7 +118,7 @@ class CockpitSkillTests(unittest.TestCase):
         for rule in (
             "cockpit-run-context",
             ".specify/workflows/runs/current_run",
-            "Workflow Cockpit alone starts, resumes, decides, and aborts",
+            "Workflow Cockpit alone owns a run",
             "`specify workflow run`",
             "`specify workflow resume`",
             "paused",

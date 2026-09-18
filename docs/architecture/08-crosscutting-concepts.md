@@ -99,6 +99,11 @@ events = text.splitlines()
 `RunStateReader` keeps a bounded `log_tail` (default 80 records) and `EngineOutput` discards old
 lines with an explicit truncation marker. `log.jsonl` remains the complete source on disk.
 
+`RunCatalog` bounds a whole discovery pass: a maximum number of run directories plus per-file caps
+for `state.json`, `workflow.yml`, and the `current_run` pointer, each read with a before/after
+signature check so an in-progress write is reported unusable rather than read torn. Discovery and
+adoption preparation run in a `@work(thread=True)` worker, never on the render path.
+
 ## Immutable snapshots
 
 State crosses the presentation boundary as frozen, self-contained values. No shared mutable model
@@ -195,6 +200,7 @@ if template.name == "opencode":   # NO: behavior must not branch on the active t
 | Layer | Test type |
 |---|---|
 | Registry, definition resolution, graph parsing, projection, feature files, compatibility, deciders | Unit tests (`tests/unit/`) |
+| Run discovery, ownership claims, launch-copy parsing, adoption binding (no TUI, no engine internals) | Unit tests (`tests/unit/`) |
 | Screens, focus, modes, confirmation, outcomes, styling | Textual `App.run_test()` (`tests/textual/`) |
 | Executable/project/run identity, lifecycle, output, gate submission, cleanup, signals | Contract and PTY integration (`tests/contract/`, `tests/pty/`) |
 | Documentation structure, links, format, budget, ADRs | `tests/docs/` |

@@ -44,6 +44,14 @@ Checkbox > .toggle--button { color: $signal; background: $raised; }
 #workflows > .option-list--option { padding: 0 2; }
 #workflows > .option-list--option-highlighted { border-left: wide $signal; padding-left: 1; }
 #catalog-note { color: $fog; margin-top: 1; padding-left: 2; }
+#existing-runs-section { width: 100%; max-width: 90; height: auto; margin-top: 2; }
+#existing-runs { width: 100%; height: auto; max-height: 8; background: $deck;
+    border-left: solid $cold; color: $fog; }
+#existing-runs > .option-list--option { padding: 0 1; color: $fog; }
+#existing-runs > .option-list--option-highlighted { background: $raised; color: $paper; }
+#existing-runs:focus > .option-list--option-highlighted { background: $selection; color: $paper; }
+#existing-runs-note { color: $fog; margin-top: 1; padding-left: 2; }
+.configuring #existing-runs-section { display: none; }
 #workflow-empty { display: none; width: 100%; max-width: 90; min-height: 10; margin-top: 1; padding: 2 3;
     background: $deck; border-left: wide $hold; content-align: left middle; }
 #launch-detail { display: none; width: 100%; max-width: 90; height: auto; }

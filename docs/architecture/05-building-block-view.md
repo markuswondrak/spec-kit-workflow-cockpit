@@ -59,6 +59,10 @@ flowchart TB
 | `WorkflowDefinitionParser` | Turn the effective definition into declared control flow. |
 | `ControlFlowGraph` | Generic graph of nodes, edges, branches, loops, gates, and overlays. |
 | `RunStateReader` | Tolerant reads of independently written `state.json`, `inputs.json`, and `log.jsonl`; skip unchanged files while detecting atomic replacements. |
+| `RunCatalog` | Bounded, read-only discovery of `.specify/workflows/runs/` into `RunDescriptor`s; never infers status and imports no engine internals. |
+| `RunStore` | Delete one run directory under explicit single-owner safety: single path segment, no live owner, not the session's run, and not `running`/`initializing`. |
+| `RunClaimStore` | Read, acquire, and release the single ownership claim of a run; liveness and stale/PID-reuse detection never signals a process. |
+| `definition_from_launch_copy` | Build a `WorkflowDefinition` from the persisted launch-copy `workflow.yml`; authoritative for an adopted run's graph and gates. |
 | `GraphProjector` | Combine the static graph with runtime state into status, active path, attempts, and timings. |
 | `GitService` | Read `HEAD`, branch, and dirty state of the project worktree. |
 | `FeatureReviewService` | Resolve the declared feature directory; list files; detect binary, large, and Markdown files; read current content. |
@@ -69,8 +73,9 @@ flowchart TB
 
 | Component | Responsibility |
 |---|---|
-| `CockpitSession` | Presentation facade that composes services and exposes one `submit_decision(choice, token)` seam. |
-| `GateDecisionCoordinator` | Project every current declared gate into one transport-independent `GateSnapshot`; own opaque tokens and write-once reconciliation. |
+| `CockpitSession` | Presentation facade that composes services; starts a new run, adopts an existing one, inspects an existing run read-only, or deletes a stale one; exposes one `submit_decision(choice, token)` seam. |
+| `RunAdopter` | Orchestrate describe -> claim -> launch-copy definition for an existing paused run; binds identity and spawns nothing. |
+| `GateDecisionCoordinator` | Project every current declared gate into one transport-independent `GateSnapshot`; own opaque tokens and write-once reconciliation, including the single adopted resume. |
 | `PollingLoop` | Publish an immutable `RunSnapshot` on a 250 ms monotonic schedule. |
 | `RunSnapshot` | Immutable view of status, graph projection, gate, review data, output tail, and outcome. |
 | `SignalHandler` | On catchable `SIGINT`, `SIGHUP`, `SIGTERM`, attempt bounded best-effort abort without confirmation. |
@@ -81,7 +86,8 @@ flowchart TB
 |---|---|
 | `CockpitApp` | Textual application and screen routing. |
 | Screens | Preflight, Launch, Cockpit, Confirm, Help; a resize guard replaces the layout below 88 x 36. |
-| `HeaderRail` | Product, state, branch, elapsed, workflow, run ID. |
+| `HeaderRail` | Product, state, branch, elapsed, workflow, run ID, an `ADOPTED` marker for an adopted run, and a `VIEW ONLY` badge in inspect mode. |
+| `ExistingRunsList` | Compact, subordinate launch-screen list of discovered run descriptors with an explicit empty state. |
 | `Runway` | Scrollable control-flow graph with runtime overlay. |
 | `Focus` | State, Files, Gate, and Outcome surfaces showing feature-file content. |
 | `MarkdownDocumentView` | Read-only formatted rendering of Markdown feature files; other text keeps the plain viewer. |

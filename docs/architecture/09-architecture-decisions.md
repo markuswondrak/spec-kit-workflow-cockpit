@@ -21,6 +21,8 @@ section is the index; each ADR records context, the decision, consequences, and 
 | [0007](../decisions/0007-effective-definition-launch-model.md) | The launch model is the effective base-plus-overlay definition. |
 | [0008](../decisions/0008-install-run-context-skill.md) | The run-context skill installs into the project integration at startup. |
 | [0009](../decisions/0009-universal-interactive-contract.md) | The interactive gate contract applies to any workflow-capable engine. |
+| [0010](../decisions/0010-adopt-paused-runs.md) | A paused run may be adopted through an explicit single-owner claim. |
+| [0011](../decisions/0011-delete-run-directories.md) | A run directory may be deleted through explicit confirmation. |
 
 ## How to add an ADR
 

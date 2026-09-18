@@ -20,7 +20,13 @@ from pathlib import Path
 from ..engine.gate_decider import DecisionResult, InternalPtyDecider, VerdictInputDecider
 from ..engine.interactive_contract import PromptContract, resolve_contract
 from ..engine.pty_session import WriteOutcome
-from ..engine.supervisor import EngineSupervisor, ProcessCondition, StdinPolicy
+from ..engine.supervisor import (
+    EngineSupervisor,
+    ProcessCondition,
+    StdinPolicy,
+    SupervisorError,
+    build_interactive_resume_argv,
+)
 from ..services.graph import ControlFlowGraph, GraphNode, resolve_declared_id
 from ..services.run_state import RunStateData
 from ..services.snapshot import GateSnapshot, GateState
@@ -152,11 +158,16 @@ class GateDecisionCoordinator:
         clock: Callable[[], float],
         contract: PromptContract | None = None,
         watch_seconds: float = SUBMISSION_WATCH_SECONDS,
+        adopted: bool = False,
+        read_only: bool = False,
     ) -> None:
         self._graph = graph
         self._supervisor = supervisor
+        self._executable = Path(executable)
         self._version = version
         self._contract = resolve_contract(version) if contract is None else contract
+        self._adopted = adopted
+        self._read_only = read_only
         self._clock = clock
         self._watch_seconds = watch_seconds
         self._verdict_decider = VerdictInputDecider(executable, supervisor)
@@ -227,6 +238,15 @@ class GateDecisionCoordinator:
             # The run left the consumed attempt or began a new execution.
             self._attempt = None
         runtime_id = state.current_step_id or node.id
+        if self._read_only:
+            message = node.message or "Gate evidence is unavailable."
+            return self._blocked(
+                node,
+                runtime_id,
+                message,
+                node.options,
+                "View-only mode: gate decisions cannot be submitted.",
+            )
         if kind == "structured":
             return self._project_structured(state, node, runtime_id, condition, key)
         return self._project_interactive(state, node, runtime_id, condition, key)
@@ -291,10 +311,21 @@ class GateDecisionCoordinator:
                 f"The specify version {self._version!r} could not be mapped to an interactive "
                 "prompt; only Abort is available."
             )
-        if not state.complete or state.status != "running":
-            return "The engine is not waiting at this gate; only Abort is available."
         if condition.aborting:
             return "This run is aborting; only Abort is available."
+        if self._adopted:
+            # An adopted paused run has no live process until the single guarded
+            # resume is spawned on confirmation; a live resumed child is then
+            # treated exactly like a started interactive gate.
+            if state.status == "paused":
+                return ""
+            if state.status == "running" and condition.live and condition.stdin_pty:
+                return ""
+            if state.status == "running":
+                return "The engine is not waiting at this gate; only Abort is available."
+            return "The engine is not waiting at this gate; only Abort is available."
+        if not state.complete or state.status != "running":
+            return "The engine is not waiting at this gate; only Abort is available."
         if not condition.live:
             return "No live engine process is waiting at this gate; only Abort is available."
         if not condition.stdin_pty:
@@ -313,17 +344,13 @@ class GateDecisionCoordinator:
         if state.status != "paused":
             return declared_message, declared_options, ""
         if not isinstance(result, dict) or result.get("type") != "gate":
-            return (
-                declared_message,
-                declared_options,
-                "The persisted gate evidence is unavailable; only Abort is available.",
+            return declared_message, declared_options, (
+                "The persisted gate evidence is unavailable; only Abort is available."
             )
         output = result.get("output")
         if not isinstance(output, dict):
-            return (
-                declared_message,
-                declared_options,
-                "The persisted gate output is malformed; only Abort is available.",
+            return declared_message, declared_options, (
+                "The persisted gate output is malformed; only Abort is available."
             )
         raw_message = output.get("message")
         valid_message = isinstance(raw_message, str) and bool(raw_message)
@@ -355,6 +382,8 @@ class GateDecisionCoordinator:
         condition: ProcessCondition,
         gate_attempt: int,
     ) -> None:
+        if self._read_only:
+            raise GateDecisionError("Cannot submit decisions in view-only mode.")
         gate = self._project(state, run_id, condition, gate_attempt)
         if gate is None:
             raise GateDecisionError("The run is not at a declared gate.")
@@ -396,6 +425,17 @@ class GateDecisionCoordinator:
             )
         if self._pty_decider is None:
             return DecisionResult(WriteOutcome.NOT_WRITTEN, "Interactive submission is unavailable.")
+        if self._adopted and not self._supervisor.verify_live():
+            # Exactly one guarded resume; the PTY buffers the choice until the
+            # resumed prompt reads it. A spawn failure writes nothing.
+            try:
+                self._supervisor.resume(
+                    run_id,
+                    build_interactive_resume_argv(self._executable, run_id),
+                    stdin=StdinPolicy.PTY,
+                )
+            except SupervisorError as exc:
+                return DecisionResult(WriteOutcome.NOT_WRITTEN, str(exc))
         return self._pty_decider.submit(choice=choice, options=options)
 
     # -- snapshots -----------------------------------------------------

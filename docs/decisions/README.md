@@ -14,5 +14,7 @@ rejected. The set is indexed from [§9 Architecture Decisions](../architecture/0
 | [0007](0007-effective-definition-launch-model.md) | The launch model is the effective base-plus-overlay definition | Accepted |
 | [0008](0008-install-run-context-skill.md) | The run-context skill installs into the project integration at startup | Accepted |
 | [0009](0009-universal-interactive-contract.md) | The interactive gate contract applies to any workflow-capable engine | Accepted |
+| [0010](0010-adopt-paused-runs.md) | A paused run may be adopted through an explicit single-owner claim | Accepted |
+| [0011](0011-delete-run-directories.md) | A run directory may be deleted through explicit confirmation | Accepted |
 
 An ADR test asserts every file here is listed and every listed ADR resolves to a file.

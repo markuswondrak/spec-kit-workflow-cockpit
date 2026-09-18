@@ -26,6 +26,7 @@ class ConfirmScreen(ModalScreen[bool]):
         confirm_label: str = "Confirm",
         note: str = "",
         destructive: bool = False,
+        eyebrow: str | None = None,
     ) -> None:
         super().__init__()
         self.heading = heading
@@ -33,10 +34,11 @@ class ConfirmScreen(ModalScreen[bool]):
         self.confirm_label = confirm_label
         self.note = note
         self.destructive = destructive
+        self.eyebrow = eyebrow or ("LIFECYCLE / ABORT" if destructive else "CONFIRM")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="confirm-sheet", classes="danger" if self.destructive else ""):
-            yield Static("LIFECYCLE / ABORT" if self.destructive else "CONFIRM", classes="eyebrow")
+            yield Static(self.eyebrow, classes="eyebrow")
             yield Static(self.heading, id="confirm-heading")
             yield Static(self.effect, id="confirm-effect", markup=False)
             yield Static(self.note, classes="muted")

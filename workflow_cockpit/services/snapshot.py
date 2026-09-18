@@ -85,6 +85,10 @@ class RunSnapshot:
     gate: GateSnapshot | None = None
     review: ReviewSnapshot | None = None
     reviewing: bool = False
+    #: True when this session owns an existing run it did not start.
+    adopted: bool = False
+    #: True when this session is observing a run read-only without ownership.
+    read_only: bool = False
     #: Actionable description of the latest recoverable failure, if any. The UI
     #: renders it on the persistent error strip.
     diagnostic: str = ""

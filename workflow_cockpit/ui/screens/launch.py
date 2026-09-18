@@ -18,6 +18,7 @@ from ..widgets import ResizeGuard
 from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
 from .help import HelpScreen
+from .launch_runs import ExistingRunsList, LaunchRunsMixin
 
 LAUNCH_LOGO = r"""  ____ ___   ____ _  ______ ___ _____
  / ___/ _ \ / ___| |/ /  _ \_ _|_   _|
@@ -35,11 +36,12 @@ class WorkflowList(OptionList):
     ]
 
 
-class LaunchScreen(AdaptiveScreen):
+class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("escape", "back", "Workflows"),
         Binding("question_mark", "help", "Help"),
+        Binding("d", "delete_run", "Delete run"),
     ]
 
     def __init__(self, session, report=None) -> None:
@@ -49,6 +51,8 @@ class LaunchScreen(AdaptiveScreen):
         self.selected = 0
         self.configuring = False
         self._dirty_confirmed = False
+        self._pending_adopt: str | None = None
+        self._pending_delete: str | None = None
         self._definition = None
         try:
             self._entries = session.list_workflows()
@@ -82,6 +86,10 @@ class LaunchScreen(AdaptiveScreen):
                     )
                     yield WorkflowList(id="workflows")
                     yield Static(id="catalog-note")
+                with Vertical(id="existing-runs-section"):
+                    yield Static("02 / RESUME AN EXISTING RUN", classes="section-label")
+                    yield ExistingRunsList(id="existing-runs")
+                    yield Static(id="existing-runs-note")
                 yield Static(id="workflow-empty")
                 with Vertical(id="launch-detail"):
                     yield Static("02 / CONFIGURE RUN", id="detail-label", classes="section-label")
@@ -105,6 +113,7 @@ class LaunchScreen(AdaptiveScreen):
         root = getattr(getattr(self.session, "project_root", None), "__str__", lambda: "")()
         self.query_one("#identity", Static).update(Text.assemble(("  ", palette.fog), (root, palette.paper)))
         self._render_style_note()
+        self._load_existing_runs()
         listing = self.query_one("#workflows", OptionList)
         if self._registry_error:
             self._show_empty_state(
@@ -193,6 +202,10 @@ class LaunchScreen(AdaptiveScreen):
         flow = " -> ".join(step.id for step in definition.steps)
         self.query_one("#detail-flow", Static).update(Text.assemble((flow, palette.cold)))
         self.query_one("#workflow-picker").display = not self.configuring
+        try:
+            self.query_one("#existing-runs-section").display = not self.configuring
+        except NoMatches:
+            pass
         self.query_one("#launch-detail").display = self.configuring
         self.query_one("#launch-content").set_class(self.configuring, "configuring")
         await self._build_form(definition.presented_inputs)
@@ -265,10 +278,36 @@ class LaunchScreen(AdaptiveScreen):
         commands = self.query_one("#launch-commands", Static)
         if self.configuring:
             commands.update(" Tab / Shift+Tab  move     Enter  activate     Esc  workflows     ?  help     q  quit")
+            return
+        focused_runs = False
+        try:
+            focused_runs = self.query_one("#existing-runs", ExistingRunsList).has_focus
+        except NoMatches:
+            focused_runs = False
+        if focused_runs:
+            commands.update(
+                " Tab/Shift+Tab  sections     Up/Down or j/k  choose run     "
+                "Enter  adopt / inspect run     d  delete run     ?  help     q  quit"
+            )
         elif self._entries and not self._registry_error:
-            commands.update(" Up/Down or j/k  choose workflow     Enter  configure     ?  help     q  quit")
+            commands.update(
+                " Up/Down or j/k  choose workflow     Tab  existing runs     "
+                "Enter  configure     ?  help     q  quit"
+            )
         else:
             commands.update(" ?  help     q  quit")
+
+    def on_focus(self, event) -> None:
+        self._render_commands()
+
+    def on_blur(self, event) -> None:
+        self._render_commands()
+
+    def on_descendant_focus(self, event) -> None:
+        self._render_commands()
+
+    def on_descendant_blur(self, event) -> None:
+        self._render_commands()
 
     def _first_field_focus(self) -> None:
         form = self.query_one("#config-form", Vertical)
@@ -344,6 +383,9 @@ class LaunchScreen(AdaptiveScreen):
         self.app.exit()
 
     async def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        if event.option_list.id == "existing-runs":
+            self._render_commands()
+            return
         if event.option_list.id != "workflows":
             return
         self.selected = event.option_index
@@ -353,6 +395,8 @@ class LaunchScreen(AdaptiveScreen):
     async def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_list.id == "workflows":
             await self.configure()
+        elif event.option_list.id == "existing-runs":
+            self._select_existing_run(event.option_index)
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start":

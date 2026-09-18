@@ -14,6 +14,13 @@ is used differently in code, the code wins for behavior; this file wins for inte
 |---|---|---|
 | **Run** | One execution of one workflow in one project/worktree, identified by a run ID. | A Cockpit session, which owns exactly one run. |
 | **Cockpit session** | One `workflow-cockpit` process bound to one run. | Run history in `.specify/workflows/runs/`. |
+| **Run descriptor** | The bounded, read-only summary of a discovered run: run ID, workflow, persisted status, step, age, and usability. | Persisted `state.json`, which is the source it reads. |
+| **Adoptable run** | A discovered run whose persisted status is `paused`, with a launch copy and no conflicting live owner. | Every discovered paused run; one with a live foreign owner is not adoptable. |
+| **Viewable run** | A discovered run with readable `state.json` and a launch-copy definition, eligible for view-only inspection. | An adoptable run, which must additionally be `paused` and claimable. |
+| **Ownership claim** | The durable `.cockpit-owner.json` record naming the single Cockpit owner of a run, with liveness evidence. | The engine process group, which only the supervisor signals. |
+| **Adoption** | Binding a session and supervisor to an existing paused run without spawning the engine. | A new Start, which allocates a fresh run ID. |
+| **View-only inspection** | Observing an existing run's state, graph, and logs read-only without acquiring an ownership claim, binding a supervisor, or writing lifecycle state. | Adoption, which claims ownership and can decide gates. |
+| **Run deletion** | Removing one stale run directory from the launch screen after a destructive confirmation, refusing a live-owned, running, or currently open run. | Automatic pruning or engine cleanup; deletion is always explicit. |
 | **Gate** | A workflow-declared pause with a message and declared options. | A Cockpit confirmation dialog. |
 | **Decision** | The user's confirmed choice among a gate's declared options. | An Abort, which is a separate lifecycle action. |
 | **Verdict input** | A gate's declared `verdict_input` name, answered by structured `resume`. | The PTY fallback for gates without one. |

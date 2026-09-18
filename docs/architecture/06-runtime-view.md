@@ -26,7 +26,48 @@ sequenceDiagram
 
 Skill installation happens only for a real TUI start, not `--check`. A dirty worktree warns but does
 not block Start. The run ID is allocated before spawn and passed through `SPECKIT_WORKFLOW_RUN_ID`;
-directory scanning never claims ownership.
+directory scanning never claims ownership during Start. Adoption is the explicit alternative: a
+bounded catalog plus a single-owner claim (below).
+
+## Discover and adopt
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as cockpit
+    participant K as RunCatalog
+    participant J as RunClaimStore
+    participant R as run files
+    U->>C: open launch screen
+    C->>K: list_existing_runs (bounded, thread worker)
+    K->>R: read state.json / workflow.yml / current_run
+    K-->>C: RunDescriptor list (newest first, unusable reported)
+    U->>C: choose an adoptable paused run, confirm
+    C->>J: acquire ownership claim (atomic write)
+    J-->>C: acquired / held by live foreign owner (refused)
+    C->>R: build definition from launch-copy workflow.yml
+    C->>R: write current_run index for the adopted run
+    Note over C: no engine process is spawned
+    U->>C: confirm a gate decision
+    C->>R: exactly one resume (structured or guarded PTY)
+```
+
+Discovery is read-only and bounded by run count and per-file caps; a malformed run is reported
+unusable with a reason, never hidden or assigned an inferred status. Adoption binds the existing run
+ID and spawns nothing; a second live owner is refused and a stale claim from a crash is recovered
+without signalling any process.
+
+Alternatively, any usable run (including `running`, terminal, or foreign-owned runs) can be
+inspected read-only without acquiring an ownership claim, binding a supervisor, or writing
+`current_run`. In view-only mode, gate submission and abort are disabled.
+
+## Delete a stale run
+
+A confirmed delete on the launch screen calls `RunStore.delete`, which refuses a live-owned run, the
+session's current run, a `running`/`initializing` run, and any target that is not a direct child of
+`.specify/workflows/runs/`. On success it removes that one directory; `ContextIndexWriter` then clears
+the `current_run` index if it named the deleted run. No process is signalled and nothing is deleted
+without the confirmation ([ADR 0011](../decisions/0011-delete-run-directories.md)).
 
 ## Observe
 
