@@ -16,5 +16,6 @@ rejected. The set is indexed from [§9 Architecture Decisions](../architecture/0
 | [0009](0009-universal-interactive-contract.md) | The interactive gate contract applies to any workflow-capable engine | Accepted |
 | [0010](0010-adopt-paused-runs.md) | A paused run may be adopted through an explicit single-owner claim | Accepted |
 | [0011](0011-delete-run-directories.md) | A run directory may be deleted through explicit confirmation | Accepted |
+| [0012](0012-release-versioning.md) | The package version is single-sourced and releases are tag-driven from main | Accepted |
 
 An ADR test asserts every file here is listed and every listed ADR resolves to a file.

@@ -62,3 +62,10 @@ specify extension add --dev ./extensions/arc42
 
 The cockpit never modifies the workflow engine or imports its internals. Persisted run files are
 authoritative.
+
+## Releasing
+
+Maintainers cut releases from `main` by tagging `vMAJOR.MINOR.PATCH`. The version lives only in
+`workflow_cockpit/__init__.py`; `pyproject.toml` resolves it dynamically. The Release workflow
+re-verifies the tagged commit and publishes the artifacts with generated release notes. See
+[RELEASING.md](RELEASING.md) for the full flow and hotfix guidance.

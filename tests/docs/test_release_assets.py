@@ -1,5 +1,6 @@
 """Release metadata and contributor guidance contract tests."""
 
+import re
 import unittest
 
 try:
@@ -61,6 +62,43 @@ class ReleaseAssetTests(unittest.TestCase):
             "specify workflow add --dev ./workflows/lean-flow",
         ):
             self.assertIn(command, text)
+
+
+class ReleasePipelineTests(unittest.TestCase):
+    def test_package_version_is_single_sourced(self):
+        data = tomllib.loads(read(ROOT / "pyproject.toml"))
+        project = data["project"]
+        self.assertNotIn("version", project)
+        self.assertIn("version", project.get("dynamic", []))
+        self.assertEqual(
+            data["tool"]["setuptools"]["dynamic"]["version"],
+            {"attr": "workflow_cockpit.__version__"},
+        )
+        init = read(ROOT / "workflow_cockpit" / "__init__.py")
+        match = re.search(r'^__version__ = "([^"]+)"$', init, re.MULTILINE)
+        self.assertIsNotNone(match, "workflow_cockpit/__init__.py has no __version__")
+
+    def test_test_workflow_covers_supported_pythons_and_is_reusable(self):
+        text = read(ROOT / ".github" / "workflows" / "test.yml")
+        self.assertIn("workflow_call", text)
+        for version in ('"3.10"', '"3.11"', '"3.12"'):
+            self.assertIn(version, text)
+
+    def test_release_workflow_is_tag_driven_and_guarded(self):
+        text = read(ROOT / ".github" / "workflows" / "release.yml")
+        for marker in (
+            'tags: ["v*"]',
+            "uses: ./.github/workflows/test.yml",
+            "merge-base --is-ancestor",
+            "contents: write",
+            "--generate-notes",
+        ):
+            self.assertIn(marker, text)
+
+    def test_releasing_guide_exists_and_is_linked(self):
+        self.assertTrue((ROOT / "RELEASING.md").is_file())
+        for name in ("README.md", "CONTRIBUTING.md"):
+            self.assertIn("[RELEASING.md](RELEASING.md)", read(ROOT / name), name)
 
 
 if __name__ == "__main__":

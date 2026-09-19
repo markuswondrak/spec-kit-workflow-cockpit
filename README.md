@@ -234,13 +234,16 @@ For the rationale behind this documentation approach, read the
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, exact lint and test commands, artifact
-verification, and the preferred dogfooding workflow. Develop repository changes through the bundled
-Lean Flow and review its gates in Cockpit whenever practical.
+verification, and the preferred dogfooding workflow, and [RELEASING.md](RELEASING.md) to cut a
+release. Develop repository changes through the bundled Lean Flow and review its gates in Cockpit
+whenever practical.
 
 [CI](.github/workflows/test.yml) runs Ruff and the unit, Textual, contract, PTY, and documentation
-suites on Linux and macOS with Python 3.10 and 3.12. A dependent job builds the sdist and wheel,
-then checks installation in a fresh environment. WSL verification is run locally using the same
-quality commands in the contributor guide.
+suites on Linux and macOS with Python 3.10, 3.11, and 3.12. A dependent job builds the sdist and
+wheel, then checks installation in a fresh environment. A tag on `main` that matches the package
+version runs the [Release workflow](.github/workflows/release.yml), which re-verifies the tagged
+commit, builds the artifacts, and publishes a GitHub Release with generated notes. WSL verification
+is run locally using the same quality commands in the contributor guide.
 
 ## License
 

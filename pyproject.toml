@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "workflow-cockpit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Standalone Textual cockpit that owns one Spec Kit workflow run"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,6 +49,9 @@ test = [
 
 [project.scripts]
 workflow-cockpit = "workflow_cockpit.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "workflow_cockpit.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["workflow_cockpit*"]

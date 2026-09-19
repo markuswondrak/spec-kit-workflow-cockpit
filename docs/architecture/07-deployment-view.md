@@ -9,8 +9,9 @@
 
 The repository has one `pyproject.toml` declaring the `workflow-cockpit` console script, bounded
 Python/runtime dependencies, complete distribution metadata, a root MIT `LICENSE`, and packaged
-Textual CSS. `python -m build` produces an sdist and wheel; an isolated smoke check installs the
-wheel and verifies the executable.
+Textual CSS. Its version is dynamic: `pyproject.toml` resolves `__version__` from
+`workflow_cockpit/__init__.py`, which is the single editable source. `python -m build` produces an
+sdist and wheel; an isolated smoke check installs the wheel and verifies the executable.
 
 ```mermaid
 flowchart LR
@@ -48,10 +49,10 @@ A run deploys nothing: the application reads and writes inside the target projec
 
 ## CI and platforms
 
-`.github/workflows/test.yml` runs on pushes and pull requests. Its test matrix runs
+`.github/workflows/test.yml` runs on every push and pull request. Its test matrix runs
 `ruff check workflow_cockpit tests` and the full suite on `ubuntu-latest` and `macos-latest` for
-Python 3.10 and 3.12. A dependent distribution job builds both artifacts and installs the wheel in
-a fresh virtual environment:
+Python 3.10, 3.11, and 3.12. A dependent distribution job builds both artifacts and installs the
+wheel in a fresh virtual environment:
 
 ```bash
 python -m pip install -e ".[test]"
@@ -60,6 +61,11 @@ python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q
 python -m build
 python tests/release/smoke.py dist
 ```
+
+`.github/workflows/release.yml` runs on `vMAJOR.MINOR.PATCH` tags. It re-verifies the tagged commit
+with the test workflow, refuses a tag that is not an ancestor of `main` or that does not match the
+package version, rebuilds and smoke-installs the artifacts, and publishes a GitHub Release with
+generated notes. GitHub is the distribution channel; PyPI publishing is deliberately not configured.
 
 The real-`specify` contract suite skips unless a pinned executable is provisioned; every other
 suite is capability-gated. WSL uses the same command and is validated manually.
