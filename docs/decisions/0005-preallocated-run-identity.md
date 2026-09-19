@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Supersedes: -
-- Amended by: [0010](0010-adopt-paused-runs.md)
+- Amended by: [0010](0010-adopt-paused-runs.md), [0013](0013-context-index-pointer-and-start-claim.md)
 
 ## Context
 

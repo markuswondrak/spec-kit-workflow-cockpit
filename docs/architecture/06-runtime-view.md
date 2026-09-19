@@ -20,14 +20,17 @@ sequenceDiagram
     U->>C: Start
     C->>C: generate run ID, verify run dir absent
     C->>S: workflow run <id> -i name=value (no shell)
-    C->>R: write current_run context index
-    S->>R: write state.json / inputs.json / log.jsonl
+    C->>R: write current_run context index (pointer only)
+    S->>R: create run dir, write state.json / inputs.json / log.jsonl
+    C->>R: acquire ownership claim on first poll observing the run dir
 ```
 
 Skill installation happens only for a real TUI start, not `--check`. A dirty worktree warns but does
 not block Start. The run ID is allocated before spawn and passed through `SPECKIT_WORKFLOW_RUN_ID`;
-directory scanning never claims ownership during Start. Adoption is the explicit alternative: a
-bounded catalog plus a single-owner claim (below).
+directory scanning never claims ownership during Start. The context index is a pointer to the
+authoritative sources, never a copy of them. Because the engine creates the run directory after
+spawn, the ownership claim is written on the first poll that observes it; a clean close releases it.
+Adoption is the explicit alternative: a bounded catalog plus a single-owner claim (below).
 
 ## Discover and adopt
 
