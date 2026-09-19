@@ -61,12 +61,12 @@ flowchart TB
 | `RunStateReader` | Tolerant reads of independently written `state.json`, `inputs.json`, and `log.jsonl`; skip unchanged files while detecting atomic replacements. |
 | `RunCatalog` | Bounded, read-only discovery of `.specify/workflows/runs/` into `RunDescriptor`s; never infers status and imports no engine internals. |
 | `RunStore` | Delete one run directory under explicit single-owner safety: single path segment, no live owner, not the session's run, and not `running`/`initializing`. |
-| `RunClaimStore` | Read, acquire, and release the single ownership claim of a run; liveness and stale/PID-reuse detection never signals a process. |
+| `RunClaimStore` | Read, acquire, and release the single ownership claim of a run, for both started and adopted runs; liveness and stale/PID-reuse detection never signals a process. |
 | `definition_from_launch_copy` | Build a `WorkflowDefinition` from the persisted launch-copy `workflow.yml`; authoritative for an adopted run's graph and gates. |
 | `GraphProjector` | Combine the static graph with runtime state into status, active path, attempts, and timings. |
 | `GitService` | Read `HEAD`, branch, and dirty state of the project worktree. |
 | `FeatureReviewService` | Resolve the declared feature directory; list files; detect binary, large, and Markdown files; read current content. |
-| `ContextIndexWriter` | Write the stable `current_run` context index after Start; a failure is reported but never interrupts the run. |
+| `ContextIndexWriter` | Write the stable `current_run` context index as a pointer to the authoritative sources, never a copy; a failure is reported but never interrupts the run. |
 | `EditorLauncher` | Suspend and restore Textual around `$EDITOR` at a paused gate only. |
 
 ## Coordination

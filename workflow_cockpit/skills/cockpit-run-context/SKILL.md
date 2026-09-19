@@ -32,10 +32,33 @@ Read the sources named in the index with read-only tools:
 - `log.jsonl` for the complete event log (`tail` it; do not load it all).
 - the workflow definition for declared steps, gates, and options.
 - Git in the worktree for the current branch and commit.
-- the declared feature directory for Feature Files.
+- `.specify/feature.json` for the declared feature directory (read the file; the
+  index never copies the resolved path).
+- `.cockpit-owner.json` inside the run directory for the Cockpit owner identity
+  and liveness evidence (host, PID/PGID, process start time).
 
 If a source is missing or partially written, say so. Never infer workflow state
 from an index or from logs when `state.json` is readable; it is authoritative.
+
+## Which run is active
+
+The index is a pointer, not state. Resolve these three questions from the
+sources themselves and never from a cached value:
+
+- **Which run:** the `Run ID` in the index. If the index is missing, or its run
+  directory is gone, report that there is no known Cockpit run and do not guess
+  from other run directories.
+- **What it is doing:** `status` in that run's `state.json`. A terminal status
+  (`completed`, `failed`, `aborted`) means the run is over.
+- **Who owns it:** the run's `.cockpit-owner.json`. A claim whose recorded host
+  and PID/start time still match a live process is a live owner; a claim whose
+  PID is gone, or whose start time changed, is stale; a missing claim means the
+  run has no recorded owner.
+
+Treat the run as actively driven by Cockpit only when `state.json` is
+non-terminal and a live claim exists. If the claim is missing or stale, say so
+and do not edit on the run's behalf. Never start, adopt, or resume a second run
+on the same worktree; one worktree has at most one Cockpit-owned run.
 
 ## Explain
 

@@ -24,6 +24,7 @@ section is the index; each ADR records context, the decision, consequences, and 
 | [0010](../decisions/0010-adopt-paused-runs.md) | A paused run may be adopted through an explicit single-owner claim. |
 | [0011](../decisions/0011-delete-run-directories.md) | A run directory may be deleted through explicit confirmation. |
 | [0012](../decisions/0012-release-versioning.md) | The package version is single-sourced and releases are tag-driven from main. |
+| [0013](../decisions/0013-context-index-pointer-and-start-claim.md) | The context index is a pointer, and every Cockpit-owned run holds the claim. |
 
 ## How to add an ADR
 

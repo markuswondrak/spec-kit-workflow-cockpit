@@ -1,9 +1,12 @@
 """Write the stable Cockpit context index for the current run.
 
 The index is a Markdown file at a fixed path under the engine run metadata
-directory. It never copies live state: it lists the authoritative sources a
-user-chosen external agent should read instead. It is the only Cockpit writer
-inside ``.specify/`` and a generation failure is reported, never fatal.
+directory. It is a pointer, never a copy: it names the one run Cockpit binds to
+this worktree and lists the authoritative sources a user-chosen external agent
+should read instead. Every value owned by another file (run status, feature
+directory, ownership) stays in that file; the index only points at it, so it
+cannot drift. It is the only Cockpit writer inside ``.specify/`` and a
+generation failure is reported, never fatal.
 """
 
 from __future__ import annotations
@@ -14,7 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .definition import WorkflowDefinition
-from .feature_review import resolve_feature_directory
 
 #: Stable project-relative location of the context index.
 CONTEXT_INDEX_RELATIVE = Path(".specify") / "workflows" / "runs" / "current_run"
@@ -48,27 +50,17 @@ def _validate_run_id(run_id: str) -> str:
     return run_id
 
 
-def _resolve_inside(root: Path, relative: str | None) -> Path | None:
-    """Resolve a project-relative path, rejecting anything outside the root."""
-    if not relative or "\x00" in relative or Path(relative).is_absolute():
-        return None
-    candidate = (root / relative).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        return None
-    return candidate
-
-
 class ContextIndexWriter:
-    """Render and atomically write ``.specify/workflows/runs/current_run``."""
+    """Render and atomically write ``.specify/workflows/runs/current_run``.
 
-    def __init__(self, project_root: Path, *, feature_dir: str | None = None) -> None:
+    The index is a pure pointer: it records the Cockpit-owned run binding and the
+    paths to the authoritative sources. It never resolves or caches values owned
+    by another file (the declared feature directory, run status, ownership), so
+    there is nothing that can go stale between runs.
+    """
+
+    def __init__(self, project_root: Path) -> None:
         self.project_root = Path(project_root)
-        if feature_dir is not None:
-            self._feature_dir = feature_dir
-        else:
-            self._feature_dir = resolve_feature_directory(self.project_root)
 
     @property
     def index_path(self) -> Path:
@@ -99,21 +91,16 @@ class ContextIndexWriter:
         )
         overlays_dir = root / ".specify" / "workflows" / "overlays" / definition.id
         feature_json = root / ".specify" / "feature.json"
-
-        feature_dir = self._feature_dir
-        feature_path = _resolve_inside(root, feature_dir)
-        if feature_path is not None and not feature_path.is_dir():
-            feature_path = None
-        if feature_path is None:
-            feature_dir = None
+        ownership_claim = run_dir / ".cockpit-owner.json"
 
         status_command = self._status_command(executable, run_id)
 
         lines: list[str] = [
             "# Cockpit run context",
             "",
-            "This is a stable index for the current run, written by Workflow Cockpit. It is not",
-            "run state: read the authoritative sources below instead of trusting this file.",
+            "This is a stable index for the current run, written by Workflow Cockpit. It is a",
+            "pointer, not run state: it never copies values owned by another file. Read the",
+            "authoritative sources below and resolve them yourself instead of trusting this file.",
             "",
             f"- Run ID: `{run_id}`",
             f"- Workflow: {definition.name} (`{definition.id}`)",
@@ -130,12 +117,8 @@ class ContextIndexWriter:
             f"- Enabled overlays directory: `{overlays_dir}`",
             "- Current branch and commit: read Git in the worktree, for example",
             f"  `git -C {root} branch --show-current` and `git -C {root} rev-parse --short HEAD`.",
-            f"- Declared feature directory source: `{feature_json}`",
-            (
-                f"- Declared feature directory: `{feature_path}`"
-                if feature_path is not None
-                else "- Declared feature directory: not declared (or unavailable); no Feature Files."
-            ),
+            f"- Declared feature directory: read `feature_directory` from `{feature_json}`.",
+            f"- Ownership claim: `{ownership_claim}` (Cockpit-owned owner identity and liveness).",
             "",
             "## Gate check before editing",
             "",
