@@ -1,5 +1,6 @@
 """Release metadata and contributor guidance contract tests."""
 
+import os
 import re
 import unittest
 
@@ -99,6 +100,12 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertTrue((ROOT / "RELEASING.md").is_file())
         for name in ("README.md", "CONTRIBUTING.md"):
             self.assertIn("[RELEASING.md](RELEASING.md)", read(ROOT / name), name)
+
+    def test_release_script_is_executable_and_documented(self):
+        script = ROOT / "scripts" / "release.sh"
+        self.assertTrue(script.is_file())
+        self.assertTrue(os.access(script, os.X_OK), "scripts/release.sh is not executable")
+        self.assertIn("scripts/release.sh", read(ROOT / "RELEASING.md"))
 
 
 if __name__ == "__main__":

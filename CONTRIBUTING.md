@@ -65,7 +65,8 @@ authoritative.
 
 ## Releasing
 
-Maintainers cut releases from `main` by tagging `vMAJOR.MINOR.PATCH`. The version lives only in
+Maintainers cut releases from `main` with `scripts/release.sh`, which bumps the version, commits,
+creates the `vMAJOR.MINOR.PATCH` tag, and pushes both. The version lives only in
 `workflow_cockpit/__init__.py`; `pyproject.toml` resolves it dynamically. The Release workflow
 re-verifies the tagged commit and publishes the artifacts with generated release notes. See
 [RELEASING.md](RELEASING.md) for the full flow and hotfix guidance.

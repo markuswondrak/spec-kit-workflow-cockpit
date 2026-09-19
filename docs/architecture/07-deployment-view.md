@@ -62,10 +62,12 @@ python -m build
 python tests/release/smoke.py dist
 ```
 
-`.github/workflows/release.yml` runs on `vMAJOR.MINOR.PATCH` tags. It re-verifies the tagged commit
-with the test workflow, refuses a tag that is not an ancestor of `main` or that does not match the
-package version, rebuilds and smoke-installs the artifacts, and publishes a GitHub Release with
-generated notes. GitHub is the distribution channel; PyPI publishing is deliberately not configured.
+`.github/workflows/release.yml` runs on `vMAJOR.MINOR.PATCH` tags. Maintainers cut a release with
+`scripts/release.sh`, which bumps `__version__`, commits the bump on `main`, and pushes the matching
+tag. The workflow re-verifies the tagged commit with the test workflow, refuses a tag that is not an
+ancestor of `main` or that does not match the package version, rebuilds and smoke-installs the
+artifacts, and publishes a GitHub Release with generated notes. GitHub is the distribution channel;
+PyPI publishing is deliberately not configured.
 
 The real-`specify` contract suite skips unless a pinned executable is provisioned; every other
 suite is capability-gated. WSL uses the same command and is validated manually.

@@ -22,26 +22,29 @@ version and are bumped only when those components change.
 Releases are only cut from `main`. The release workflow refuses a tag whose commit is not an
 ancestor of `main`, and refuses a tag that does not match the package version exactly.
 
+Use `scripts/release.sh`. It requires a clean `main` that is in sync with `origin/main`, bumps the
+version, commits `Release vX.Y.Z`, creates the annotated tag, and pushes both. Preview the result
+without changing anything with `--dry-run`:
+
+```bash
+scripts/release.sh --dry-run   # e.g. 0.1.0 -> 0.2.0
+scripts/release.sh             # minor bump (default); prompts before pushing
+scripts/release.sh minor -y    # same, without the prompt
+```
+
 1. Confirm `main` is green in the [Test workflow](.github/workflows/test.yml).
-2. Update `__version__` in `workflow_cockpit/__init__.py` to the new `X.Y.Z`.
-3. If the change is user-visible, merge that bump through a normal pull request. Include release
-   notes wherever the change is described; the release body is generated from merged pull requests
-   and commit messages between tags.
-4. Tag `main`, then push the tag:
-
-   ```bash
-   git switch main
-   git pull --ff-only
-   git tag -a vX.Y.Z -m "vX.Y.Z"
-   git push origin vX.Y.Z
-   ```
-
-5. Watch the [Release workflow](.github/workflows/release.yml). It verifies the tagged commit,
+2. Run the script. Bump kinds:
+   - `minor` (default) for features and compatible changes,
+   - `patch` for a hotfix,
+   - `major` for a breaking change,
+   - `current` to release the existing `__version__` unchanged, used for the very first release.
+3. Watch the [Release workflow](.github/workflows/release.yml). It verifies the tagged commit,
    guards the tag, builds the sdist and wheel, smoke-installs them, and publishes a GitHub Release
    with the generated notes.
 
-If a guard or the verify job fails, delete the tag (`git push origin :vX.Y.Z`), fix `main`, and tag
-again. Do not publish a release from a red commit.
+The script pushes the bump commit and the tag together, so the tagged commit is always the version
+commit. If a guard or the verify job fails, delete the tag (`git push origin :vX.Y.Z`), fix `main`,
+and release again. Do not publish a release from a red commit.
 
 ## Hotfixes
 
@@ -51,10 +54,16 @@ again. Do not publish a release from a red commit.
    git switch -c hotfix/X.Y.Z vPREVIOUS
    ```
 
-2. Apply the minimal fix, bump `__version__` to the next `PATCH`, and open a pull request into
-   `main`.
-3. Once merged, tag `main` with `vX.Y.Z` as in the normal flow. The guard only checks that the
-   tagged commit is on `main`, so the fix must land there before it can be released.
+2. Apply the minimal fix and open a pull request into `main`. Do not bump the version there; the
+   release script owns the bump.
+3. Once merged, cut the patch release from `main`:
+
+   ```bash
+   scripts/release.sh patch
+   ```
+
+   The guard only checks that the tagged commit is on `main`, so the fix must land there before the
+   patch can be released.
 
 ## Distribution
 
