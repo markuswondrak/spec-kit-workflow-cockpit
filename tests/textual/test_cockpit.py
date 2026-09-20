@@ -1,7 +1,9 @@
 import asyncio
 import unittest
+from types import SimpleNamespace
 
 from tests.support import FakeSession, StyledApp
+from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
@@ -130,6 +132,36 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("bold", styles["prepare"])
             self.assertIn("underline", styles["prepare"])
             self.assertNotIn("underline", styles["review"])
+
+    async def test_narrow_runway_keeps_full_labels_and_exposes_tooltip(self):
+        session = FakeSession(status="running")
+        session._graph = WorkflowDefinitionParser().parse(
+            (
+                {
+                    "id": "assessment-gate",
+                    "type": "gate",
+                    "message": "Assess",
+                    "options": ["approve"],
+                },
+                {"id": "bug-verification", "command": "demo.verify"},
+            )
+        )
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            runway = self.app.screen.query_one("#runway-graph")
+            prompts = {str(option.id): str(option.prompt) for option in runway.options}
+            self.assertIn("assessment-gate", prompts["assessment-gate"])
+            self.assertIn("bug-verification", prompts["bug-verification"])
+            index = next(
+                position
+                for position, option in enumerate(runway.options)
+                if option.id == "bug-verification"
+            )
+            runway._on_mouse_move(SimpleNamespace(style=SimpleNamespace(meta={"option": index})))
+            self.assertEqual(runway.tooltip, "bug-verification")
+            runway._on_leave(SimpleNamespace())
+            self.assertIsNone(runway.tooltip)
 
     async def test_runway_is_display_only(self):
         session = FakeSession(status="running")

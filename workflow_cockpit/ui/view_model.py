@@ -50,6 +50,7 @@ class RunwayRow:
     text: str
     status: str
     active: bool
+    full_label: str = ""
 
 
 def default_focus_mode(snapshot: RunSnapshot) -> str:
@@ -126,13 +127,17 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
     )
 
 
-def _middle_truncate(value: str, limit: int) -> str:
+def _tail_truncate(value: str, limit: int) -> str:
+    """Clip a label to ``limit`` columns, preserving its identifying prefix.
+
+    Tail truncation keeps the leading identifier (e.g. ``assessment-...``) that
+    distinguishes sibling steps, unlike middle truncation which drops it.
+    """
     if len(value) <= limit:
         return value
-    if limit < 5:
+    if limit <= 3:
         return value[:limit]
-    left = (limit - 3) // 2
-    return f"{value[:left]}...{value[-(limit - 3 - left) :]}"
+    return value[: limit - 3] + "..."
 
 
 def render_runway(projection: GraphProjection | None, *, width: int = 36) -> list[RunwayRow]:
@@ -168,12 +173,17 @@ def render_runway(projection: GraphProjection | None, *, width: int = 36) -> lis
         if state.duration_seconds is not None and not node.gate:
             duration = format_elapsed(state.duration_seconds).rjust(DURATION_COLUMN)
         tail = ("  " + "  ".join(meta)) if meta else ""
-        label_width = max(8, width - len(prefix) - len(marker) - 1 - TAIL_COLUMN - DURATION_COLUMN)
-        label = _middle_truncate(node.label, label_width).ljust(label_width)
+        # Reserve only the columns this row actually renders. Flow-only rows
+        # carry no gate/attempt tail and no duration, so a fixed reservation
+        # would needlessly shrink their label budget.
+        tail_width = len(tail) if tail else 0
+        duration_width = DURATION_COLUMN if duration else 0
+        label_width = max(8, width - len(prefix) - len(marker) - 1 - tail_width - duration_width)
+        label = _tail_truncate(node.label, label_width).ljust(label_width)
         body = f"{prefix}{marker} {label}{tail}"
         if duration:
             body = body.ljust(width - DURATION_COLUMN)
-        rows.append(RunwayRow(node.id, body + duration, state.status, state.active))
+        rows.append(RunwayRow(node.id, body + duration, state.status, state.active, node.label))
     return rows
 
 
