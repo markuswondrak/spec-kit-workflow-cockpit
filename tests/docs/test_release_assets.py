@@ -58,9 +58,8 @@ class ReleaseAssetTests(unittest.TestCase):
             "python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q",
             "python -m build",
             "python tests/release/smoke.py dist",
-            "specify preset add --dev ./presets/lean-workflow --priority 1",
-            "specify extension add --dev ./extensions/arc42",
-            "specify workflow add --dev ./workflows/lean-flow",
+            "scripts/setup-speckit.sh --source github --ref v0.13.0",
+            "scripts/setup-speckit.sh --source local --path ../spec-kit-extended-flow",
         ):
             self.assertIn(command, text)
 

@@ -54,8 +54,12 @@ python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q
 ```
 
 The real-`specify` contract suite skips unless `WORKFLOW_COCKPIT_REAL_SPECIFY` points at a pinned
-executable. Development is dogfooded through `presets/lean-workflow` + `workflows/lean-flow`; see
-[`presets/lean-workflow/README.md`](presets/lean-workflow/README.md).
+executable. Development is dogfooded through the published GitHub installation of
+`spec-kit-extended-flow`; local sibling-checkout development is an explicit alternate mode. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+When changing `docs/architecture/`, run `python -m pytest tests/docs -q` before finishing the
+workflow so the arc42 structure, links, budgets, and ADR references remain valid.
 
 ## Layout
 
@@ -63,4 +67,4 @@ executable. Development is dogfooded through `presets/lean-workflow` + `workflow
 - `docs/` - architecture context, decisions, glossary.
 - `tests/` - unit, Textual, contract, PTY, and docs tests.
 - `workflow_ui/prototype/` - visual-only prototype, not shipped.
-- `presets/`, `workflows/`, `extensions/` - dogfooding tooling.
+- `scripts/setup-speckit.sh` - local Spec Kit and Extended Flow bootstrap.
