@@ -37,6 +37,7 @@ from .run_poll_mixin import BRANCH_REFRESH_SECONDS, RunPollMixin
 
 
 class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
+    ALLOW_SELECT = False
     BINDINGS = [
         Binding("x", "abort", "Abort"),
         Binding("q", "quit", "Exit"),

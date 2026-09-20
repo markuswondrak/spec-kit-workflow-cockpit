@@ -3,6 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from textual.geometry import Offset
+from textual.widget import Widget
+
 from tests.support import FakeSession, StyledApp
 from workflow_cockpit.services.review import FeatureFile, ReviewDocument, ReviewSnapshot
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
@@ -149,6 +152,30 @@ class MarkdownReviewTests(unittest.IsolatedAsyncioTestCase):
             markdown = screen.query_one("#review-markdown")
             self.assertTrue(markdown.display)
             self.assertIn("unclosed link", markdown.source)
+
+    def test_cockpit_screen_disables_text_selection(self):
+        self.assertFalse(CockpitScreen.ALLOW_SELECT)
+
+    async def test_mousedown_over_markdown_absorbs_orphaned_child(self):
+        session = self._session()
+        session.review_document = lambda path, *, full=False: ReviewDocument(
+            path=path, text="# Heading\n\nbody\n", markdown=True
+        )
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(self._screen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            markdown = screen.query_one("#review-markdown")
+            orphan = Widget()
+            original = screen.get_widget_and_offset_at
+            screen.get_widget_and_offset_at = lambda x, y: (orphan, Offset(0, 0))
+            try:
+                await pilot.click(markdown)
+                await settle(pilot)
+            finally:
+                screen.get_widget_and_offset_at = original
+            self.assertTrue(self.app.is_running)
+            self.assertTrue(markdown.display)
 
     async def test_scroll_preserved_on_same_path_refresh(self):
         session = self._session()
