@@ -8,13 +8,13 @@
 #   scripts/setup-speckit.sh [--source github|local] [--ref REF] [--path PATH]
 #
 #   --source  Installation source (default: github).
-#   --ref     GitHub ref (default: v0.13.0).
+#   --ref     Git ref for the Workflow Cockpit catalog (default: main).
 #   --path    Local checkout (default: ../spec-kit-extended-flow).
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="github"
-REF="v0.13.0"
+REF="main"
 FLOW_PATH="../spec-kit-extended-flow"
 
 while [ "$#" -gt 0 ]; do
@@ -71,7 +71,7 @@ echo "==> Disabling the Spec Kit git extension when present"
 (cd "$PROJECT_ROOT" && specify extension disable git >/dev/null 2>&1 || true)
 
 if [ "$SOURCE" = "github" ]; then
-    CATALOG_BASE="https://raw.githubusercontent.com/markuswondrak/spec-kit-extended-flow/$REF/catalog"
+    CATALOG_BASE="https://raw.githubusercontent.com/markuswondrak/spec-kit-workflow-cockpit/$REF/catalog"
     echo "==> Registering Extended Flow catalogs ($REF)"
     (cd "$PROJECT_ROOT" && \
         specify extension catalog add "$CATALOG_BASE/extension-catalog.json" \

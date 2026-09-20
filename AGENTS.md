@@ -67,4 +67,4 @@ workflow so the arc42 structure, links, budgets, and ADR references remain valid
 - `docs/` - architecture context, decisions, glossary.
 - `tests/` - unit, Textual, contract, PTY, and docs tests.
 - `workflow_ui/prototype/` - visual-only prototype, not shipped.
-- `scripts/setup-speckit.sh` - local Spec Kit and Extended Flow bootstrap.
+- `scripts/setup-speckit.sh` - Spec Kit and Extended Flow bootstrap (GitHub by default).

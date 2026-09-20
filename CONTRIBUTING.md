@@ -41,7 +41,7 @@ From an initialized Spec Kit project at this repository root, install the releas
 from GitHub:
 
 ```bash
-scripts/setup-speckit.sh --source github --ref v0.13.0
+scripts/setup-speckit.sh --source github
 workflow-cockpit
 ```
 

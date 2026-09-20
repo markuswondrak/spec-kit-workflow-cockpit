@@ -155,7 +155,7 @@ From an initialized Spec Kit project **at this checkout's root**, with your chos
 integration already configured, install the released Extended Flow from GitHub:
 
 ```bash
-scripts/setup-speckit.sh --source github --ref v0.13.0
+scripts/setup-speckit.sh --source github
 ```
 
 Then start the Cockpit, choose **Spec-Kit Extended Flow — Feature Flow**, and describe your change

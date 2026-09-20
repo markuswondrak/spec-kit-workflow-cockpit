@@ -106,10 +106,11 @@ Dieser Plan beschreibt die vollständige Umstellung des Spec-Kit-Ökosystems:
   * `catalog/artifacts/lean-workflow-*.zip`, `catalog/artifacts/arc42-*.zip`, `catalog/artifacts/workflow-cockpit-*.zip`
 
 #### 2.2 `scripts/setup-speckit.sh` aktualisieren
-* GitHub ist die Standardquelle: `--source github --ref v0.13.0`.
+* GitHub ist die Standardquelle: `--source github`.
+* Der Cockpit-eigene Catalog pinnt die Extended-Flow-Version `v0.13.0`.
 * Local Dev bleibt explizit verfügbar: `--source local --path PATH`.
-* GitHub-Modus registriert Extension-, Preset-, Workflow- und Bundle-Catalog und installiert das
-  veröffentlichte Bundle.
+* GitHub-Modus registriert die vier Cockpit-Catalog-Dateien und installiert das veröffentlichte
+  Bundle.
 * Local-Modus installiert Extension, Preset und die drei Workflows per `--dev`.
 
 #### 2.3 Dokumentations-Verifikation absichern
