@@ -128,13 +128,24 @@ def _elapsed(snapshot: RunSnapshot) -> str:
 
 
 class Runway(OptionList):
-    """Read-only declared graph; the current node is emphasized in place."""
+    """Read-only declared graph; the current node is emphasized in place.
+
+    Labels that do not fit the sidebar are tail-truncated, never middle-cut, and
+    hovering a row reveals its complete declared label as a tooltip. Textual 8
+    exposes tooltips per widget rather than per ``Option``, so the hover target
+    is resolved in the widget layer against the full labels held as plain data.
+    """
 
     can_focus = False
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._full_labels: dict[str, str] = {}
 
     def update_projection(self, projection) -> None:
         scroll_y = self.scroll_y
         rows = render_runway(projection, width=max(12, self.size.width or 36))
+        self._full_labels = {str(row.id): row.full_label for row in rows}
         current = projection.current_node_id if projection is not None else None
         options: list[Option] = []
         for row in rows:
@@ -149,6 +160,16 @@ class Runway(OptionList):
         self.clear_options()
         self.add_options(options)
         self.scroll_to(y=scroll_y, animate=False)
+
+    def _on_mouse_move(self, event) -> None:
+        super()._on_mouse_move(event)
+        index = event.style.meta.get("option")
+        option = self.get_option_at_index(index) if index is not None else None
+        self.tooltip = self._full_labels.get(str(option.id)) if option is not None else None
+
+    def _on_leave(self, event) -> None:
+        super()._on_leave(event)
+        self.tooltip = None
 
 
 class EngineOutput(Vertical):
