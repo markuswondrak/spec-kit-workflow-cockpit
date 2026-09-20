@@ -1,5 +1,6 @@
 """Release metadata and contributor guidance contract tests."""
 
+import json
 import os
 import re
 import unittest
@@ -58,11 +59,37 @@ class ReleaseAssetTests(unittest.TestCase):
             "python -m pytest tests/unit tests/textual tests/contract tests/pty tests/docs -q",
             "python -m build",
             "python tests/release/smoke.py dist",
-            "specify preset add --dev ./presets/lean-workflow --priority 1",
-            "specify extension add --dev ./extensions/arc42",
-            "specify workflow add --dev ./workflows/lean-flow",
+            "scripts/setup-speckit.sh --source github",
+            "scripts/setup-speckit.sh --source local --path ../spec-kit-extended-flow",
         ):
             self.assertIn(command, text)
+
+    def test_workflow_cockpit_catalog_pins_released_extended_flow(self):
+        catalog_dir = ROOT / "catalog"
+        for name in (
+            "extension-catalog.json",
+            "preset-catalog.json",
+            "workflow-catalog.json",
+            "bundle-catalog.json",
+        ):
+            data = json.loads(read(catalog_dir / name))
+            self.assertTrue(
+                data["catalog_url"].startswith(
+                    "https://raw.githubusercontent.com/markuswondrak/spec-kit-workflow-cockpit/"
+                )
+            )
+
+        extension = json.loads(read(catalog_dir / "extension-catalog.json"))["extensions"]["extendedflow"]
+        preset = json.loads(read(catalog_dir / "preset-catalog.json"))["presets"]["spec-kit-extended-flow"]
+        workflows = json.loads(read(catalog_dir / "workflow-catalog.json"))["workflows"]
+        bundle = json.loads(read(catalog_dir / "bundle-catalog.json"))["bundles"]["spec-kit-extended-flow"]
+
+        self.assertEqual(extension["version"], "0.13.0")
+        self.assertEqual(preset["version"], "0.13.0")
+        self.assertEqual(bundle["version"], "0.13.0")
+        self.assertEqual(set(workflows), {"spec-kit-extended-flow", "spec-kit-bugfix-flow", "spec-kit-quick-flow"})
+        self.assertTrue(all(item["version"] for item in workflows.values()))
+        self.assertTrue(all("spec-kit-extended-flow" in item.get("url", "") for item in workflows.values()))
 
 
 class ReleasePipelineTests(unittest.TestCase):

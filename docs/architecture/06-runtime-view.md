@@ -141,7 +141,10 @@ and power loss carry no cleanup guarantee.
 
 ## Dogfooding workflow
 
-Repository changes run through `workflows/lean-flow/workflow.yml`:
-`specify -> review-spec -> plan -> review-plan -> tasks -> implement -> update-docs`. The
-final step invokes the `arc42-context` extension command `speckit.arc42.update-docs`, which updates
-the affected architecture documents in the same change. See [§7 Deployment View](07-deployment-view.md).
+Repository changes run through the published `spec-kit-extended-flow` Feature Flow installed from
+GitHub:
+`specify -> spec-gate -> plan -> plan-gate -> tasks -> analyze -> implement -> converge ->
+documentation -> finish`. The documentation step invokes `speckit.extendedflow.documentation`,
+which updates affected architecture documents in the same change. The final finish step gathers
+context, removes the temporary feature artifacts, and leaves the engine-owned run directory intact.
+See [§7 Deployment View](07-deployment-view.md).

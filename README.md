@@ -141,34 +141,38 @@ not install anything. The installed file is an ordinary worktree change; commit 
 prefer. The skill reads the stable index at `.specify/workflows/runs/current_run`, which Cockpit
 rewrites after each Start.
 
-### Try the Bundled Lean Flow
+### Try the Extended Flow
 
-The repository includes a workflow for developing changes with specification and plan review gates:
+The repository is dogfooded against the published `spec-kit-extended-flow` bundle. The feature
+flow uses the standard Spec-Kit lifecycle with specification and plan review gates:
 
 ```text
-Specify -> Spec Review -> Plan -> Plan Review -> Tasks -> Implement -> Update Docs
+Specify -> Spec Review -> Plan -> Plan Review -> Tasks -> Analyze -> Implement -> Converge ->
+Documentation -> Finish
 ```
 
-From an initialized Spec Kit project **at this checkout's root**, with the base lean commands and
-your chosen agent integration already configured, register the bundled components:
+From an initialized Spec Kit project **at this checkout's root**, with your chosen agent
+integration already configured, install the released Extended Flow from GitHub:
 
 ```bash
-specify preset add --dev ./presets/lean-workflow --priority 1
-specify extension add --dev ./extensions/arc42
-specify workflow add --dev ./workflows/lean-flow
+scripts/setup-speckit.sh --source github
 ```
 
-Then follow the quickstart above, choose **Lean Flow**, and describe your change in the required
-`spec` input. The `integration` input defaults to `auto`, using the project's initialized
-integration. Both review gates offer `approve` or `reject`; rejection aborts this workflow.
+Then start the Cockpit, choose **Spec-Kit Extended Flow — Feature Flow**, and describe your change
+in the `spec` input. The `integration` input defaults to `auto`, using the project's initialized
+integration. Both review gates offer `approve` or `reject`; rejection aborts the feature workflow.
+Select **Quick Flow** for trivial changes.
 
-The [lean-workflow preset](presets/lean-workflow/README.md) supplies unattended runtime instructions
-and lets the agent name its feature directory under `specs/`. Priority `1` takes precedence over
-the base lean preset's `10`. The [arc42 extension](extensions/arc42/README.md) supplies the final
-living-documentation step. These are source-checkout tooling, not contents of the wheel.
+The Extended Flow preset supplies the unattended runtime context, while its extension supplies
+documentation reconciliation, finish, and Quick Flow commands. The bundle also installs the
+standard Spec-Kit bug extension. For local development against an unreleased checkout, use:
+
+```bash
+scripts/setup-speckit.sh --source local --path ../spec-kit-extended-flow
+```
 
 See [Contributing](CONTRIBUTING.md#preferred-development-path) for the preferred dogfooding path
-and how to refresh installed components after edits.
+and the local development variant.
 
 ## Configuration
 
@@ -235,7 +239,7 @@ For the rationale behind this documentation approach, read the
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, exact lint and test commands, artifact
 verification, and the preferred dogfooding workflow, and [RELEASING.md](RELEASING.md) to cut a
-release. Develop repository changes through the bundled Lean Flow and review its gates in Cockpit
+release. Develop repository changes through the Extended Flow and review its gates in Cockpit
 whenever practical.
 
 [CI](.github/workflows/test.yml) runs Ruff and the unit, Textual, contract, PTY, and documentation

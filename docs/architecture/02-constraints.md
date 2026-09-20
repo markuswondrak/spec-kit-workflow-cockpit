@@ -38,8 +38,9 @@ instead of working around it.
   split by functional domain.
 - **Documentation is living.** Any change that alters a documented constraint, boundary, or
   decision updates the matching document in the same commit.
-- **Dogfooding.** Changes to this repository are driven through the bundled
-  `presets/lean-workflow` preset and observed/decided in the Cockpit itself.
+- **Dogfooding.** Changes to this repository are driven through the published GitHub installation
+  of `spec-kit-extended-flow` and observed/decided in the Cockpit itself. Local sibling-checkout
+  development is an explicit alternate mode.
 
 ## Boundaries
 

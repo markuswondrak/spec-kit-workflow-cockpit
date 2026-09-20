@@ -37,27 +37,24 @@ Drive repository changes through the bundled unattended workflow, then observe a
 gate in Workflow Cockpit. This keeps development dogfooded against the product rather than relying
 only on direct agent edits.
 
-From an initialized Spec Kit project at this repository root, install the local components:
+From an initialized Spec Kit project at this repository root, install the released Extended Flow
+from GitHub:
 
 ```bash
-specify preset add --dev ./presets/lean-workflow --priority 1
-specify extension add --dev ./extensions/arc42
-specify workflow add --dev ./workflows/lean-flow
+scripts/setup-speckit.sh --source github
 workflow-cockpit
 ```
 
-Start the Cockpit and select **Lean Flow**. The workflow runs `specify`, review gates, `plan`,
-`tasks`, `implement`, and the `speckit.arc42.update-docs` living-documentation step. Review the
-generated specification and plan at their gates before approving them.
+Start the Cockpit and select **Spec-Kit Extended Flow — Feature Flow** or
+**Spec-Kit Extended Flow — Quick Flow**. The feature workflow runs the standard Spec-Kit sequence:
+`specify`, review gates, `plan`, `tasks`, `analyze`, `implement`, `converge`, documentation
+reconciliation, and finish. Review the generated specification and plan at their gates before
+approving them. Use Quick Flow for trivial changes.
 
-After a change to the local preset or extension, remove and add that component again so Spec Kit
-refreshes its generated copies:
+For local development against an unreleased sibling checkout:
 
 ```bash
-specify preset remove lean-workflow
-specify preset add --dev ./presets/lean-workflow --priority 1
-specify extension remove arc42
-specify extension add --dev ./extensions/arc42
+scripts/setup-speckit.sh --source local --path ../spec-kit-extended-flow
 ```
 
 The cockpit never modifies the workflow engine or imports its internals. Persisted run files are

@@ -27,8 +27,8 @@ flowchart LR
 | Package data | `styling/templates/*.json`, `skills/cockpit-run-context/SKILL.md`. |
 | Console script | `workflow-cockpit = workflow_cockpit.cli:main`. |
 
-Repo-only tooling is deliberately not packaged: `presets/lean-workflow/`, `workflows/lean-flow/`,
-`extensions/arc42-context/` and `workflow_ui/prototype/`.
+Repo-only tooling is deliberately not packaged: Extended Flow is installed into the target Spec Kit
+project from its GitHub catalog, while `workflow_ui/prototype/` remains visual-only tooling.
 
 ## Project layout
 
@@ -39,9 +39,8 @@ docs/decisions/               numbered ADRs
 docs/glossary.md              pinned vocabulary
 workflow_cockpit/             application source
 tests/                        unit, textual, contract, pty, docs
-presets/lean-workflow/        dogfooding preset
-workflows/lean-flow/          dogfooding workflow
-extensions/arc42-context/     documentation-update extension
+scripts/setup-speckit.sh      Extended Flow bootstrap (GitHub by default)
+workflow_ui/prototype/        visual-only prototype
 ```
 
 A run deploys nothing: the application reads and writes inside the target project's

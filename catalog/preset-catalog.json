@@ -1,16 +1,34 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-18T00:00:00Z",
+  "updated_at": "2026-09-20T00:00:00Z",
   "catalog_url": "https://raw.githubusercontent.com/markuswondrak/spec-kit-workflow-cockpit/main/catalog/preset-catalog.json",
   "presets": {
-    "lean-workflow": {
-      "name": "Lean Workflow Cockpit",
-      "id": "lean-workflow",
-      "version": "1.0.0",
-      "description": "Unattended lean workflow: self-named specs under specs/ plus workflow-runtime context for every core command.",
-      "author": "workflow-cockpit",
-      "download_url": "https://raw.githubusercontent.com/markuswondrak/spec-kit-workflow-cockpit/main/catalog/artifacts/lean-workflow-1.0.0.zip",
-      "tags": ["workflow-cockpit", "headless", "unattended"]
+    "spec-kit-extended-flow": {
+      "name": "Spec-Kit Extended Flow",
+      "id": "spec-kit-extended-flow",
+      "version": "0.13.0",
+      "description": "Templates, scripts, and unattended runtime context for the Extended Flow.",
+      "author": "Markus Wondrak",
+      "repository": "https://github.com/markuswondrak/spec-kit-extended-flow",
+      "license": "MIT",
+      "download_url": "https://github.com/markuswondrak/spec-kit-extended-flow/releases/download/v0.13.0/spec-kit-extended-flow-0.13.0.zip",
+      "requires": {
+        "speckit_version": ">=0.11.2",
+        "extensions": [
+          "extendedflow",
+          "bug"
+        ]
+      },
+      "provides": {
+        "commands": 14,
+        "templates": 2
+      },
+      "tags": [
+        "qa",
+        "review",
+        "documentation",
+        "workflow"
+      ]
     }
   }
 }
