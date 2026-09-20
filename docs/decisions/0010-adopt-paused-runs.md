@@ -3,6 +3,7 @@
 - Status: Accepted
 - Supersedes: -
 - Amends: [0005](0005-preallocated-run-identity.md)
+- Amended by: [0013](0013-context-index-pointer-and-start-claim.md)
 
 ## Context
 

@@ -13,6 +13,7 @@ from tests.support import (
     write_workflow,
 )
 from workflow_cockpit.engine.supervisor import StdinPolicy
+from workflow_cockpit.services.run_claim import RunClaimStore
 from workflow_cockpit.services.snapshot import GateState
 from workflow_cockpit.session.cockpit_session import CockpitSession, SessionError, generate_run_id
 from workflow_cockpit.session.dependencies import (
@@ -113,6 +114,34 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(snapshot.context_path, "")
         self.assertIn("disk full", snapshot.context_error)
         self.assertIn("disk full", session.context_error)
+
+    def test_start_acquires_ownership_claim_once_run_dir_exists(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        claims = RunClaimStore(self.root)
+        # The engine creates the run directory after spawn; before that there is
+        # nothing to claim and a poll must not fail.
+        session.snapshot()
+        self.assertIsNone(claims.read(snapshot.run_id))
+        run_dir = self.root / ".specify" / "workflows" / "runs" / snapshot.run_id
+        run_dir.mkdir(parents=True)
+        session.snapshot()
+        claim = claims.read(snapshot.run_id)
+        self.assertIsNotNone(claim)
+        self.assertEqual(claim.run_id, snapshot.run_id)
+
+    def test_close_releases_the_started_claim(self):
+        session = self.make_session()
+        session.select("demo")
+        snapshot = session.start({"spec": "search"})
+        run_dir = self.root / ".specify" / "workflows" / "runs" / snapshot.run_id
+        run_dir.mkdir(parents=True)
+        session.snapshot()
+        claims = RunClaimStore(self.root)
+        self.assertIsNotNone(claims.read(snapshot.run_id))
+        session.close()
+        self.assertIsNone(claims.read(snapshot.run_id))
 
     def test_second_start_rejected(self):
         session = self.make_session()

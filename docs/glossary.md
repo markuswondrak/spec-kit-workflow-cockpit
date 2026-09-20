@@ -17,7 +17,7 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Run descriptor** | The bounded, read-only summary of a discovered run: run ID, workflow, persisted status, step, age, and usability. | Persisted `state.json`, which is the source it reads. |
 | **Adoptable run** | A discovered run whose persisted status is `paused`, with a launch copy and no conflicting live owner. | Every discovered paused run; one with a live foreign owner is not adoptable. |
 | **Viewable run** | A discovered run with readable `state.json` and a launch-copy definition, eligible for view-only inspection. | An adoptable run, which must additionally be `paused` and claimable. |
-| **Ownership claim** | The durable `.cockpit-owner.json` record naming the single Cockpit owner of a run, with liveness evidence. | The engine process group, which only the supervisor signals. |
+| **Ownership claim** | The durable `.cockpit-owner.json` record naming the single Cockpit owner of a run, with liveness evidence; held for every run Cockpit starts or adopts. | The engine process group, which only the supervisor signals. |
 | **Adoption** | Binding a session and supervisor to an existing paused run without spawning the engine. | A new Start, which allocates a fresh run ID. |
 | **View-only inspection** | Observing an existing run's state, graph, and logs read-only without acquiring an ownership claim, binding a supervisor, or writing lifecycle state. | Adoption, which claims ownership and can decide gates. |
 | **Run deletion** | Removing one stale run directory from the launch screen after a destructive confirmation, refusing a live-owned, running, or currently open run. | Automatic pruning or engine cleanup; deletion is always explicit. |
@@ -34,7 +34,7 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Engine Output** | The bounded, read-only `RichLog` fed from the supervisor. | `log.jsonl`, the complete source. |
 | **Runway** | The scrollable control-flow graph with runtime overlay. | A linear step list. |
 | **Focus** | The single state-driven canvas (State, Files, Gate, Output, Outcome). | A fixed set of panes. |
-| **Context index** | The stable `current_run` Markdown index of authoritative sources. | A copied live snapshot. |
+| **Context index** | The stable `current_run` Markdown pointer to the authoritative sources; it copies no value owned by another file. | A copied live snapshot; any value it copies can drift. |
 | **Skill** | `cockpit-run-context`, installed at start into the project integration's skills directory and invoked in a user-chosen external agent. | A Cockpit-managed process. |
 | **Overlay** | An enabled modification applied to a workflow definition before resolution. | A theme or styling template. |
 | **Control Flow Graph** | The declared nodes, edges, branches, loops, and gates of a workflow. | Runtime status. |

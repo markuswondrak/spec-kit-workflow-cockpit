@@ -27,8 +27,9 @@ flowchart TB
 ```
 
 The engine is never modified. Cockpit's only writes inside `.specify/` are the stable context index
-at `.specify/workflows/runs/current_run` and the Cockpit-owned ownership claim
-`runs/<run_id>/.cockpit-owner.json`; lifecycle state changes only through `specify workflow resume`.
+at `.specify/workflows/runs/current_run`, which points at the authoritative sources instead of
+copying them, and the Cockpit-owned ownership claim `runs/<run_id>/.cockpit-owner.json`, held for
+every run Cockpit starts or adopts; lifecycle state changes only through `specify workflow resume`.
 
 ## Technical context
 

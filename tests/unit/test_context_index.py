@@ -51,31 +51,26 @@ class ContextIndexTests(unittest.TestCase):
             "inputs.json",
             "log.jsonl",
             str(run_dir / "workflow.yml"),
+            str(run_dir / ".cockpit-owner.json"),
             str(self.root / ".specify" / "workflows" / "demo" / "workflow.yml"),
             "git -C",
             "branch --show-current",
             ".specify/feature.json",
-            "specs/demo",
         ):
             self.assertIn(needle, content)
         self.assertIn("cockpit-abc123", content)
 
-    def test_missing_feature_directory_is_reported(self):
+    def test_index_never_copies_the_resolved_feature_directory(self):
+        writer = ContextIndexWriter(self.root)
+        content = writer.render(run_id="cockpit-abc123", definition=self.definition)
+        self.assertIn("feature_directory", content)
+        self.assertNotIn("specs/demo", content)
+
+    def test_index_needs_no_feature_directory_to_render(self):
         (self.root / ".specify" / "feature.json").unlink()
         writer = ContextIndexWriter(self.root)
         content = writer.render(run_id="cockpit-abc123", definition=self.definition)
-        self.assertIn("not declared", content)
-
-    def test_escaping_feature_directory_not_referenced(self):
-        outside = self.root.parent / "outside-feature"
-        outside.mkdir(exist_ok=True)
-        (self.root / ".specify" / "feature.json").write_text(
-            json.dumps({"feature_directory": "../outside-feature"}), encoding="utf-8"
-        )
-        writer = ContextIndexWriter(self.root)
-        content = writer.render(run_id="cockpit-abc123", definition=self.definition)
-        self.assertIn("not declared", content)
-        self.assertNotIn(str(outside), content)
+        self.assertIn(".specify/feature.json", content)
 
     def test_run_id_with_separator_rejected(self):
         writer = ContextIndexWriter(self.root)

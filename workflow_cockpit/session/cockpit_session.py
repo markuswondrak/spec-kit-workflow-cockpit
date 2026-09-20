@@ -19,7 +19,7 @@ from ..services.projection import GraphProjector
 from ..services.registry import WorkflowEntry
 from ..services.review import ReviewDocument, ReviewSnapshot
 from ..services.run_catalog import RunCatalog, RunDescriptor
-from ..services.run_claim import RunClaimStore
+from ..services.run_claim import ClaimOutcome, RunClaimStore, current_claim
 from ..services.run_state import RunStateReader
 from ..services.run_store import RunStore
 from ..services.snapshot import RunSnapshot
@@ -67,6 +67,8 @@ class CockpitSession:
         self._context_error = ""
         self._owner_id = owner_id()
         self._claims = RunClaimStore(self.project_root)
+        self._claim_settled = False
+        self._claim_error = ""
         self._catalog = RunCatalog(self.project_root, owner_id=self._owner_id, claim_store=self._claims)
         self._adopter = RunAdopter(self.project_root, catalog=self._catalog, claims=self._claims)
         self._run_store = RunStore(self.project_root, owner_id=self._owner_id, claims=self._claims)
@@ -247,6 +249,34 @@ class CockpitSession:
             executable=self.compatibility.executable,
         )
 
+    def _ensure_started_claim(self) -> None:
+        """Claim ownership of a started run once the engine has created its directory.
+
+        ``EngineSupervisor.start`` deliberately refuses an existing run directory, and
+        the engine creates it after spawn, so the claim cannot be written synchronously
+        in ``start``. It is acquired on the first poll that observes the directory; a
+        write failure is reported and retried, and never interrupts the run. Adoption
+        acquires its claim in ``RunAdopter``; read-only inspection never claims.
+        """
+        if self._claim_settled or not self._started or self._adopted or self._read_only:
+            return
+        run_id = self._supervisor.run_id
+        if run_id is None or not (self.runs_dir / run_id).is_dir():
+            return
+        claim = current_claim(run_id, self._owner_id, branch=self._branches.value)
+        try:
+            outcome = self._claims.acquire(run_id, claim)
+        except Exception as exc:  # noqa: BLE001 - a claim failure must not stop the run
+            self._claim_error = f"Ownership claim unavailable: {exc}"
+            self._claim_settled = True
+            return
+        if outcome is ClaimOutcome.ACQUIRED:
+            self._claim_settled = True
+        elif outcome is ClaimOutcome.HELD_BY_LIVE_FOREIGN:
+            self._claim_settled = True
+            self._claim_error = "Another live Cockpit owns this run."
+        # FAILED: keep the run going and retry on the next poll.
+
     @property
     def last_abort_result(self):
         """Cleanup result of the most recent Abort, if any."""
@@ -357,6 +387,7 @@ class CockpitSession:
 
     def snapshot(self) -> RunSnapshot:
         run_id = self.run_id or ""
+        self._ensure_started_claim()
         if self._started and not self._read_only and self._contract_error is None and self._definition and run_id:
             reason = check_launch_contract(self._definition, self.runs_dir / run_id, self._supervisor)
             if reason is not None:
@@ -421,6 +452,7 @@ class CockpitSession:
                 aggregator_diag,
                 self._diagnostic,
                 branch_error,
+                self._claim_error,
             )
 
             elapsed = 0.0
@@ -485,7 +517,7 @@ class CockpitSession:
 
     def close(self) -> None:
         self._supervisor.close()
-        if self._adopted and self.run_id:
-            # An adopted run this session owns releases its claim; a crash leaves
-            # the claim for liveness-based recovery (FR-013).
+        if self.run_id and not self._read_only:
+            # Any run this session owns releases its claim on a clean close; a
+            # crash leaves the claim for liveness-based recovery (FR-013).
             self._claims.release(self.run_id, self._owner_id)
