@@ -57,6 +57,11 @@ For local development against an unreleased sibling checkout:
 scripts/setup-speckit.sh --source local --path ../spec-kit-extended-flow
 ```
 
+To adopt a newer Extended Flow release in an existing worktree, re-run the setup script and verify
+the installed components as described in
+[catalog/README.md](catalog/README.md#adopting-a-new-extended-flow-release). Updating the catalog
+files alone leaves `.specify/` on the previously installed version.
+
 The cockpit never modifies the workflow engine or imports its internals. Persisted run files are
 authoritative.
 

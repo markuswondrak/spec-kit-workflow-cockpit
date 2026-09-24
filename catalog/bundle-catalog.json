@@ -1,23 +1,23 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-20T00:00:00Z",
+  "updated_at": "2026-09-24T17:49:50Z",
   "catalog_url": "https://raw.githubusercontent.com/markuswondrak/spec-kit-workflow-cockpit/main/catalog/bundle-catalog.json",
   "bundles": {
     "spec-kit-extended-flow": {
       "name": "Spec-Kit Extended Flow",
       "id": "spec-kit-extended-flow",
-      "version": "0.13.0",
+      "version": "0.18.0",
       "role": "developer",
       "description": "The released Extended Flow stack curated for Workflow Cockpit.",
       "author": "Markus Wondrak",
       "license": "MIT",
-      "download_url": "https://github.com/markuswondrak/spec-kit-extended-flow/releases/download/v0.13.0/spec-kit-extended-flow-bundle-0.13.0.zip",
+      "download_url": "https://github.com/markuswondrak/spec-kit-extended-flow/releases/download/v0.18.0/spec-kit-extended-flow-bundle-0.18.0.zip",
       "requires": {
         "speckit_version": ">=0.11.2"
       },
       "provides": {
         "extensions": 2,
-        "presets": 1,
+        "presets": 2,
         "steps": 0,
         "workflows": 3
       },
