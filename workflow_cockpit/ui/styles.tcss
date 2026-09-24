@@ -107,9 +107,8 @@ OptionList:focus > .option-list--option-highlighted { background: $selection; co
 #gate-decision { width: 1fr; height: auto; max-height: 10; }
 /* Symmetric padding makes each pill hug its label, so every label centres evenly. */
 #gate-decision > Button { width: auto; min-width: 6; padding: 0 1; margin-right: 2; }
-/* The tracked selection stays visible, but only real focus gets the bright fill. */
-#gate-decision > Button.selected { background: $selection; color: $paper; text-style: bold; }
-#gate-decision:focus > Button.selected { background: $focus; color: $paper; }
+/* Only the focused bar marks the tracked selection; unfocused choices stay equal. */
+#gate-decision:focus > Button.selected { background: $focus; color: $paper; text-style: bold; }
 #gate-decision > Button:disabled { background: $raised; color: $fog; }
 #gate-select { width: auto; min-width: 24; }
 #decide-hint { width: auto; height: 3; color: $fog; content-align: right middle; padding-right: 1; }
