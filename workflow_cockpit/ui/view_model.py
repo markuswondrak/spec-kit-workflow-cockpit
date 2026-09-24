@@ -115,9 +115,9 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
         notice = "Choose an option, then confirm. Opening files is optional."
         tone = "fog"
         if affordance == "select":
-            hint = "1..N or enter  confirm   /   down  open"
+            hint = "1..N/enter confirm  down open"
         else:
-            hint = "1..N or enter  confirm   /   left/right  move"
+            hint = "1..N/enter confirm  left/right"
     elif gate.state is GateState.SUBMITTED:
         notice = gate.acknowledged or (
             "Choice submitted once. Persisted engine state stays authoritative; "
