@@ -9,12 +9,12 @@
 
 The Cockpit sits between a user's terminal and an already initialized Spec Kit project. It shows
 one run and owns that run's lifecycle; the workflow engine remains the only thing that actually
-advances a workflow. It starts a new run, discovers and adopts an existing paused run, or inspects
-an existing run read-only under `.specify/workflows/runs/`.
+advances a workflow. It starts a new run, discovers and adopts an existing paused or failed run, or
+inspects an existing run read-only under `.specify/workflows/runs/`.
 
 ```mermaid
 flowchart TB
-    user([User]) -->|select, adopt, inspect, decide, abort| cockpit[workflow-cockpit]
+    user([User]) -->|select, adopt, inspect, decide, resume, abort| cockpit[workflow-cockpit]
     cockpit -->|run / resume / status| specify[specify CLI]
     cockpit -->|read state.json, inputs.json, log.jsonl, workflow.yml| runfiles[(.specify run files)]
     cockpit -->|read HEAD, branch, dirty| git[(Git worktree)]
@@ -55,10 +55,11 @@ every run Cockpit starts or adopts; lifecycle state changes only through `specif
 - **Skill:** `cockpit-run-context` consumes only the context-index path and never invokes workflow
   lifecycle commands.
 - **Adoption, inspection, and deletion:** the launch screen lists bounded, read-only run descriptors.
-  An adoptable `paused` run can be claimed and decided; any usable run (including `running`,
-  terminal, or foreign-owned) can be inspected read-only without acquiring a claim or spawning
-  processes; and a confirmed user action may delete one stale run directory under the safety rules
-  in [ADR 0011](../decisions/0011-delete-run-directories.md).
+  An adoptable `paused` run can be claimed and decided and an adoptable `failed` run claimed and
+  resumed once from its recorded step; any usable run (including `running`, terminal, or
+  foreign-owned) can be inspected read-only without acquiring a claim or spawning processes; and a
+  confirmed user action may delete one stale run directory under the safety rules in
+  [ADR 0011](../decisions/0011-delete-run-directories.md).
 
 ## Engine contract
 

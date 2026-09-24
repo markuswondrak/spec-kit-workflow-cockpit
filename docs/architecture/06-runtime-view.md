@@ -45,7 +45,7 @@ sequenceDiagram
     C->>K: list_existing_runs (bounded, thread worker)
     K->>R: read state.json / workflow.yml / current_run
     K-->>C: RunDescriptor list (newest first, unusable reported)
-    U->>C: choose an adoptable paused run, confirm
+    U->>C: choose an adoptable paused or failed run, confirm
     C->>J: acquire ownership claim (atomic write)
     J-->>C: acquired / held by live foreign owner (refused)
     C->>R: build definition from launch-copy workflow.yml
@@ -106,6 +106,34 @@ flowchart TB
 
 The decide bar selects its affordance from the declared choice count: one to three choices render as equal-weight buttons, four or more render as one compact select box. Every declared choice is confirmed before dispatch. A PTY submission is sent at most once and never resent while state stays paused. Mixed, dynamic, loop/fan-out, and interactive-retry gate shapes are rejected before Start when deterministic prompt ownership cannot be proven.
 
+## Resume a failed run
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant B as Cockpit outcome surface
+    participant Y as ResumeCoordinator
+    participant S as EngineSupervisor
+    participant R as run files
+    U->>B: press r on an adopted failed run
+    B->>Y: project (persisted status is failed)
+    Y-->>B: available, named step (and enclosing step when nested), write-once token
+    U->>B: confirm Resume
+    B->>Y: submit(token)
+    Y->>Y: reserve the attempt under the lock
+    Y->>S: one bare resume <run_id> (validated stdin policy)
+    S->>R: engine continues from current_step_index
+    Y-->>B: token consumed (WRITTEN/UNCERTAIN); NOT_WRITTEN releases it
+    B->>R: re-read state.json (status is never inferred)
+```
+
+Only an adopted run whose persisted status is `failed` offers Resume. The confirmation names the
+recorded current step and, when it is nested, its immediate enclosing step and the whole nested body
+that runs again. A refusal (view-only, stale token, status outside `paused`/`failed`, or spawn
+failure) writes nothing and leaves the run resumable; exactly one bare
+`specify workflow resume <run_id>` is issued per confirmation
+([ADR 0014](../decisions/0014-resume-failed-runs.md)).
+
 ## Abort and lifecycle
 
 ```mermaid
@@ -134,6 +162,8 @@ and power loss carry no cleanup guarantee.
 | reaped | completed | Success after output drain and reap. |
 | reaped | failed/aborted | Engine terminal result with persisted step/cause when available. |
 | reaped | missing/nonterminal | Unexpected process death; preserve output tail and report failure. |
+| live | paused/failed, after confirmed Resume | Running; the resume has started but `state.json` has not advanced yet. |
+| reaped non-zero | failed | Resume returned non-zero; the run remains failed and resumable; surface the exit diagnostic. |
 | live | any, after confirmed Abort | Aborting; signal only the verified owned group. |
 | reaped | any, after Cockpit Abort began | Cockpit-aborted after cleanup completes. |
 

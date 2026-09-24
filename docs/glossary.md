@@ -15,10 +15,13 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Run** | One execution of one workflow in one project/worktree, identified by a run ID. | A Cockpit session, which owns exactly one run. |
 | **Cockpit session** | One `workflow-cockpit` process bound to one run. | Run history in `.specify/workflows/runs/`. |
 | **Run descriptor** | The bounded, read-only summary of a discovered run: run ID, workflow, persisted status, step, age, and usability. | Persisted `state.json`, which is the source it reads. |
-| **Adoptable run** | A discovered run whose persisted status is `paused`, with a launch copy and no conflicting live owner. | Every discovered paused run; one with a live foreign owner is not adoptable. |
-| **Viewable run** | A discovered run with readable `state.json` and a launch-copy definition, eligible for view-only inspection. | An adoptable run, which must additionally be `paused` and claimable. |
+| **Adoptable run** | A discovered run whose persisted status is `paused` or `failed`, with a launch copy and no conflicting live owner. | Every discovered paused or failed run; one with a live foreign owner is not adoptable. |
+| **Viewable run** | A discovered run with readable `state.json` and a launch-copy definition, eligible for view-only inspection. | An adoptable run, which must additionally be `paused` or `failed` and claimable. |
 | **Ownership claim** | The durable `.cockpit-owner.json` record naming the single Cockpit owner of a run, with liveness evidence; held for every run Cockpit starts or adopts. | The engine process group, which only the supervisor signals. |
-| **Adoption** | Binding a session and supervisor to an existing paused run without spawning the engine. | A new Start, which allocates a fresh run ID. |
+| **Adoption** | Binding a session and supervisor to an existing paused or failed run without spawning the engine. | A new Start, which allocates a fresh run ID. |
+| **Failed run** | A discovered run whose persisted status is `failed`; it is adoptable and resumable once from its recorded step. | An `aborted` run, which is terminal and stays read-only. |
+| **Resume action** | The confirmed, write-once lifecycle action that issues exactly one bare `specify workflow resume <run_id>` for an adopted failed run. | A gate decision, which answers a declared pause. |
+| **Resume point** | The persisted current step a resume continues from, and its immediate enclosing step when nested. | The engine's exact re-run set, which the engine owns. |
 | **View-only inspection** | Observing an existing run's state, graph, and logs read-only without acquiring an ownership claim, binding a supervisor, or writing lifecycle state. | Adoption, which claims ownership and can decide gates. |
 | **Run deletion** | Removing one stale run directory from the launch screen after a destructive confirmation, refusing a live-owned, running, or currently open run. | Automatic pruning or engine cleanup; deletion is always explicit. |
 | **Gate** | A workflow-declared pause with a message and declared options. | A Cockpit confirmation dialog. |

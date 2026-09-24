@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..services.graph import resolve_declared_id
 from ..services.projection import GraphProjection
 from ..services.snapshot import GateState, RunSnapshot
+from ..session.resume import ResumeDecision
 
 STATUS_GRAMMAR: dict[str, tuple[str, str]] = {
     "idle": ("[ ]", "IDLE"),
@@ -146,6 +148,44 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
         selectable=selectable,
         hint=hint,
         affordance=affordance,
+    )
+
+
+def resume_decision(snapshot: RunSnapshot) -> ResumeDecision:
+    """Resolve the Resume affordance for an adopted, non-read-only failed run.
+
+    Availability and the named resume point are derived from the snapshot only;
+    the write-once token comes from the coordinator through the session. A
+    missing declaration degrades to the raw runtime id and no nested parent.
+    """
+    if not snapshot.adopted:
+        return ResumeDecision(False, reason="Only an adopted run can be resumed.")
+    if snapshot.read_only:
+        return ResumeDecision(False, reason="View-only mode: the run cannot be resumed.")
+    if snapshot.engine_status != "failed":
+        return ResumeDecision(False, reason="The run is not in a failed state.")
+    step_id = snapshot.current_step_id
+    step_label = step_id or "—"
+    nested = False
+    parent_label = ""
+    projection = snapshot.graph_projection
+    if projection is not None and step_id:
+        declared = resolve_declared_id(step_id, projection.graph.declared_ids)
+        node = projection.graph.by_id.get(declared) if declared is not None else None
+        if node is not None:
+            step_id = declared
+            step_label = node.label or node.id
+            if node.parent_id:
+                parent = projection.graph.by_id.get(node.parent_id)
+                if parent is not None:
+                    nested = True
+                    parent_label = parent.label or parent.id
+    return ResumeDecision(
+        available=True,
+        step_id=step_id,
+        step_label=step_label,
+        nested=nested,
+        parent_label=parent_label,
     )
 
 

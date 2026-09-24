@@ -30,6 +30,7 @@ from .gate_decision import GateDecisionCoordinator, GateDecisionError, validate_
 from .identity import generate_run_id, owner_id
 from .lifecycle import check_launch_contract, classify_outcome, write_context_index
 from .lifecycle import combine as _combine
+from .resume import ResumeCoordinator, ResumeDecision, ResumeError
 
 #: Bounded post-write verification watch (about 40 ticks at the 250 ms cadence).
 SUBMISSION_WATCH_SECONDS = 10.0
@@ -92,6 +93,8 @@ class CockpitSession:
         self._diagnostic = ""
         self._watch_seconds = SUBMISSION_WATCH_SECONDS
         self._coordinator: GateDecisionCoordinator | None = None
+        self._resume: ResumeCoordinator | None = None
+        self._resume_decision: ResumeDecision | None = None
         self._stdin_policy = StdinPolicy.DEVNULL
         self._shape_error = ""
 
@@ -163,6 +166,15 @@ class CockpitSession:
             watch_seconds=self._watch_seconds,
             adopted=adopted,
             read_only=read_only,
+        )
+        self._resume = ResumeCoordinator(
+            graph=self._graph,
+            supervisor=self._supervisor,
+            executable=self.compatibility.executable,
+            adopted=adopted,
+            read_only=read_only,
+            clock=self._clock,
+            stdin=self._stdin_policy,
         )
 
     def adopt(self, run_id: str) -> RunSnapshot:
@@ -344,6 +356,39 @@ class CockpitSession:
             self._ended_at = None
         return self.snapshot()
 
+    def resume_decision(self) -> ResumeDecision | None:
+        """The coordinator's last projected resume affordance, token included."""
+        return self._resume_decision
+
+    def resume_run(self, token: str | None) -> RunSnapshot:
+        """Submit one confirmed resume of an adopted failed run (FR-007/008).
+
+        Thin delegate over :class:`ResumeCoordinator`: the coordinator enforces
+        the write-once ledger and issues at most one bare engine resume. Status
+        is re-read from persisted files by :meth:`snapshot`.
+        """
+        if not self._started or self._reader is None or self._resume is None:
+            raise SessionError("No active run to resume.")
+        if self._read_only:
+            raise SessionError("Cannot resume a run viewed in read-only mode.")
+        if self._supervisor.abort_requested:
+            raise SessionError("This run was aborted and cannot resume in this session.")
+        state = self._reader.read()
+        condition = self._supervisor.condition()
+        try:
+            self._resume.submit(
+                token=token,
+                state=state,
+                run_id=self.run_id,
+                condition=condition,
+            )
+        except ResumeError as exc:
+            raise SessionError(str(exc)) from exc
+        with self._lock:
+            self._diagnostic = ""
+            self._ended_at = None
+        return self.snapshot()
+
     def refresh_review(self) -> ReviewSnapshot:
         """Reload Feature Files; keep the last usable set on failure."""
         self._reviewing = True
@@ -421,9 +466,9 @@ class CockpitSession:
         with self._lock:
             if self._supervisor.abort_requested:
                 status = "aborting" if not condition.reaped else "aborted"
-            elif condition.live and persisted == "paused":
+            elif condition.live and persisted in ("paused", "failed"):
                 # A resume has started but the engine has not replaced the
-                # previous paused state file yet.
+                # previous paused or failed state file yet.
                 status = "running"
             else:
                 status = persisted
@@ -440,7 +485,16 @@ class CockpitSession:
                     f"Structured resume exited with code {condition.exit_code}; "
                     "the persisted gate remains paused."
                 )
-            elif persisted != "paused":
+            elif (
+                condition.reaped
+                and self._supervisor.last_reaped_command == "resume"
+                and condition.exit_code not in (None, 0)
+                and persisted == "failed"
+            ):
+                self._diagnostic = (
+                    f"Resume exited with code {condition.exit_code}; the run remains failed."
+                )
+            elif persisted not in ("paused", "failed"):
                 self._diagnostic = ""
 
             branch_error = self._branches.error
@@ -479,6 +533,14 @@ class CockpitSession:
                     condition=condition,
                     gate_attempt=gate_attempt,
                 )
+            resume = None
+            if self._resume is not None:
+                resume = self._resume.project(
+                    state=state,
+                    run_id=run_id,
+                    condition=condition,
+                )
+            self._resume_decision = resume
             lifecycle_status = "paused" if gate is not None and outcome is None else status
             projection = (
                 self._projector.project(

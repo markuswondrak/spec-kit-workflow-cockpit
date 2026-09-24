@@ -102,6 +102,22 @@ class AdoptionUnitTests(unittest.TestCase):
         with self.assertRaises(AdoptError):
             adopter.prepare(run_id, "owner-1")
 
+    def test_failed_run_is_adopted_and_spawns_nothing(self):
+        run_id = self.seed("run-failed", "failed")
+        adopter, _ = self.make_adopter()
+        binding = adopter.prepare(run_id, "owner-1")
+        self.assertEqual(binding.run_id, run_id)
+        self.assertEqual(binding.descriptor.status, "failed")
+        self.assertEqual(binding.definition.id, "demo")
+
+    def test_aborted_and_running_are_refused(self):
+        for status in ("aborted", "running"):
+            with self.subTest(status=status):
+                run_id = self.seed(f"run-{status}", status)
+                adopter, _ = self.make_adopter()
+                with self.assertRaisesRegex(AdoptError, "paused or failed"):
+                    adopter.prepare(run_id, "owner-1")
+
     def test_prepare_inspect_succeeds_without_claim(self):
         run_id = self.seed("run-live", "running")
         adopter, claims = self.make_adopter()
@@ -217,6 +233,17 @@ class AdoptSessionTests(unittest.TestCase):
         self.assertTrue(snapshot.adopted)
         self.assertEqual(snapshot.run_id, run_id)
         self.assertEqual(snapshot.status, "paused")
+        self.assertIsNone(self.supervisor.started_argv)
+        self.assertEqual(self.supervisor.resume_calls, [])
+        self.assertIsNone(self.supervisor.started_at)
+
+    def test_adopt_failed_spawns_nothing_and_marks_adopted(self):
+        run_id = self.seed("run-failed", "failed")
+        session = self.make_session()
+        snapshot = session.adopt(run_id)
+        self.assertTrue(session.adopted)
+        self.assertEqual(snapshot.adopted, True)
+        self.assertEqual(snapshot.engine_status, "failed")
         self.assertIsNone(self.supervisor.started_argv)
         self.assertEqual(self.supervisor.resume_calls, [])
         self.assertIsNone(self.supervisor.started_at)

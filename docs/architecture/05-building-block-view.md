@@ -73,9 +73,10 @@ flowchart TB
 
 | Component | Responsibility |
 |---|---|
-| `CockpitSession` | Presentation facade that composes services; starts a new run, adopts an existing one, inspects an existing run read-only, or deletes a stale one; exposes one `submit_decision(choice, token)` seam. |
-| `RunAdopter` | Orchestrate describe -> claim -> launch-copy definition for an existing paused run; binds identity and spawns nothing. |
-| `GateDecisionCoordinator` | Project every current declared gate into one transport-independent `GateSnapshot`; own opaque tokens and write-once reconciliation, including the single adopted resume. |
+| `CockpitSession` | Presentation facade that composes services; starts a new run, adopts an existing one, inspects an existing run read-only, or deletes a stale one; exposes the `submit_decision(choice, token)` and `resume_run(token)` seams. |
+| `RunAdopter` | Orchestrate describe -> claim -> launch-copy definition for an existing paused or failed run; binds identity and spawns nothing. |
+| `GateDecisionCoordinator` | Project every current declared gate into one transport-independent `GateSnapshot`; own opaque tokens and write-once reconciliation, including the single adopted gate resume. |
+| `ResumeCoordinator` | Project the resume affordance for an adopted `failed` run and issue exactly one bare `resume`; own the opaque write-once token, the reserve-before-boundary rule, and the release-on-`NOT_WRITTEN` rule. |
 | `PollingLoop` | Publish an immutable `RunSnapshot` on a 250 ms monotonic schedule. |
 | `RunSnapshot` | Immutable view of status, graph projection, gate, review data, output tail, and outcome. |
 | `SignalHandler` | On catchable `SIGINT`, `SIGHUP`, `SIGTERM`, attempt bounded best-effort abort without confirmation. |

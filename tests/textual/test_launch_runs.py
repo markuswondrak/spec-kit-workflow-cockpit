@@ -169,6 +169,29 @@ class LaunchRunsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(session.adopted_run, "cockpit-paused")
             self.assertIsInstance(self.app.screen, CockpitScreen)
 
+    async def test_selecting_failed_run_adopts_and_switches(self):
+        from workflow_cockpit.ui.screens.cockpit import CockpitScreen
+
+        session = FakeSession()
+        session.existing_runs = (descriptor("cockpit-failed", "failed"),)
+        async with self.app.run_test(size=(120, 45)) as pilot:
+            screen = LaunchScreen(session)
+            self.app.push_screen(screen)
+            await pilot.pause()
+            listing = screen.query_one("#existing-runs", ExistingRunsList)
+            self.assertTrue(listing.descriptors[0].adoptable)
+            listing.focus()
+            listing.highlighted = 0
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            heading = str(self.app.screen.query_one("#confirm-heading").render())
+            self.assertIn("failed", heading)
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            self.assertEqual(session.adopted_run, "cockpit-failed")
+            self.assertIsInstance(self.app.screen, CockpitScreen)
+
     async def test_delete_run_confirms_and_removes(self):
         session = FakeSession()
         session.existing_runs = (descriptor("cockpit-done", "completed"),)
