@@ -90,9 +90,10 @@ flowchart TB
 | `ExistingRunsList` | Compact, subordinate launch-screen list of discovered run descriptors with an explicit empty state. |
 | `Runway` | Scrollable control-flow graph with runtime overlay. |
 | `Focus` | State, Files, Gate, and Outcome surfaces showing feature-file content. |
+| `GateDecisionBar` | Gate decision affordance: equal-weight buttons for 1-3 declared choices or one compact select for 4+; tracks the selection across refresh. |
 | `MarkdownDocumentView` | Read-only formatted rendering of Markdown feature files; other text keeps the plain viewer. |
 | `EngineOutput` | Bounded, read-only `RichLog` fed from the supervisor. |
-| `CommandRail` | Actions valid in the current state, including dynamic gate choices. |
+| `CommandRail` | Actions valid in the current state, including the advertised gate decision shortcuts. |
 | `CockpitViewModel` | Map `RunSnapshot` to renderable state; preserve selection, focus, and scroll across refreshes. |
 | `ThemeBridge` | Map the resolved styling template to a registered Textual `Theme`. |
 

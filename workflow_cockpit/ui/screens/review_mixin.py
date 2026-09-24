@@ -12,7 +12,7 @@ from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
 from ..palette import palette
 from ..view_model import gate_decision
-from ..widgets import FeatureFileList, GateOptions, MarkdownDocumentView, ReviewDocumentView
+from ..widgets import FeatureFileList, GateDecisionBar, MarkdownDocumentView, ReviewDocumentView
 
 
 class ReviewMixin:
@@ -70,7 +70,9 @@ class ReviewMixin:
 
     def _render_gate(self, snapshot, step_label) -> None:
         decision = gate_decision(snapshot)
-        self.query_one(GateOptions).update_options(decision.options, selectable=decision.selectable)
+        self.query_one(GateDecisionBar).update_options(
+            decision.options, selectable=decision.selectable, affordance=decision.affordance
+        )
         self.query_one("#view-label", Static).update(Text.assemble(("GATE / REVIEW", f"bold {palette.hold}")))
         tone = {
             "fog": palette.fog,

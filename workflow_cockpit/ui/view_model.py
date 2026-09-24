@@ -61,6 +61,21 @@ def default_focus_mode(snapshot: RunSnapshot) -> str:
     return "output"
 
 
+GATE_BUTTON_LIMIT = 3
+"""Declared choices at or below this count render as equal-weight buttons."""
+
+
+def gate_affordance(options: tuple[str, ...] | list[str]) -> str:
+    """Select the gate decision affordance from the declared choice count.
+
+    ``none`` for zero choices, ``buttons`` for one to ``GATE_BUTTON_LIMIT``,
+    and ``select`` for more. The boundary is inclusive at three.
+    """
+    if not options:
+        return "none"
+    return "buttons" if len(options) <= GATE_BUTTON_LIMIT else "select"
+
+
 @dataclass(frozen=True)
 class GateDecision:
     """Presentation decision for the current gate, free of Textual imports."""
@@ -72,6 +87,7 @@ class GateDecision:
     options: tuple[str, ...]
     selectable: bool
     hint: str
+    affordance: str
 
 
 def gate_decision(snapshot: RunSnapshot) -> GateDecision:
@@ -91,12 +107,17 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
             (),
             False,
             "selection unavailable",
+            "none",
         )
     selectable = gate.selectable
+    affordance = gate_affordance(gate.options)
     if gate.state is GateState.READY:
         notice = "Choose an option, then confirm. Opening files is optional."
         tone = "fog"
-        hint = "1..N or enter  confirm selected"
+        if affordance == "select":
+            hint = "1..N/enter confirm  down open"
+        else:
+            hint = "1..N/enter confirm  left/right"
     elif gate.state is GateState.SUBMITTED:
         notice = gate.acknowledged or (
             "Choice submitted once. Persisted engine state stays authoritative; "
@@ -124,6 +145,7 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
         options=gate.options,
         selectable=selectable,
         hint=hint,
+        affordance=affordance,
     )
 
 

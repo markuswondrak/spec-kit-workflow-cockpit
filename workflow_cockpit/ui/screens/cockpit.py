@@ -21,7 +21,7 @@ from ..widgets import (
     EngineOutput,
     ErrorStrip,
     FeatureFileList,
-    GateOptions,
+    GateDecisionBar,
     HeaderRail,
     MarkdownDocumentView,
     ResizeGuard,
@@ -76,7 +76,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
         self._document_key: tuple | None = None
         self._document_pending_key: tuple | None = None
         self._diagnostic = ""
-        self._pending_decision: tuple[str, str | None] | None = None
+        self._pending_decision: tuple[str, str | None, str | None] | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):
@@ -102,7 +102,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
                             yield MarkdownDocumentView(id="review-markdown")
                     with Horizontal(id="decide-bar"):
                         yield Static("DECIDE", id="decide-label")
-                        yield GateOptions(id="gate-options")
+                        yield GateDecisionBar(id="gate-decision")
                         yield Static(id="decide-hint")
                     yield EngineOutput(id="output")
             yield ErrorStrip(id="error-strip")
@@ -376,16 +376,20 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
                 return
             self._confirm_choice(decision.options[number - 1])
             return
-        selected = self.query_one(GateOptions).selected_option()
+        selected = self.query_one(GateDecisionBar).selected_option()
         if selected is not None:
             self._confirm_choice(selected)
+
+    def on_gate_decision_bar_choice_activated(self, message: GateDecisionBar.ChoiceActivated) -> None:
+        self._confirm_choice(message.choice)
 
     def _confirm_choice(self, choice: str) -> None:
         snapshot = self._snapshot_now()
         gate = snapshot.gate
         if gate is None or not gate.selectable:
             return
-        self._pending_decision = (choice, gate.token)
+        prior = self.query_one(GateDecisionBar).selected_option()
+        self._pending_decision = (choice, gate.token, prior)
         title = f"Submit {choice!r}?"
         effect = "The confirmed choice is submitted once. Persisted engine state stays authoritative."
         if gate.on_reject and choice.lower() in ("reject", "abort"):
@@ -403,9 +407,14 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
     def _after_choice(self, confirmed: bool | None) -> None:
         pending = self._pending_decision
         self._pending_decision = None
-        if not confirmed or pending is None:
+        if pending is None:
             return
-        choice, token = pending
+        choice, token, prior = pending
+        bar = self.query_one(GateDecisionBar)
+        if not confirmed:
+            bar.select(prior)
+            return
+        bar.select(choice)
         self._submit_decision(choice, token)
 
     @work(thread=True)
@@ -479,7 +488,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
             return
         if not gate_decision(snapshot).selectable:
             return
-        selected = self.query_one(GateOptions).selected_option()
+        selected = self.query_one(GateDecisionBar).selected_option()
         if selected is not None:
             self._confirm_choice(selected)
 

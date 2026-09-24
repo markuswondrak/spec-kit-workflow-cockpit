@@ -22,6 +22,7 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **View-only inspection** | Observing an existing run's state, graph, and logs read-only without acquiring an ownership claim, binding a supervisor, or writing lifecycle state. | Adoption, which claims ownership and can decide gates. |
 | **Run deletion** | Removing one stale run directory from the launch screen after a destructive confirmation, refusing a live-owned, running, or currently open run. | Automatic pruning or engine cleanup; deletion is always explicit. |
 | **Gate** | A workflow-declared pause with a message and declared options. | A Cockpit confirmation dialog. |
+| **Gate affordance** | The presentation mode selected by a gate's declared choice count: equal-weight buttons for one to three choices, one compact select box for four or more. | The declared choices themselves, which are unchanged by the mode. |
 | **Decision** | The user's confirmed choice among a gate's declared options. | An Abort, which is a separate lifecycle action. |
 | **Verdict input** | A gate's declared `verdict_input` name, answered by structured `resume`. | The PTY fallback for gates without one. |
 | **PTY** | The internal pseudo-terminal that carries engine output and fallback gate input. | A user-visible terminal. |
