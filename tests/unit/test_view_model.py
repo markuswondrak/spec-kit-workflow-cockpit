@@ -5,8 +5,14 @@ from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.log_aggregator import StepTiming
 from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
-from workflow_cockpit.services.snapshot import RunSnapshot
-from workflow_cockpit.ui.view_model import DURATION_COLUMN, render_runway
+from workflow_cockpit.services.snapshot import GateSnapshot, GateState, RunSnapshot
+from workflow_cockpit.ui.view_model import (
+    DURATION_COLUMN,
+    GATE_BUTTON_LIMIT,
+    gate_affordance,
+    gate_decision,
+    render_runway,
+)
 
 WORKFLOW = (
     {"id": "prepare", "command": "demo.prepare"},
@@ -151,6 +157,58 @@ class SnapshotDefaultsTests(unittest.TestCase):
 
     def test_read_only_defaults_to_false(self):
         self.assertFalse(RunSnapshot(run_id="cockpit-1").read_only)
+
+
+def gate(options=("approve", "reject"), *, state=GateState.READY, token="token-1") -> GateSnapshot:
+    return GateSnapshot(
+        runtime_step_id="review",
+        step_id="review",
+        message="Approve?",
+        options=tuple(options),
+        state=state,
+        token=token,
+    )
+
+
+class GateAffordanceTests(unittest.TestCase):
+    """The threshold rule is pure and inclusive at three (contract C1)."""
+
+    def test_button_limit_is_three(self):
+        self.assertEqual(GATE_BUTTON_LIMIT, 3)
+
+    def test_none_for_zero_choices(self):
+        self.assertEqual(gate_affordance(()), "none")
+
+    def test_buttons_for_one_to_three_choices(self):
+        for count in (1, 2, 3):
+            with self.subTest(count=count):
+                options = tuple(f"choice-{index}" for index in range(count))
+                self.assertEqual(gate_affordance(options), "buttons")
+
+    def test_select_for_four_or_more_choices(self):
+        for count in (4, 5, 9):
+            with self.subTest(count=count):
+                options = tuple(f"choice-{index}" for index in range(count))
+                self.assertEqual(gate_affordance(options), "select")
+
+    def test_decision_affordance_tracks_option_count(self):
+        snapshot = RunSnapshot(run_id="r", gate=gate())
+        self.assertEqual(gate_decision(snapshot).affordance, "buttons")
+
+        snapshot = RunSnapshot(run_id="r", gate=gate(("a", "b", "c", "d")))
+        self.assertEqual(gate_decision(snapshot).affordance, "select")
+
+        snapshot = RunSnapshot(run_id="r", gate=gate(()))
+        self.assertEqual(gate_decision(snapshot).affordance, "none")
+
+    def test_decision_affordance_tracks_option_count_for_every_state(self):
+        for state in (GateState.READY, GateState.SUBMITTED, GateState.UNVERIFIED, GateState.BLOCKED):
+            with self.subTest(state=state):
+                snapshot = RunSnapshot(run_id="r", gate=gate(state=state, token="token-1"))
+                self.assertEqual(gate_decision(snapshot).affordance, "buttons")
+
+    def test_no_gate_reports_no_affordance(self):
+        self.assertEqual(gate_decision(RunSnapshot(run_id="r")).affordance, "none")
 
 
 if __name__ == "__main__":

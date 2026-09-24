@@ -104,9 +104,7 @@ flowchart TB
     persisted -->|not advanced| abortOnly[show sent-once state; offer Abort only]
 ```
 
-Every declared choice is confirmed before dispatch. A PTY submission is sent at most once and never
-resent while state stays paused. Mixed, dynamic, loop/fan-out, and interactive-retry gate shapes
-are rejected before Start when deterministic prompt ownership cannot be proven.
+The decide bar selects its affordance from the declared choice count: one to three choices render as equal-weight buttons, four or more render as one compact select box. Every declared choice is confirmed before dispatch. A PTY submission is sent at most once and never resent while state stays paused. Mixed, dynamic, loop/fan-out, and interactive-retry gate shapes are rejected before Start when deterministic prompt ownership cannot be proven.
 
 ## Abort and lifecycle
 

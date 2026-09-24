@@ -4,11 +4,14 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from textual.widgets import Button, Select
+
 from tests.support import FakeSession, StyledApp
 from workflow_cockpit.services.review import FeatureFile, ReviewDocument, ReviewSnapshot
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
 from workflow_cockpit.ui.screens.confirm import ConfirmScreen
+from workflow_cockpit.ui.widgets import GateDecisionBar
 
 
 def ready_gate(**kwargs) -> GateSnapshot:
@@ -36,6 +39,14 @@ async def settle(pilot, rounds: int = 5) -> None:
     for _ in range(rounds):
         await pilot.pause()
         await asyncio.sleep(0.02)
+
+
+def bar(screen) -> GateDecisionBar:
+    return screen.query_one("#gate-decision", GateDecisionBar)
+
+
+def visible_buttons(screen) -> list[Button]:
+    return [button for button in bar(screen).query(Button) if button.display]
 
 
 class GateSurfaceParityTests(unittest.IsolatedAsyncioTestCase):
@@ -69,7 +80,8 @@ class GateSurfaceParityTests(unittest.IsolatedAsyncioTestCase):
                     screen = app.screen
                     self.assertIn("GATE / REVIEW", str(screen.query_one("#view-label").render()))
                     self.assertIn("Approve the plan?", str(screen.query_one("#overview-content").render()))
-                    self.assertEqual(screen.query_one("#gate-options").option_count, 2)
+                    self.assertEqual([button.label.plain for button in visible_buttons(screen)], ["approve", "reject"])
+                    self.assertFalse(screen.query_one("#gate-select", Select).display)
                     self.assertTrue(screen.query_one("#review-panel").display)
                     self.assertTrue(screen.query_one("#decide-bar").display)
                     self.assertEqual(screen.query_one("#feature-files").option_count, 1)
@@ -180,7 +192,8 @@ class GateStateSurfaceTests(unittest.IsolatedAsyncioTestCase):
             self.app.push_screen(CockpitScreen(session))
             await pilot.pause()
             screen = self.app.screen
-            self.assertEqual(screen.query_one("#gate-options").option_count, 2)
+            self.assertEqual(len(visible_buttons(screen)), 2)
+            self.assertTrue(all(button.disabled for button in visible_buttons(screen)))
             self.assertIn("submitted", str(screen.query_one("#overview-content").render()).lower())
             await pilot.press("1")
             await pilot.press("enter")
@@ -202,7 +215,7 @@ class GateStateSurfaceTests(unittest.IsolatedAsyncioTestCase):
             rendered = str(screen.query_one("#overview-content").render())
             self.assertIn("CHOICE SENT, STATE NOT ADVANCED", rendered)
             self.assertTrue(screen.query_one("#output").display)
-            self.assertEqual(screen.query_one("#gate-options").option_count, 2)
+            self.assertEqual(len(visible_buttons(screen)), 2)
             await pilot.press("1")
             await pilot.press("enter")
             await pilot.pause()
@@ -222,7 +235,7 @@ class GateStateSurfaceTests(unittest.IsolatedAsyncioTestCase):
             self.app.push_screen(CockpitScreen(session))
             await pilot.pause()
             screen = self.app.screen
-            self.assertEqual(screen.query_one("#gate-options").option_count, 2)
+            self.assertEqual(len(visible_buttons(screen)), 2)
             self.assertIn("No live engine process", str(screen.query_one("#overview-content").render()))
             await pilot.press("1")
             await pilot.press("enter")
@@ -429,6 +442,262 @@ class ReviewSurfaceTests(unittest.IsolatedAsyncioTestCase):
             screen._refresh()
             await pilot.pause()
             self.assertEqual(screen._selected_review_path, "b.txt")
+
+
+class GateAffordanceSurfaceTests(unittest.IsolatedAsyncioTestCase):
+    """Buttons for 1-3 declared choices, a select for 4+ (contract C1-C4)."""
+
+    async def asyncSetUp(self):
+        self.app = StyledApp()
+
+    def _session(self, options) -> FakeSession:
+        session = FakeSession(status="paused")
+        session.gate = ready_gate(options=tuple(options))
+        session.review = review()
+        return session
+
+    async def _mount(self, pilot, options):
+        session = self._session(options)
+        self.app.push_screen(CockpitScreen(session))
+        await settle(pilot)
+        return session
+
+    async def test_two_choice_gate_renders_buttons(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            await self._mount(pilot, ("approve", "reject"))
+            screen = self.app.screen
+            self.assertEqual(
+                [button.label.plain for button in visible_buttons(screen)], ["approve", "reject"]
+            )
+            self.assertFalse(screen.query_one("#gate-select", Select).display)
+
+    async def test_three_choice_gate_renders_three_buttons(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            await self._mount(pilot, ("a", "b", "c"))
+            self.assertEqual(len(visible_buttons(self.app.screen)), 3)
+
+    async def test_one_choice_gate_renders_one_button(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            await self._mount(pilot, ("only",))
+            self.assertEqual([button.label.plain for button in visible_buttons(self.app.screen)], ["only"])
+
+    async def test_button_labels_are_declared_choices_verbatim(self):
+        options = ("Ship it", "Needs work")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            await self._mount(pilot, options)
+            labels = [button.label.plain for button in visible_buttons(self.app.screen)]
+            self.assertEqual(labels, list(options))
+
+    async def test_mouse_press_confirms_that_exact_choice(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = await self._mount(pilot, ("approve", "reject"))
+            await pilot.click("#gate-choice-1")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            self.assertIn("reject", str(self.app.screen.query_one("#confirm-heading").render()))
+            self.assertEqual(session.decisions, [])
+            await pilot.press("enter")
+            await settle(pilot)
+            self.assertEqual(session.decisions, ["reject"])
+
+    async def test_four_choice_gate_renders_select(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            await self._mount(pilot, ("a", "b", "c", "d"))
+            screen = self.app.screen
+            self.assertTrue(screen.query_one("#gate-select", Select).display)
+            self.assertEqual(visible_buttons(screen), [])
+            self.assertFalse(screen.query_one("#gate-choice-0", Button).display)
+
+    async def test_digit_four_submits_the_fourth_choice(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = await self._mount(pilot, ("a", "b", "c", "d"))
+            await pilot.press("4")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            await pilot.press("enter")
+            await settle(pilot)
+            self.assertEqual(session.decisions, ["d"])
+
+    async def test_choosing_a_select_entry_starts_confirmation(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = await self._mount(pilot, ("a", "b", "c", "d"))
+            self.app.screen.query_one("#gate-select", Select).value = "c"
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            self.assertIn("'c'", str(self.app.screen.query_one("#confirm-heading").render()))
+            self.assertEqual(session.decisions, [])
+            await pilot.press("enter")
+            await settle(pilot)
+            self.assertEqual(session.decisions, ["c"])
+
+    async def test_forced_refresh_does_not_retrigger_confirmation(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("a", "b", "c", "d"))
+            cockpit = CockpitScreen(session)
+            self.app.push_screen(cockpit)
+            await settle(pilot)
+            cockpit.query_one("#gate-select", Select).value = "d"
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            cockpit._refresh()
+            await settle(pilot)
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            self.assertEqual(session.decisions, [])
+            await pilot.press("enter")
+            await settle(pilot)
+            self.assertEqual(session.decisions, ["d"])
+
+    async def test_left_right_moves_selection_without_submitting(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = await self._mount(pilot, ("approve", "reject"))
+            screen = self.app.screen
+            bar(screen).focus()
+            await pilot.pause()
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(bar(screen).selected_option(), "reject")
+            self.assertEqual(session.decisions, [])
+            self.assertTrue(screen.query_one("#gate-choice-1", Button).has_class("selected"))
+
+    async def test_enter_confirms_the_tracked_selection(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = await self._mount(pilot, ("approve", "reject"))
+            bar(self.app.screen).focus()
+            await pilot.pause()
+            await pilot.press("right")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            await pilot.press("enter")
+            await settle(pilot)
+            self.assertEqual(session.decisions, ["reject"])
+
+
+class GateViewOnlyTests(unittest.IsolatedAsyncioTestCase):
+    """View-only gates show choices but offer no submission (contract C5)."""
+
+    async def asyncSetUp(self):
+        self.app = StyledApp()
+
+    def _session(self, options) -> FakeSession:
+        session = FakeSession(status="paused")
+        session.gate = ready_gate(options=tuple(options), state=GateState.SUBMITTED, token=None)
+        session.review = review()
+        return session
+
+    async def test_view_only_buttons_are_disabled_and_submit_nothing(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("approve", "reject"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            self.assertEqual(len(visible_buttons(screen)), 2)
+            self.assertTrue(all(button.disabled for button in visible_buttons(screen)))
+            self.assertFalse(bar(screen).can_focus)
+            await pilot.press("1")
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.click("#gate-choice-0")
+            await settle(pilot)
+            self.assertEqual(session.decisions, [])
+
+    async def test_view_only_select_is_disabled_and_submits_nothing(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("a", "b", "c", "d", "e"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            select = screen.query_one("#gate-select", Select)
+            self.assertTrue(select.display)
+            self.assertTrue(select.disabled)
+            await pilot.press("5")
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.click("#gate-select")
+            await settle(pilot)
+            self.assertEqual(session.decisions, [])
+
+
+class GateSelectionStabilityTests(unittest.IsolatedAsyncioTestCase):
+    """The tracked selection survives refresh and mode switches (contract C6)."""
+
+    async def asyncSetUp(self):
+        self.app = StyledApp()
+
+    def _session(self, options) -> FakeSession:
+        session = FakeSession(status="paused")
+        session.gate = ready_gate(options=tuple(options))
+        session.review = review()
+        return session
+
+    async def test_button_selection_survives_refresh(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("approve", "reject"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            bar(screen).select("reject")
+            screen._refresh()
+            await settle(pilot)
+            self.assertEqual(bar(screen).selected_option(), "reject")
+            self.assertTrue(screen.query_one("#gate-choice-1", Button).has_class("selected"))
+
+    async def test_select_selection_survives_refresh(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("a", "b", "c", "d"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            bar(screen).select("c")
+            await pilot.pause()
+            screen._refresh()
+            await settle(pilot)
+            self.assertEqual(bar(screen).selected_option(), "c")
+            self.assertEqual(screen.query_one("#gate-select", Select).value, "c")
+
+    async def test_selection_survives_a_mode_switch(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("a", "b", "c"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            bar(screen).select("c")
+            session.gate = ready_gate(options=("a", "b", "c", "d"))
+            screen._refresh()
+            await settle(pilot)
+            self.assertTrue(screen.query_one("#gate-select", Select).display)
+            self.assertEqual(bar(screen).selected_option(), "c")
+            self.assertEqual(screen.query_one("#gate-select", Select).value, "c")
+
+    async def test_selection_falls_back_when_choice_disappears(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("a", "b", "c"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            bar(screen).select("c")
+            session.gate = ready_gate(options=("a", "b"))
+            screen._refresh()
+            await settle(pilot)
+            self.assertEqual(bar(screen).selected_option(), "a")
+            self.assertFalse(screen.query_one("#gate-choice-2", Button).display)
+
+    async def test_cancelled_confirmation_restores_prior_selection(self):
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            session = self._session(("a", "b", "c", "d"))
+            self.app.push_screen(CockpitScreen(session))
+            await settle(pilot)
+            screen = self.app.screen
+            select = screen.query_one("#gate-select", Select)
+            select.value = "c"
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            await pilot.press("escape")
+            await settle(pilot)
+            self.assertEqual(session.decisions, [])
+            self.assertEqual(bar(screen).selected_option(), "a")
+            self.assertEqual(select.value, "a")
 
 
 if __name__ == "__main__":
