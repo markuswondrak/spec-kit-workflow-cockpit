@@ -14,6 +14,7 @@ from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateState
 from workflow_cockpit.session.gate_decision import GateDecisionCoordinator, GateDecisionError
+from workflow_cockpit.session.resume import ResumeCoordinator, ResumeError
 
 
 def wait_for(predicate, timeout=5.0):
@@ -133,6 +134,76 @@ class AdoptedInteractiveGateTests(unittest.TestCase):
                 run_id="existing",
                 condition=supervisor.condition(),
             )
+        supervisor.close()
+
+
+@requires_pty
+class AdoptedInteractiveResumeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / ".specify" / "workflows" / "runs" / "existing").mkdir(parents=True)
+        self.calls = self.root / "resume-calls.txt"
+        self.script = self.root / "fake-resume"
+        self.script.write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            f"open({str(self.calls)!r}, 'a').write('resume\\n')\n"
+            "sys.stdout.write('resumed\\n')\n"
+            "sys.stdout.flush()\n",
+            encoding="utf-8",
+        )
+        self.script.chmod(self.script.stat().st_mode | stat.S_IEXEC)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_adopted_failed_resume_spawns_once_over_pty(self):
+        supervisor = EngineSupervisor(self.script, self.root)
+        supervisor.bind_existing("existing")
+        graph = WorkflowDefinitionParser().parse(
+            (
+                {"id": "prepare", "command": "demo.prepare"},
+                {
+                    "id": "review",
+                    "type": "gate",
+                    "message": "Review it",
+                    "options": ["approve"],
+                    "on_reject": "skip",
+                },
+                {"id": "finish", "command": "demo.finish"},
+            )
+        )
+        coordinator = ResumeCoordinator(
+            graph=graph,
+            supervisor=supervisor,
+            executable=self.script,
+            adopted=True,
+            clock=time.monotonic,
+            stdin=StdinPolicy.PTY,
+        )
+        state = RunStateData(status="failed", current_step_id="review")
+        decision = coordinator.project(
+            state=state, run_id="existing", condition=supervisor.condition()
+        )
+        self.assertTrue(decision.available)
+        coordinator.submit(
+            token=decision.token,
+            state=state,
+            run_id="existing",
+            condition=supervisor.condition(),
+        )
+        self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+        self.assertEqual(self.calls.read_text().count("resume"), 1)
+        # Write-once: the same confirmation cannot spawn a second resume.
+        with self.assertRaises(ResumeError):
+            coordinator.submit(
+                token=decision.token,
+                state=state,
+                run_id="existing",
+                condition=supervisor.condition(),
+            )
+        self.assertEqual(self.calls.read_text().count("resume"), 1)
         supervisor.close()
 
 

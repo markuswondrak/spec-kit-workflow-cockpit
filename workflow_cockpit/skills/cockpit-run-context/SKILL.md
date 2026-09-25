@@ -49,7 +49,8 @@ sources themselves and never from a cached value:
   directory is gone, report that there is no known Cockpit run and do not guess
   from other run directories.
 - **What it is doing:** `status` in that run's `state.json`. A terminal status
-  (`completed`, `failed`, `aborted`) means the run is over.
+  (`completed`, `failed`, `aborted`) means the engine has stopped; a `failed` run
+  can still be adopted and resumed once by Cockpit from its recorded step.
 - **Who owns it:** the run's `.cockpit-owner.json`. A claim whose recorded host
   and PID/start time still match a live process is a live owner; a claim whose
   PID is gone, or whose start time changed, is stale; a missing claim means the
@@ -74,7 +75,7 @@ approve/reject semantics the workflow does not declare.
 
 ## Lifecycle ownership
 
-Workflow Cockpit alone owns a run: it starts a new run or adopts an existing paused run, then resumes, decides, and aborts it.
+Workflow Cockpit alone owns a run: it starts a new run or adopts an existing paused or failed run, then resumes, decides, and aborts it.
 
 - Never invoke `specify workflow run`, `specify workflow resume`, or any gate
   decision or abort command. You are read-only with respect to the lifecycle.

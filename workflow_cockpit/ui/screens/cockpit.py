@@ -14,7 +14,7 @@ from ...services.review import ReviewDocument
 from ...services.snapshot import OutcomeKind, RunSnapshot
 from ..editor import default_editor_launcher, editor_environment
 from ..palette import palette
-from ..view_model import default_focus_mode, format_elapsed, gate_decision
+from ..view_model import default_focus_mode, format_elapsed, gate_decision, resume_decision
 from ..widgets import (
     TRUNCATION_MARKER,
     CommandRail,
@@ -32,14 +32,16 @@ from .aborting import AbortingScreen
 from .base import AdaptiveScreen
 from .confirm import ConfirmScreen
 from .help import HelpScreen
+from .resume_mixin import ResumeMixin
 from .review_mixin import ReviewMixin
 from .run_poll_mixin import BRANCH_REFRESH_SECONDS, RunPollMixin
 
 
-class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
+class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
     ALLOW_SELECT = False
     BINDINGS = [
         Binding("x", "abort", "Abort"),
+        Binding("r", "resume", "Resume"),
         Binding("q", "quit", "Exit"),
         Binding("l", "expand_output", "Output"),
         Binding("e", "collapse_output", "Collapse", show=False),
@@ -282,7 +284,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
                 (f"{step}\n", palette.paper),
                 (f"status {snapshot.status}   /   engine {engine}\n", palette.fog),
                 (f"{detail}\n\n", tone if outcome.kind is not OutcomeKind.SUCCESS else palette.fog),
-                ("Press enter to close.", palette.paper),
+                (self._resume_closing(snapshot), palette.paper),
             )
         )
         self._update_commands(snapshot)
@@ -299,7 +301,8 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
                 rail.set_actions(f"  {stale}l  output     ?  help     q  quit", None)
             return
         if snapshot.terminal:
-            rail.set_actions(f"  {stale}enter  close", None)
+            actions = "r  resume     enter  close" if resume_decision(snapshot).available else "enter  close"
+            rail.set_actions(f"  {stale}{actions}", None)
             return
         decision = gate_decision(snapshot)
         if decision.selectable:

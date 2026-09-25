@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from workflow_cockpit.engine.pty_session import WriteOutcome
-from workflow_cockpit.engine.supervisor import ProcessCondition, StdinPolicy
+from workflow_cockpit.engine.supervisor import ProcessCondition, StdinPolicy, SupervisorError
 from workflow_cockpit.services.definition import InputSpec, StepSpec, WorkflowDefinition
 from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.projection import GraphProjector
@@ -85,6 +85,7 @@ class FakeSupervisor:
         self.writes: list[bytes] = []
         self.write_result = WriteOutcome.WRITTEN
         self.stdin_policy = StdinPolicy.DEVNULL
+        self.resume_error = ""
         self._active_command: str | None = None
         self._live = live
 
@@ -110,6 +111,8 @@ class FakeSupervisor:
         self._active_command = None
 
     def resume(self, run_id: str, argv, *, stdin=None, env=None) -> None:
+        if self.resume_error:
+            raise SupervisorError(self.resume_error)
         if self.run_id is None:
             raise RuntimeError("No run has been started to resume.")
         self.resume_calls.append((run_id, list(argv)))
@@ -225,12 +228,17 @@ class FakeSession:
         self.editor = "/usr/bin/true"
         self.context_path = ".specify/workflows/runs/current_run"
         self.context_error = ""
+        self.current_step_id = "prepare"
         self.existing_runs: tuple = ()
         self.adopted_run: str | None = None
         self.inspected_run: str | None = None
         self.read_only: bool = False
         self.deleted_runs: list[str] = []
         self.delete_error: str = ""
+        self.resumed_tokens: list[str] = []
+        self.resume_error: str = ""
+        self._resume_token: str | None = None
+        self._resume_used = False
         self._graph = WorkflowDefinitionParser().parse(
             (
                 {"id": "prepare", "command": "demo.prepare"},
@@ -320,6 +328,32 @@ class FakeSession:
         )
         return self.snapshot()
 
+    def resume_decision(self):
+        from workflow_cockpit.session.resume import ResumeDecision
+
+        if not self.adopted or self.read_only or self.status != "failed":
+            return ResumeDecision(False, reason="not resumable")
+        if self._resume_token is None:
+            self._resume_token = "resume-token"
+        return ResumeDecision(
+            available=True,
+            step_id="review",
+            step_label="review",
+            token=None if self._resume_used else self._resume_token,
+        )
+
+    def resume_run(self, token):
+        if self.resume_error:
+            raise RuntimeError(self.resume_error)
+        if not self.adopted or self.read_only or self.status != "failed":
+            raise RuntimeError("This run cannot be resumed.")
+        if self._resume_used or not token or token != self._resume_token:
+            raise RuntimeError("The resume request changed; this confirmation is stale.")
+        self._resume_used = True
+        self.resumed_tokens.append(token)
+        self.status = "running"
+        return self.snapshot()
+
     def refresh_branch(self):
         self.branch_refreshes += 1
         return self.branch
@@ -344,6 +378,7 @@ class FakeSession:
         kind_map = {
             "success": OutcomeKind.SUCCESS,
             "failure": OutcomeKind.FAILURE,
+            "failed": OutcomeKind.FAILURE,
             "abort": OutcomeKind.ABORT,
         }
         outcome = None
@@ -354,7 +389,7 @@ class FakeSession:
             workflow_id="demo",
             workflow_name="Demo Workflow",
             status=self.status,
-            current_step_id="prepare",
+            current_step_id=self.current_step_id,
             branch=self.branch,
             elapsed_seconds=12,
             output_tail=tuple(self.output_lines),
@@ -381,7 +416,7 @@ class FakeSession:
                 self._graph,
                 RunStateData(
                     status="completed" if self.status == "success" else self.status,
-                    current_step_id="prepare",
+                    current_step_id=self.current_step_id,
                     step_results={"prepare": {"status": "completed"}} if self.status != "running" else {},
                 ),
             ),

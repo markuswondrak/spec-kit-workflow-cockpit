@@ -61,11 +61,11 @@ class RunDescriptor:
 
     @property
     def adoptable(self) -> bool:
-        """A paused run with a usable launch copy and no live foreign owner."""
+        """A paused or failed run with a usable launch copy and no live foreign owner."""
         return (
             self.usable
             and self.launch_copy
-            and self.status == "paused"
+            and self.status in ("paused", "failed")
             and self.claim_state in (ClaimState.NONE, ClaimState.OWNED, ClaimState.STALE)
         )
 

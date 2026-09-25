@@ -8,7 +8,7 @@
 ## Product promise
 
 Workflow Cockpit gives an existing Spec Kit workflow user one local workspace in which to start a
-workflow, adopt an existing paused run, or inspect an existing run read-only, observe its
+workflow, adopt an existing paused or failed run, or inspect an existing run read-only, observe its
 execution, review worktree changes at gates, and submit the workflow's declared decision. It is a
 standalone Python + Textual TUI, not a `specify` subcommand and not part of the Spec Kit repository.
 
@@ -18,7 +18,7 @@ started or one it adopted:
 ```mermaid
 flowchart LR
     start[Start] --> observe[Observe]
-    adopt[Adopt paused run] --> observe
+    adopt[Adopt paused/failed run] --> observe
     inspect[Inspect read-only] --> observe
     observe --> gate[Gate]
     gate --> review[Review]
@@ -27,8 +27,8 @@ flowchart LR
 ```
 
 The Cockpit is not a status dashboard and does not aggregate runs. One invocation owns at most one
-run in one project/worktree; it may list existing runs read-only, adopt one paused run, or inspect
-an existing run read-only, but never holds more than one.
+run in one project/worktree; it may list existing runs read-only, adopt one paused or failed run, or
+inspect an existing run read-only, but never holds more than one.
 
 ## Top quality goals
 
@@ -53,7 +53,8 @@ an existing run read-only, but never holds more than one.
 - Every installed compatible workflow can be started, and every declared gate can be submitted
   through the Cockpit.
 - An existing paused run discovered in the project can be adopted and decided without starting a
-  fresh engine run, and no run owned by a live foreign process is ever adopted.
+  fresh engine run, and a failed run can be adopted and resumed once from its recorded step, with no
+  run owned by a live foreign process ever adopted.
 - Normal exit and supported termination signals do not leave a Cockpit-owned workflow process
   running unattended.
 
@@ -68,6 +69,6 @@ an existing run read-only, but never holds more than one.
 | FR-5 | Confirm and submit every declared gate option without changing workflow semantics; prefer `verdict_input`; never send an unverified PTY decision twice; provide a separately confirmed Abort. |
 | FR-6 | Confirm Abort on active exit; attempt bounded cleanup on catchable signals; handle success, failure, and abort; persist no Cockpit history. |
 | FR-7 | Ship selectable styling templates that change only visual tokens and fall back to the neutral default without failing the run. |
-| FR-8 | Discover existing runs under `.specify/workflows/runs/` with bounded reads; report unusable runs; adopt only a `paused` run through a single-owner claim and the persisted launch-copy definition, spawning nothing and writing lifecycle state only through `resume`. |
+| FR-8 | Discover existing runs under `.specify/workflows/runs/` with bounded reads; report unusable runs; adopt only a `paused` or `failed` run through a single-owner claim and the persisted launch-copy definition, spawning nothing and writing lifecycle state only through `resume`; offer one confirmed, write-once resume of a failed run from its recorded step. |
 
 Full quality scenarios live in [§10 Quality Requirements](10-quality-requirements.md).

@@ -198,6 +198,44 @@ class EngineContractTests(unittest.TestCase):
         self.assertEqual(final.outcome.kind.value, "success")
         self.assertEqual(final.engine_status, "completed")
 
+    def test_adopt_failed_run_and_resume_once(self):
+        import yaml
+
+        from tests.support import LINEAR_WORKFLOW
+
+        run_id = "failed-run"
+        run_dir = write_run(self.root, run_id, status="failed", current_step_id="review")
+        (run_dir / "workflow.yml").write_text(
+            yaml.safe_dump(LINEAR_WORKFLOW, sort_keys=False), encoding="utf-8"
+        )
+
+        record = self.root / "failed-resume-record.json"
+        supervisor = EngineSupervisor(self.fake, self.root)
+        result = replace(compatibility_result("1.0.6"), executable=self.fake)
+        env = {"COCKPIT_TEST_RECORD": str(record), "PATH": os.environ.get("PATH", "")}
+        with mock.patch.dict(os.environ, env, clear=False):
+            environment = CockpitEnvironment(self.root, result)
+            services = replace(CockpitServices.for_environment(environment), git=FakeGit())
+            session = CockpitSession(
+                environment,
+                services=services,
+                engine=EngineRuntime(supervisor=supervisor, clock=time.monotonic),
+            )
+            snapshot = session.adopt(run_id)
+            self.assertEqual(snapshot.engine_status, "failed")
+            self.assertIsNone(supervisor.started_at)
+            decision = session.resume_decision()
+            self.assertTrue(decision.available)
+            session.resume_run(decision.token)
+            self.assertTrue(wait_for(lambda: supervisor.condition().reaped))
+            final = session.snapshot()
+
+        payload = json.loads(record.read_text(encoding="utf-8"))
+        self.assertEqual(payload["argv"][:3], ["workflow", "resume", run_id])
+        self.assertNotIn("-i", payload["argv"])
+        self.assertEqual(payload["run_id"], run_id)
+        self.assertEqual(final.engine_status, "completed")
+
     def test_structured_resume_uses_exact_argv(self):
         record = self.root / "resume-record.json"
         supervisor = EngineSupervisor(self.fake, self.root)

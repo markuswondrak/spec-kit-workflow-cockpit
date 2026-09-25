@@ -7,6 +7,7 @@ from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
+from workflow_cockpit.ui.screens.confirm import ConfirmScreen
 from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, BounceIndicator, EngineOutput
 
 
@@ -287,6 +288,81 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             workspace = app.screen.query_one("#workspace")
             self.assertEqual(header.region.height, 4)
             self.assertEqual(workspace.region.y, header.region.height)
+
+    async def test_resume_key_confirms_and_calls_session_once(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            screen = self.app.screen
+            commands = str(screen.query_one("#commands").render())
+            self.assertIn("resume", commands.lower())
+            await pilot.press("r")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            heading = str(self.app.screen.query_one("#confirm-heading").render())
+            self.assertIn("resume", heading.lower())
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            self.assertEqual(len(session.resumed_tokens), 1)
+
+    async def test_resume_cancel_submits_nothing(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertEqual(session.resumed_tokens, [])
+            self.assertIsInstance(self.app.screen, CockpitScreen)
+
+    async def test_resume_unavailable_when_read_only(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        session.read_only = True
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, CockpitScreen)
+            self.assertEqual(session.resumed_tokens, [])
+
+    async def test_resume_confirmation_names_nested_parent(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        session._graph = WorkflowDefinitionParser().parse(
+            (
+                {
+                    "id": "loop",
+                    "type": "while",
+                    "steps": [
+                        {
+                            "id": "review",
+                            "type": "gate",
+                            "message": "Review",
+                            "options": ["approve"],
+                        }
+                    ],
+                },
+            )
+        )
+        session.current_step_id = "review"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            screen = self.app.screen
+            self.assertIsInstance(screen, ConfirmScreen)
+            heading = str(screen.query_one("#confirm-heading").render())
+            effect = str(screen.query_one("#confirm-effect").render())
+            self.assertIn("loop", heading)
+            self.assertIn("whole nested body", effect)
 
     async def test_resize_guard_blocks_and_recovers(self):
         session = FakeSession(status="running")

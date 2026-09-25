@@ -12,6 +12,7 @@ from workflow_cockpit.ui.view_model import (
     gate_affordance,
     gate_decision,
     render_runway,
+    resume_decision,
 )
 
 WORKFLOW = (
@@ -209,6 +210,77 @@ class GateAffordanceTests(unittest.TestCase):
 
     def test_no_gate_reports_no_affordance(self):
         self.assertEqual(gate_decision(RunSnapshot(run_id="r")).affordance, "none")
+
+
+NESTED_WORKFLOW = (
+    {"id": "prepare", "command": "demo.prepare"},
+    {
+        "id": "loop",
+        "type": "while",
+        "steps": [
+            {"id": "review", "type": "gate", "message": "Review", "options": ["approve"]}
+        ],
+    },
+)
+
+
+def resume_snapshot(step_id, graph=WORKFLOW, *, adopted=True, read_only=False, engine_status="failed"):
+    projection = GraphProjector().project(
+        WorkflowDefinitionParser().parse(graph),
+        RunStateData(status=engine_status, current_step_id=step_id),
+    )
+    return RunSnapshot(
+        run_id="r",
+        adopted=adopted,
+        read_only=read_only,
+        engine_status=engine_status,
+        current_step_id=step_id,
+        graph_projection=projection,
+    )
+
+
+class ResumeDecisionTests(unittest.TestCase):
+    def test_names_top_level_step_without_parent(self):
+        decision = resume_decision(resume_snapshot("verify"))
+        self.assertTrue(decision.available)
+        self.assertEqual(decision.step_id, "verify")
+        self.assertEqual(decision.step_label, "verify")
+        self.assertFalse(decision.nested)
+        self.assertEqual(decision.parent_label, "")
+        self.assertIsNone(decision.token)
+
+    def test_marks_nested_step_and_names_immediate_parent(self):
+        decision = resume_decision(resume_snapshot("review", NESTED_WORKFLOW))
+        self.assertTrue(decision.available)
+        self.assertEqual(decision.step_id, "review")
+        self.assertTrue(decision.nested)
+        self.assertEqual(decision.parent_label, "loop")
+
+    def test_unavailable_for_read_only_non_adopted_and_non_failed(self):
+        cases = (
+            {"read_only": True},
+            {"adopted": False},
+            {"engine_status": "paused"},
+        )
+        for overrides in cases:
+            with self.subTest(**overrides):
+                decision = resume_decision(resume_snapshot("verify", **overrides))
+                self.assertFalse(decision.available)
+                self.assertTrue(decision.reason)
+                self.assertIsNone(decision.token)
+
+    def test_missing_graph_degrades_to_raw_step_id(self):
+        snapshot = RunSnapshot(
+            run_id="r",
+            adopted=True,
+            engine_status="failed",
+            current_step_id="review",
+        )
+        decision = resume_decision(snapshot)
+        self.assertTrue(decision.available)
+        self.assertEqual(decision.step_id, "review")
+        self.assertEqual(decision.step_label, "review")
+        self.assertFalse(decision.nested)
 
 
 if __name__ == "__main__":
