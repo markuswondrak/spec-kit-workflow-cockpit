@@ -7,6 +7,7 @@ from workflow_cockpit.services.graph import WorkflowDefinitionParser
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
+from workflow_cockpit.ui.screens.confirm import ConfirmScreen
 from workflow_cockpit.ui.widgets import TRUNCATION_MARKER, BounceIndicator, EngineOutput
 
 
@@ -110,6 +111,13 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             activity = self.app.screen.query_one("#activity")
             self.assertIsInstance(activity, BounceIndicator)
             self.assertTrue(activity.display)
+            # A declared gate awaits a decision even though the raw status stays
+            # running; output is not rolling, so the indicator hides.
+            session.gate = paused_gate()
+            self.app.screen._refresh()
+            await pilot.pause()
+            self.assertFalse(activity.display)
+            session.gate = None
             session.status = "paused"
             self.app.screen._refresh()
             await pilot.pause()
@@ -118,6 +126,26 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.app.screen._refresh()
             await pilot.pause()
             self.assertFalse(activity.display)
+
+    async def test_aborting_with_output_flowing_keeps_the_indicator(self):
+        session = FakeSession(status="running")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            activity = self.app.screen.query_one("#activity")
+            session.status = "aborting"
+            self.app.screen._refresh()
+            await pilot.pause()
+            self.assertTrue(activity.display)
+
+    async def test_active_phase_tone_is_distinct_from_every_status_tone(self):
+        from workflow_cockpit.ui.palette import palette
+        from workflow_cockpit.ui.widgets import active_tone, status_tone
+
+        self.assertEqual(active_tone(), palette.cold)
+        for status in ("running", "completed", "paused", "pending", "skipped", "failed", "aborted"):
+            with self.subTest(status=status):
+                self.assertNotEqual(active_tone(), status_tone(status))
 
     async def test_current_node_rendered_bold_underline(self):
         session = FakeSession(status="running")
@@ -129,8 +157,11 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
                 str(option.id): " ".join(str(span.style) for span in option.prompt.spans)
                 for option in runway.options
             }
+            from workflow_cockpit.ui.palette import palette
+
             self.assertIn("bold", styles["prepare"])
             self.assertIn("underline", styles["prepare"])
+            self.assertIn(palette.cold, styles["prepare"])
             self.assertNotIn("underline", styles["review"])
 
     async def test_narrow_runway_keeps_full_labels_and_exposes_tooltip(self):
@@ -287,6 +318,81 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             workspace = app.screen.query_one("#workspace")
             self.assertEqual(header.region.height, 4)
             self.assertEqual(workspace.region.y, header.region.height)
+
+    async def test_resume_key_confirms_and_calls_session_once(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            screen = self.app.screen
+            commands = str(screen.query_one("#commands").render())
+            self.assertIn("resume", commands.lower())
+            await pilot.press("r")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, ConfirmScreen)
+            heading = str(self.app.screen.query_one("#confirm-heading").render())
+            self.assertIn("resume", heading.lower())
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            self.assertEqual(len(session.resumed_tokens), 1)
+
+    async def test_resume_cancel_submits_nothing(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertEqual(session.resumed_tokens, [])
+            self.assertIsInstance(self.app.screen, CockpitScreen)
+
+    async def test_resume_unavailable_when_read_only(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        session.read_only = True
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            self.assertIsInstance(self.app.screen, CockpitScreen)
+            self.assertEqual(session.resumed_tokens, [])
+
+    async def test_resume_confirmation_names_nested_parent(self):
+        session = FakeSession(status="failed")
+        session.adopted_run = "cockpit-failed"
+        session._graph = WorkflowDefinitionParser().parse(
+            (
+                {
+                    "id": "loop",
+                    "type": "while",
+                    "steps": [
+                        {
+                            "id": "review",
+                            "type": "gate",
+                            "message": "Review",
+                            "options": ["approve"],
+                        }
+                    ],
+                },
+            )
+        )
+        session.current_step_id = "review"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            screen = self.app.screen
+            self.assertIsInstance(screen, ConfirmScreen)
+            heading = str(screen.query_one("#confirm-heading").render())
+            effect = str(screen.query_one("#confirm-effect").render())
+            self.assertIn("loop", heading)
+            self.assertIn("whole nested body", effect)
 
     async def test_resize_guard_blocks_and_recovers(self):
         session = FakeSession(status="running")

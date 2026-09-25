@@ -7,11 +7,11 @@ from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState, RunSnapshot
 from workflow_cockpit.ui.view_model import (
-    DURATION_COLUMN,
     GATE_BUTTON_LIMIT,
     gate_affordance,
     gate_decision,
     render_runway,
+    resume_decision,
 )
 
 WORKFLOW = (
@@ -31,7 +31,14 @@ def projection(status="paused", current="review"):
     }
     return GraphProjector().project(
         WorkflowDefinitionParser().parse(WORKFLOW),
-        RunStateData(status=status, current_step_id=current, step_results={}),
+        RunStateData(
+            status=status,
+            current_step_id=current,
+            step_results={
+                "prepare": {"status": "completed"},
+                "verify": {"status": "completed"},
+            },
+        ),
         timings,
         now=NOW,
     )
@@ -45,35 +52,62 @@ class RenderRunwayTests(unittest.TestCase):
         self.assertIn("gate", self.rows["review"].text)
         self.assertNotIn("00:0", self.rows["review"].text)
 
-    def test_duration_sits_in_same_column_for_every_row(self):
-        text = self.rows["prepare"].text
-        column = len(text) - DURATION_COLUMN
-        self.assertEqual(text[column:].strip(), "00:03")
-        verify = self.rows["verify"].text
-        self.assertEqual(len(verify) - DURATION_COLUMN, column)
-        self.assertEqual(verify[column:].strip(), "00:05")
+    def test_completed_rows_carry_inline_duration(self):
+        self.assertIn("(00:03)", self.rows["prepare"].text)
+        self.assertIn("(00:05)", self.rows["verify"].text)
+        # Inline means on the label line, not a detached trailing column.
+        self.assertTrue(self.rows["prepare"].text.rstrip().endswith("(00:03)"))
 
-    def test_duration_column_holds_when_tail_varies(self):
+    def test_active_row_carries_inline_duration(self):
         graph = WorkflowDefinitionParser().parse(
             (
                 {"id": "prepare", "command": "demo.prepare"},
-                {"id": "again", "command": "demo.again"},
+                {"id": "verify", "command": "demo.verify"},
             )
         )
-        start = NOW - timedelta(seconds=4)
-        projection = GraphProjector().project(
+        start = NOW - timedelta(seconds=135)
+        active = GraphProjector().project(
             graph,
-            RunStateData(status="running", current_step_id="again", step_results={}),
+            RunStateData(
+                status="running",
+                current_step_id="verify",
+                step_results={"prepare": {"status": "completed"}},
+            ),
             {
-                "prepare": StepTiming(3, start, start + timedelta(seconds=2), "completed"),
-                "again": StepTiming(1, start, None, "running"),
+                "prepare": StepTiming(1, start, start + timedelta(seconds=10), "completed"),
+                "verify": StepTiming(1, start, None, "running"),
             },
             now=NOW,
         )
-        rows = render_runway(projection)
-        columns = [len(row.text) - DURATION_COLUMN for row in rows]
-        self.assertEqual(columns[0], columns[1])
-        self.assertIn("#3", rows[0].text)
+        rows = {row.id: row for row in render_runway(active)}
+        self.assertIn("(00:10)", rows["prepare"].text)
+        self.assertIn("(02:15)", rows["verify"].text)
+
+    def test_pending_and_skipped_rows_carry_no_duration(self):
+        graph = WorkflowDefinitionParser().parse(
+            (
+                {"id": "prepare", "command": "demo.prepare"},
+                {"id": "verify", "command": "demo.verify"},
+                {"id": "tail", "command": "demo.tail"},
+            )
+        )
+        pending = GraphProjector().project(
+            graph,
+            RunStateData(
+                status="running",
+                current_step_id="prepare",
+                step_results={"verify": {"status": "skipped"}},
+            ),
+            {
+                "prepare": StepTiming(1, START, None, "running"),
+                "verify": StepTiming(1, START, NOW, "skipped"),
+                "tail": StepTiming(1, START, NOW, "pending"),
+            },
+            now=NOW,
+        )
+        rows = {row.id: row for row in render_runway(pending)}
+        self.assertNotIn("(", rows["verify"].text)
+        self.assertNotIn("(", rows["tail"].text)
 
 
 LONG_WORKFLOW = (
@@ -129,25 +163,34 @@ class NarrowRunwayTests(unittest.TestCase):
         self.assertIn("...", row.text)
         self.assertNotIn("long-name", row.text)
 
-    def test_label_budget_matches_the_columns_actually_rendered(self):
+    def test_inline_duration_does_not_shrink_the_label(self):
         graph = WorkflowDefinitionParser().parse(
             (
-                {"id": "with-tail", "name": "x" * 40, "command": "demo.a"},
-                {"id": "without-tail", "name": "x" * 40, "command": "demo.b"},
+                {"id": "with-duration", "name": "x" * 40, "command": "demo.a"},
+                {"id": "no-duration", "name": "x" * 40, "command": "demo.b"},
             )
         )
         projection = GraphProjector().project(
             graph,
-            RunStateData(status="running", current_step_id="without-tail", step_results={}),
-            {"with-tail": StepTiming(3, NOW, NOW, "completed")},
+            RunStateData(
+                status="running",
+                current_step_id=None,
+                step_results={
+                    "with-duration": {"status": "completed"},
+                    "no-duration": {"status": "completed"},
+                },
+            ),
+            {"with-duration": StepTiming(1, NOW - timedelta(seconds=9), NOW, "completed")},
             now=NOW,
         )
         rows = {row.id: row for row in render_runway(projection, width=NARROW_WIDTH)}
-        self.assertIn("#3", rows["with-tail"].text)
-        self.assertEqual(len(rows["with-tail"].text), len(rows["without-tail"].text))
+        self.assertIn("(00:09)", rows["with-duration"].text)
+        self.assertNotIn("(", rows["no-duration"].text)
+        # The inline suffix rides outside the label budget, so both labels are
+        # truncated to the same number of characters.
         self.assertEqual(
-            len(rows["with-tail"].text) - DURATION_COLUMN,
-            len(rows["without-tail"].text) - DURATION_COLUMN,
+            rows["with-duration"].text.count("x"),
+            rows["no-duration"].text.count("x"),
         )
 
 
@@ -209,6 +252,77 @@ class GateAffordanceTests(unittest.TestCase):
 
     def test_no_gate_reports_no_affordance(self):
         self.assertEqual(gate_decision(RunSnapshot(run_id="r")).affordance, "none")
+
+
+NESTED_WORKFLOW = (
+    {"id": "prepare", "command": "demo.prepare"},
+    {
+        "id": "loop",
+        "type": "while",
+        "steps": [
+            {"id": "review", "type": "gate", "message": "Review", "options": ["approve"]}
+        ],
+    },
+)
+
+
+def resume_snapshot(step_id, graph=WORKFLOW, *, adopted=True, read_only=False, engine_status="failed"):
+    projection = GraphProjector().project(
+        WorkflowDefinitionParser().parse(graph),
+        RunStateData(status=engine_status, current_step_id=step_id),
+    )
+    return RunSnapshot(
+        run_id="r",
+        adopted=adopted,
+        read_only=read_only,
+        engine_status=engine_status,
+        current_step_id=step_id,
+        graph_projection=projection,
+    )
+
+
+class ResumeDecisionTests(unittest.TestCase):
+    def test_names_top_level_step_without_parent(self):
+        decision = resume_decision(resume_snapshot("verify"))
+        self.assertTrue(decision.available)
+        self.assertEqual(decision.step_id, "verify")
+        self.assertEqual(decision.step_label, "verify")
+        self.assertFalse(decision.nested)
+        self.assertEqual(decision.parent_label, "")
+        self.assertIsNone(decision.token)
+
+    def test_marks_nested_step_and_names_immediate_parent(self):
+        decision = resume_decision(resume_snapshot("review", NESTED_WORKFLOW))
+        self.assertTrue(decision.available)
+        self.assertEqual(decision.step_id, "review")
+        self.assertTrue(decision.nested)
+        self.assertEqual(decision.parent_label, "loop")
+
+    def test_unavailable_for_read_only_non_adopted_and_non_failed(self):
+        cases = (
+            {"read_only": True},
+            {"adopted": False},
+            {"engine_status": "paused"},
+        )
+        for overrides in cases:
+            with self.subTest(**overrides):
+                decision = resume_decision(resume_snapshot("verify", **overrides))
+                self.assertFalse(decision.available)
+                self.assertTrue(decision.reason)
+                self.assertIsNone(decision.token)
+
+    def test_missing_graph_degrades_to_raw_step_id(self):
+        snapshot = RunSnapshot(
+            run_id="r",
+            adopted=True,
+            engine_status="failed",
+            current_step_id="review",
+        )
+        decision = resume_decision(snapshot)
+        self.assertTrue(decision.available)
+        self.assertEqual(decision.step_id, "review")
+        self.assertEqual(decision.step_label, "review")
+        self.assertFalse(decision.nested)
 
 
 if __name__ == "__main__":

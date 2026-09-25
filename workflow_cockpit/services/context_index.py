@@ -130,7 +130,7 @@ class ContextIndexWriter:
             "## Lifecycle ownership",
             "",
             "- Workflow Cockpit alone owns this run: it starts a new run or adopts an existing",
-            "  paused run, then resumes, decides, and aborts it.",
+            "  paused or failed run, then resumes, decides, and aborts it.",
             "- An adopted run's launch-copy `workflow.yml` and persisted run files stay authoritative.",
             "- Never run `specify workflow run`, `specify workflow resume`, or any decision or",
             "  abort command. Inspection is read-only and safe.",

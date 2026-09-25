@@ -14,16 +14,17 @@ instead of working around it.
   OS signals against a verified live owned process group; reads use persisted run files. No engine
   internals are imported.
 - **One process, one run, one worktree.** `CockpitSession` composes services for at most one run;
-  it may start a new run, adopt one existing `paused` run, or inspect an existing run read-only
-  without ownership. Discovery lists runs read-only, but lifecycle ownership is always at most one.
+  it may start a new run, adopt one existing `paused` or `failed` run, or inspect an existing run
+  read-only without ownership. Discovery lists runs read-only, but lifecycle ownership is always at
+  most one.
   There is no multi-run, multi-project, or history model.
 - **Persisted run files are authoritative.** `state.json`, `inputs.json`, and `log.jsonl` under
   `.specify/workflows/runs/<run_id>/` decide workflow state. Engine Output is diagnostic evidence,
   never a state source.
-- **Adoption is explicit and single-owner.** Only a run whose persisted status is `paused` with a
-  parseable launch-copy `workflow.yml` may be adopted, and only after Cockpit writes and holds a
-  durable ownership claim. A live foreign owner is refused; a stale claim may be recovered without
-  signalling any process. Adoption binds the existing run ID and spawns nothing.
+- **Adoption is explicit and single-owner.** Only a run whose persisted status is `paused` or
+  `failed` with a parseable launch-copy `workflow.yml` may be adopted, and only after Cockpit writes
+  and holds a durable ownership claim. A live foreign owner is refused; a stale claim may be recovered
+  without signalling any process. Adoption binds the existing run ID and spawns nothing.
 - **Stack.** Python `>=3.10` with Textual. PyYAML and `packaging` are direct dependencies; Cockpit
   never relies on packages from the `specify` installation.
 - **Engine boundary is opaque.** The transport (PTY or pipe) and the decision strategy (structured

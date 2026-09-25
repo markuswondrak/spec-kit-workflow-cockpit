@@ -154,6 +154,57 @@ class RunCatalogTests(unittest.TestCase):
     def test_empty_runs_dir_lists_nothing(self):
         self.assertEqual(RunCatalog(self.root).list_runs(), ())
 
+    def test_failed_run_is_adoptable_and_other_statuses_are_not(self):
+        self.seed("run-failed", "failed")
+        for status in ("running", "aborted", "completed", "initializing"):
+            self.seed(f"run-{status}", status)
+        descriptor = RunCatalog(self.root).describe("run-failed")
+        self.assertTrue(descriptor.adoptable)
+        self.assertTrue(descriptor.viewable)
+        for status in ("running", "aborted", "completed", "initializing"):
+            with self.subTest(status=status):
+                self.assertFalse(RunCatalog(self.root).describe(f"run-{status}").adoptable)
+
+    def test_failed_run_without_launch_copy_is_not_adoptable(self):
+        self.seed("run-no-copy", "failed", workflow=False)
+        descriptor = RunCatalog(self.root).describe("run-no-copy")
+        self.assertFalse(descriptor.launch_copy)
+        self.assertFalse(descriptor.adoptable)
+
+    def test_failed_run_with_unreadable_launch_copy_is_unusable(self):
+        self.seed("run-bad-wf", "failed")
+        run_dir = self.root / ".specify" / "workflows" / "runs" / "run-bad-wf"
+        (run_dir / "workflow.yml").write_text("workflow: [unclosed", encoding="utf-8")
+        descriptor = RunCatalog(self.root).describe("run-bad-wf")
+        self.assertFalse(descriptor.usable)
+        self.assertFalse(descriptor.adoptable)
+        self.assertIn("workflow.yml", descriptor.reason)
+
+    def test_failed_run_with_oversized_launch_copy_is_unusable(self):
+        self.seed("run-big-failed", "failed")
+        run_dir = self.root / ".specify" / "workflows" / "runs" / "run-big-failed"
+        (run_dir / "workflow.yml").write_bytes(b"workflow: {id: demo}\n" + b"#" * (600 * 1024))
+        descriptor = RunCatalog(self.root).describe("run-big-failed")
+        self.assertFalse(descriptor.usable)
+        self.assertFalse(descriptor.adoptable)
+
+    def test_failed_run_with_live_foreign_owner_is_not_adoptable(self):
+        from tests.resume_support import HOST, PROCESS_START, seed_failed_run
+        from workflow_cockpit.services.run_claim import ClaimState, RunClaimStore
+
+        seed_failed_run(self.root, "run-foreign", claim_state=ClaimState.LIVE_FOREIGN)
+        store = RunClaimStore(
+            self.root,
+            host=HOST,
+            pid_alive=lambda pid: True,
+            start_time=lambda pid: PROCESS_START,
+        )
+        descriptor = RunCatalog(self.root, owner_id="me", claim_store=store).describe(
+            "run-foreign"
+        )
+        self.assertEqual(descriptor.claim_state, ClaimState.LIVE_FOREIGN)
+        self.assertFalse(descriptor.adoptable)
+
     def test_module_imports_no_engine_internals(self):
         source = inspect.getsource(run_catalog)
         self.assertNotIn("workflow_cockpit.engine", source)

@@ -203,11 +203,22 @@ class LaunchRunsMixin:
 
     def _begin_adopt(self, descriptor: RunDescriptor) -> None:
         self._pending_adopt = descriptor.run_id
+        if descriptor.status == "failed":
+            heading = "Adopt this failed run?"
+            effect = (
+                f"Cockpit will bind run {descriptor.run_id} and offer to resume it from its "
+                "recorded step. Nothing is resumed until you confirm on the cockpit."
+            )
+        else:
+            heading = "Adopt this paused run?"
+            effect = (
+                f"Cockpit will bind run {descriptor.run_id} and continue its declared gate. "
+                "The engine is not started until you confirm a decision."
+            )
         self.app.push_screen(
             ConfirmScreen(
-                "Adopt this paused run?",
-                f"Cockpit will bind run {descriptor.run_id} and continue its declared gate. "
-                "The engine is not started until you confirm a decision.",
+                heading,
+                effect,
                 confirm_label="Adopt run",
                 note="The existing run files stay authoritative.",
             ),

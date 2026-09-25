@@ -1,4 +1,4 @@
-"""Prepare an existing paused run for adoption without spawning the engine."""
+"""Prepare an existing paused or failed run for adoption without spawning the engine."""
 
 from __future__ import annotations
 
@@ -53,10 +53,10 @@ class RunAdopter:
             raise AdoptError(str(exc)) from exc
         if not descriptor.usable:
             raise AdoptError(f"This run cannot be adopted: {descriptor.reason}.")
-        if descriptor.status != "paused":
+        if descriptor.status not in ("paused", "failed"):
             raise AdoptError(
-                f"Only a paused run can be adopted; this run is {descriptor.status} and "
-                "stays read-only."
+                "This run cannot be adopted: only a paused or failed run can be adopted; "
+                f"this run is {descriptor.status} and stays read-only."
             )
         if not descriptor.launch_copy:
             raise AdoptError(

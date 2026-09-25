@@ -12,10 +12,13 @@ class FeatureFile:
     path: str
     binary: bool = False
     size: int | None = None
+    #: Short form shown in the UI (relative to the feature directory); ``path``
+    #: stays the full project-relative identity used for selection/resolution.
+    display: str = ""
 
     @property
     def label(self) -> str:
-        return self.path
+        return self.display or self.path
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,8 @@ class ReviewDocument:
     note: str = ""
     error: str = ""
     markdown: bool = False
+    #: Short form shown in the header (relative to the feature directory).
+    display: str = ""
 
 
 @dataclass(frozen=True)

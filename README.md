@@ -127,7 +127,12 @@ installation, pass `--specify /path/to/specify`. Both options also work with `--
 ### Run Context for Your Agent
 
 At start, Cockpit installs its bundled `cockpit-run-context` skill into your project's agent so it
-can read the current run. The destination follows `.specify/integration.json`:
+can read the current run. Ask your agent about the run and it reports the workflow, status, active
+gate, and Feature Files from the authoritative run files:
+
+![The cockpit-run-context skill reporting the current Cockpit run in an agent](docs/images/cockpit-run-context.png)
+
+The destination follows `.specify/integration.json`:
 
 | Integration | Installed to |
 |---|---|

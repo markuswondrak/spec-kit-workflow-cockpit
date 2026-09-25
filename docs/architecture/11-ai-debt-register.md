@@ -52,3 +52,15 @@ are known debt. They stay until fixed deliberately; no change may replicate them
 - Do not replicate: do not treat generated scaffolding as a durable source of truth.
 - Safe alternative: keep durable guidance in `AGENTS.md` and `docs/architecture/`; treat the
   constitution as a regenerable pointer only.
+
+### D-5: Session facade over its size cap
+- Location: `workflow_cockpit/session/cockpit_session.py`
+- Why it is debt: the facade already exceeded the 500-line rule (AGENTS.md, "Keep functionality
+  component scoped and files under 500 lines") and the resume seam added a thin
+  `resume_run`/`resume_decision` delegate plus one snapshot reconciliation branch, so it grew
+  further. Large facades resist focused review and hide unrelated responsibilities.
+- Do not replicate: do not add new orchestration directly to the facade by default.
+- Safe alternative: keep domain logic in its own module (the resume lifecycle already lives in
+  `workflow_cockpit/session/resume.py`); when the facade next needs a change, extract a concern
+  (for example the gate/resume projection and status reconciliation) into a `session/` mixin or a
+  pure `lifecycle` helper rather than appending to the facade.
