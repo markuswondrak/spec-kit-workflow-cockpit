@@ -39,11 +39,8 @@ def format_elapsed(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
-DURATION_COLUMN = 8
-"""Fixed width of the right-aligned elapsed column; gates never get one."""
-
 TAIL_COLUMN = 8
-"""Fixed width of the gate/attempt column between label and duration."""
+"""Fixed width of the gate/attempt tail that follows a label."""
 
 
 @dataclass(frozen=True)
@@ -231,21 +228,23 @@ def render_runway(projection: GraphProjection | None, *, width: int = 36) -> lis
             meta.append("gate")
         if state.attempts > 1:
             meta.append(f"#{state.attempts}")
-        duration = ""
-        if state.duration_seconds is not None and not node.gate:
-            duration = format_elapsed(state.duration_seconds).rjust(DURATION_COLUMN)
+        active = node.id == projection.current_node_id
+        show_duration = (
+            state.duration_seconds is not None
+            and not node.gate
+            and (active or state.status == "completed")
+        )
         tail = ("  " + "  ".join(meta)) if meta else ""
-        # Reserve only the columns this row actually renders. Flow-only rows
-        # carry no gate/attempt tail and no duration, so a fixed reservation
-        # would needlessly shrink their label budget.
+        # Reserve only the columns this row actually renders. The elapsed value
+        # rides inline after the label, so no fixed duration column is carved
+        # out of the label budget.
         tail_width = len(tail) if tail else 0
-        duration_width = DURATION_COLUMN if duration else 0
-        label_width = max(8, width - len(prefix) - len(marker) - 1 - tail_width - duration_width)
+        label_width = max(8, width - len(prefix) - len(marker) - 1 - tail_width)
         label = _tail_truncate(node.label, label_width).ljust(label_width)
         body = f"{prefix}{marker} {label}{tail}"
-        if duration:
-            body = body.ljust(width - DURATION_COLUMN)
-        rows.append(RunwayRow(node.id, body + duration, state.status, state.active, node.label))
+        if show_duration:
+            body += f" ({format_elapsed(state.duration_seconds)})"
+        rows.append(RunwayRow(node.id, body, state.status, state.active, node.label))
     return rows
 
 

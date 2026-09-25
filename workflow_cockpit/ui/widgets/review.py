@@ -55,7 +55,7 @@ class ReviewDocumentView(Static):
         if document is None:
             self.update(_text(("No feature files to review yet.", palette.fog)))
             return
-        header = document.path
+        header = document.display or document.path
         if document.error:
             self.update(_text((header + "\n\n", palette.paper), (document.error, palette.fault)))
             return
@@ -85,7 +85,8 @@ class MarkdownDocumentView(Markdown):
         self.display = False
 
     def show(self, document: ReviewDocument) -> None:
-        parts = [f"**{document.path}**", "", document.text or "(empty file)"]
+        label = document.display or document.path
+        parts = [f"**{label}**", "", document.text or "(empty file)"]
         if document.truncated:
             limit = document.limit_bytes or 0
             parts.append("")

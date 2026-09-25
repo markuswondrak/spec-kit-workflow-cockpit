@@ -68,6 +68,11 @@ class FeatureReviewTests(unittest.TestCase):
             [item.path for item in snapshot.files],
             ["specs/demo/nested/plan.md", "specs/demo/spec.md"],
         )
+        # Display labels drop the repeated feature-directory prefix.
+        self.assertEqual(
+            [item.label for item in snapshot.files],
+            ["nested/plan.md", "spec.md"],
+        )
 
     def test_empty_feature_directory_is_ready(self):
         snapshot = self.service.refresh()
@@ -91,9 +96,19 @@ class FeatureReviewTests(unittest.TestCase):
     def test_document_renders_text(self):
         (self.feature / "spec.md").write_text("hello\n", encoding="utf-8")
         document = self.service.document("specs/demo/spec.md")
+        self.assertEqual(document.path, "specs/demo/spec.md")
+        self.assertEqual(document.display, "spec.md")
         self.assertEqual(document.text, "hello\n")
         self.assertFalse(document.binary)
         self.assertFalse(document.truncated)
+
+    def test_document_display_is_relative_to_the_feature_directory(self):
+        nested = self.feature / "nested"
+        nested.mkdir()
+        (nested / "plan.md").write_text("plan\n", encoding="utf-8")
+        document = self.service.document("specs/demo/nested/plan.md")
+        self.assertEqual(document.path, "specs/demo/nested/plan.md")
+        self.assertEqual(document.display, "nested/plan.md")
 
     def test_markdown_flag_is_set_for_markdown_extensions(self):
         (self.feature / "spec.md").write_text("# Title\n", encoding="utf-8")

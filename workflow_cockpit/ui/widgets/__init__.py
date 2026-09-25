@@ -44,6 +44,11 @@ def status_tone(status: str) -> str:
     }.get(status, palette.fog)
 
 
+def active_tone() -> str:
+    """The pinned tone for the current phase, used by no non-active phase."""
+    return palette.cold
+
+
 TRUNCATION_MARKER = "... earlier output truncated ..."
 
 
@@ -152,7 +157,7 @@ class Runway(OptionList):
         for row in rows:
             tone = status_tone(row.status)
             if str(row.id) == current:
-                options.append(Option(_text((row.text, f"bold underline {tone}")), id=row.id))
+                options.append(Option(_text((row.text, f"bold underline {active_tone()}")), id=row.id))
             elif row.active:
                 options.append(Option(_text((row.text, f"bold {tone}")), id=row.id))
             else:
@@ -183,7 +188,7 @@ class EngineOutput(Vertical):
             yield Static(id="output-hint")
         yield RichLog(id="engine", highlight=False, markup=False, wrap=True, max_lines=2000)
 
-    def set_state(self, status: str, expanded: bool, full: bool = False) -> None:
+    def set_state(self, status: str, expanded: bool, full: bool = False, *, awaiting: bool = False) -> None:
         if status == "running" or status == "initializing":
             label, tone = "LIVE [>]", palette.signal
         elif status == "paused":
@@ -193,7 +198,7 @@ class EngineOutput(Vertical):
         self.query_one("#output-title", Static).update(
             _text(("ENGINE OUTPUT", palette.fog), (f"  /  {label}", tone))
         )
-        active = status in ("running", "initializing", "aborting")
+        active = status in ("running", "initializing", "aborting") and not awaiting
         self.query_one("#activity", BounceIndicator).display = active
         self.set_class(expanded, "expanded")
         self.set_class(full, "full-canvas")
