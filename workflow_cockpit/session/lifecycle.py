@@ -20,6 +20,9 @@ from ..services.definition import (
 from ..services.run_state import RunStateData
 from ..services.snapshot import Outcome, OutcomeKind
 
+#: Characters kept from a failure detail before the render budget is at risk.
+FAILURE_DETAIL_LIMIT = 2000
+
 
 def combine(*messages: str) -> str:
     """Join distinct non-empty diagnostics in first-seen order."""
@@ -28,6 +31,38 @@ def combine(*messages: str) -> str:
         if message and message not in seen:
             seen.append(message)
     return " ".join(seen)
+
+
+def _bounded(text: str) -> str:
+    """Trim surrounding whitespace and clamp a detail to the render budget."""
+    trimmed = text.strip()
+    if len(trimmed) <= FAILURE_DETAIL_LIMIT:
+        return trimmed
+    return trimmed[:FAILURE_DETAIL_LIMIT].rstrip() + "…"
+
+
+def _failure_detail(state: RunStateData | None, persisted: str) -> str:
+    """Derive the failure detail from the current step's captured output.
+
+    Prefers the step's captured ``stderr``, then ``stdout``, then the step or
+    top-level ``error``; falls back to the generic persisted-status message when
+    no captured diagnostic exists. The result is trimmed and bounded so a large
+    output cannot stall rendering.
+    """
+    result = state.current_result() if state is not None else None
+    if result is not None:
+        output = result.get("output")
+        if isinstance(output, dict):
+            for key in ("stderr", "stdout"):
+                value = output.get(key)
+                if isinstance(value, str) and value.strip():
+                    return _bounded(value)
+        step_error = result.get("error")
+        if isinstance(step_error, str) and step_error.strip():
+            return _bounded(step_error)
+    if state is not None and isinstance(state.error, str) and state.error.strip():
+        return _bounded(state.error)
+    return f"Engine status: {persisted}"
 
 
 def check_launch_contract(
@@ -116,7 +151,7 @@ def classify_outcome(
         if persisted in ("failed", "aborted"):
             return Outcome(
                 kind=OutcomeKind.FAILURE,
-                detail=(state.error if state and state.error else f"Engine status: {persisted}"),
+                detail=_failure_detail(state, persisted),
                 step_id=state.current_step_id if state else None,
                 engine_status=persisted,
             )
@@ -128,7 +163,7 @@ def classify_outcome(
     if persisted in ("failed", "aborted"):
         return Outcome(
             kind=OutcomeKind.FAILURE,
-            detail=(state.error if state and state.error else f"Engine status: {persisted}"),
+            detail=_failure_detail(state, persisted),
             step_id=state.current_step_id if state else None,
             engine_status=persisted,
         )

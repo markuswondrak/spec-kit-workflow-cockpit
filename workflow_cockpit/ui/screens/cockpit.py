@@ -295,15 +295,15 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
         stale = "STALE  /  " if snapshot.stale else ""
         if snapshot.read_only:
             if snapshot.terminal:
-                rail.set_actions(f"  {stale}enter / q  close", None)
+                rail.set_actions(f"  {stale}enter / q  close     l  output", None)
             elif snapshot.gate is not None:
                 rail.set_actions(f"  {stale}c  changes     s  state     l  output     q  quit", None)
             else:
                 rail.set_actions(f"  {stale}l  output     ?  help     q  quit", None)
             return
         if snapshot.terminal:
-            actions = "r  resume     enter  close" if resume_decision(snapshot).available else "enter  close"
-            rail.set_actions(f"  {stale}{actions}", None)
+            resume = "r  resume     " if resume_decision(snapshot).available else ""
+            rail.set_actions(f"  {stale}{resume}enter  close     l  output", None)
             return
         decision = gate_decision(snapshot)
         if decision.selectable:
