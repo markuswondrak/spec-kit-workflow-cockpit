@@ -77,11 +77,25 @@ class FeatureReviewService:
                     relative = path.relative_to(base).as_posix()
                 except ValueError:
                     continue
-                files.append(FeatureFile(path=relative))
+                files.append(FeatureFile(path=relative, display=self._display_path(relative)))
         except OSError as exc:
             return ReviewSnapshot(feature_dir=feature_dir, status="error", error=str(exc))
         files.sort(key=lambda item: item.path)
         return ReviewSnapshot(feature_dir=feature_dir, files=tuple(files))
+
+    def _display_path(self, path: str) -> str:
+        """Drop the repeated feature-directory prefix from a display path.
+
+        Returns an empty string when the path is not under the declared feature
+        directory; callers then fall back to the full project-relative ``path``.
+        """
+        feature_dir = resolve_feature_directory(self.project_root)
+        if not feature_dir:
+            return ""
+        prefix = feature_dir.rstrip("/") + "/"
+        if path.startswith(prefix):
+            return path[len(prefix):]
+        return ""
 
     def resolve_path(self, path: str) -> Path | None:
         """Resolve a project-relative path that stays inside the project root."""
@@ -97,27 +111,34 @@ class FeatureReviewService:
 
     def document(self, path: str, *, full: bool = False) -> ReviewDocument:
         """Render one feature file as current text or binary metadata."""
+        display = self._display_path(path)
         resolved = self.resolve_path(path)
         if resolved is None or not resolved.is_file():
-            return ReviewDocument(path=path, error="The file is unavailable in the worktree.")
+            return ReviewDocument(
+                path=path, display=display, error="The file is unavailable in the worktree."
+            )
         limit = None if full else DEFAULT_PREVIEW_BYTES
         try:
             size = resolved.stat().st_size
             with resolved.open("rb") as handle:
                 data = handle.read() if limit is None else handle.read(limit + 1)
         except OSError:
-            return ReviewDocument(path=path, error="The file is unavailable in the worktree.")
+            return ReviewDocument(
+                path=path, display=display, error="The file is unavailable in the worktree."
+            )
         truncated = limit is not None and len(data) > limit
         data = data[:limit] if truncated else data
         if is_binary_bytes(data):
             return ReviewDocument(
                 path=path,
+                display=display,
                 binary=True,
                 total_bytes=size,
                 note=f"Binary file · {size} bytes",
             )
         return ReviewDocument(
             path=path,
+            display=display,
             text=data.decode("utf-8", errors="replace"),
             truncated=truncated,
             limit_bytes=DEFAULT_PREVIEW_BYTES if truncated else None,

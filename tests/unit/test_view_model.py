@@ -7,7 +7,6 @@ from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState, RunSnapshot
 from workflow_cockpit.ui.view_model import (
-    DURATION_COLUMN,
     GATE_BUTTON_LIMIT,
     gate_affordance,
     gate_decision,
@@ -31,7 +30,14 @@ def projection(status="paused", current="review"):
     }
     return GraphProjector().project(
         WorkflowDefinitionParser().parse(WORKFLOW),
-        RunStateData(status=status, current_step_id=current, step_results={}),
+        RunStateData(
+            status=status,
+            current_step_id=current,
+            step_results={
+                "prepare": {"status": "completed"},
+                "verify": {"status": "completed"},
+            },
+        ),
         timings,
         now=NOW,
     )
@@ -45,35 +51,62 @@ class RenderRunwayTests(unittest.TestCase):
         self.assertIn("gate", self.rows["review"].text)
         self.assertNotIn("00:0", self.rows["review"].text)
 
-    def test_duration_sits_in_same_column_for_every_row(self):
-        text = self.rows["prepare"].text
-        column = len(text) - DURATION_COLUMN
-        self.assertEqual(text[column:].strip(), "00:03")
-        verify = self.rows["verify"].text
-        self.assertEqual(len(verify) - DURATION_COLUMN, column)
-        self.assertEqual(verify[column:].strip(), "00:05")
+    def test_completed_rows_carry_inline_duration(self):
+        self.assertIn("(00:03)", self.rows["prepare"].text)
+        self.assertIn("(00:05)", self.rows["verify"].text)
+        # Inline means on the label line, not a detached trailing column.
+        self.assertTrue(self.rows["prepare"].text.rstrip().endswith("(00:03)"))
 
-    def test_duration_column_holds_when_tail_varies(self):
+    def test_active_row_carries_inline_duration(self):
         graph = WorkflowDefinitionParser().parse(
             (
                 {"id": "prepare", "command": "demo.prepare"},
-                {"id": "again", "command": "demo.again"},
+                {"id": "verify", "command": "demo.verify"},
             )
         )
-        start = NOW - timedelta(seconds=4)
-        projection = GraphProjector().project(
+        start = NOW - timedelta(seconds=135)
+        active = GraphProjector().project(
             graph,
-            RunStateData(status="running", current_step_id="again", step_results={}),
+            RunStateData(
+                status="running",
+                current_step_id="verify",
+                step_results={"prepare": {"status": "completed"}},
+            ),
             {
-                "prepare": StepTiming(3, start, start + timedelta(seconds=2), "completed"),
-                "again": StepTiming(1, start, None, "running"),
+                "prepare": StepTiming(1, start, start + timedelta(seconds=10), "completed"),
+                "verify": StepTiming(1, start, None, "running"),
             },
             now=NOW,
         )
-        rows = render_runway(projection)
-        columns = [len(row.text) - DURATION_COLUMN for row in rows]
-        self.assertEqual(columns[0], columns[1])
-        self.assertIn("#3", rows[0].text)
+        rows = {row.id: row for row in render_runway(active)}
+        self.assertIn("(00:10)", rows["prepare"].text)
+        self.assertIn("(02:15)", rows["verify"].text)
+
+    def test_pending_and_skipped_rows_carry_no_duration(self):
+        graph = WorkflowDefinitionParser().parse(
+            (
+                {"id": "prepare", "command": "demo.prepare"},
+                {"id": "verify", "command": "demo.verify"},
+                {"id": "tail", "command": "demo.tail"},
+            )
+        )
+        pending = GraphProjector().project(
+            graph,
+            RunStateData(
+                status="running",
+                current_step_id="prepare",
+                step_results={"verify": {"status": "skipped"}},
+            ),
+            {
+                "prepare": StepTiming(1, START, None, "running"),
+                "verify": StepTiming(1, START, NOW, "skipped"),
+                "tail": StepTiming(1, START, NOW, "pending"),
+            },
+            now=NOW,
+        )
+        rows = {row.id: row for row in render_runway(pending)}
+        self.assertNotIn("(", rows["verify"].text)
+        self.assertNotIn("(", rows["tail"].text)
 
 
 LONG_WORKFLOW = (
@@ -129,25 +162,34 @@ class NarrowRunwayTests(unittest.TestCase):
         self.assertIn("...", row.text)
         self.assertNotIn("long-name", row.text)
 
-    def test_label_budget_matches_the_columns_actually_rendered(self):
+    def test_inline_duration_does_not_shrink_the_label(self):
         graph = WorkflowDefinitionParser().parse(
             (
-                {"id": "with-tail", "name": "x" * 40, "command": "demo.a"},
-                {"id": "without-tail", "name": "x" * 40, "command": "demo.b"},
+                {"id": "with-duration", "name": "x" * 40, "command": "demo.a"},
+                {"id": "no-duration", "name": "x" * 40, "command": "demo.b"},
             )
         )
         projection = GraphProjector().project(
             graph,
-            RunStateData(status="running", current_step_id="without-tail", step_results={}),
-            {"with-tail": StepTiming(3, NOW, NOW, "completed")},
+            RunStateData(
+                status="running",
+                current_step_id=None,
+                step_results={
+                    "with-duration": {"status": "completed"},
+                    "no-duration": {"status": "completed"},
+                },
+            ),
+            {"with-duration": StepTiming(1, NOW - timedelta(seconds=9), NOW, "completed")},
             now=NOW,
         )
         rows = {row.id: row for row in render_runway(projection, width=NARROW_WIDTH)}
-        self.assertIn("#3", rows["with-tail"].text)
-        self.assertEqual(len(rows["with-tail"].text), len(rows["without-tail"].text))
+        self.assertIn("(00:09)", rows["with-duration"].text)
+        self.assertNotIn("(", rows["no-duration"].text)
+        # The inline suffix rides outside the label budget, so both labels are
+        # truncated to the same number of characters.
         self.assertEqual(
-            len(rows["with-tail"].text) - DURATION_COLUMN,
-            len(rows["without-tail"].text) - DURATION_COLUMN,
+            rows["with-duration"].text.count("x"),
+            rows["no-duration"].text.count("x"),
         )
 
 

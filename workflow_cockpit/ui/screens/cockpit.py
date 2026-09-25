@@ -181,7 +181,8 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
         output = self.query_one(EngineOutput)
         full = mode == "output"
         output.display = True
-        output.set_state(snapshot.status, expanded=full or self._output_expanded, full=full)
+        expanded = full or self._output_expanded
+        output.set_state(snapshot.status, expanded, full=full, awaiting=snapshot.awaiting_decision)
         overview.display = mode != "changes"
         overview.set_class(mode == "output", "compact-summary")
         overview.set_class(mode == "gate", "gate-summary")
@@ -229,7 +230,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, AdaptiveScreen):
                 (f"{phase}\n", palette.fog),
                 (
                     f"NOW {step_label}  attempt {attempt}  {format_elapsed(snapshot.elapsed_seconds)}\n",
-                    f"bold {palette.paper}",
+                    f"bold {palette.cold}",
                 ),
                 (f"NEXT {next_step}\n", palette.fog),
             )
