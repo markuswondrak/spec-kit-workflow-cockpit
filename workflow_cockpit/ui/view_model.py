@@ -235,15 +235,20 @@ def render_runway(projection: GraphProjection | None, *, width: int = 36) -> lis
             and (active or state.status == "completed")
         )
         tail = ("  " + "  ".join(meta)) if meta else ""
-        # Reserve only the columns this row actually renders. The elapsed value
-        # rides inline after the label, so no fixed duration column is carved
-        # out of the label budget.
-        tail_width = len(tail) if tail else 0
-        label_width = max(8, width - len(prefix) - len(marker) - 1 - tail_width)
+        duration = f"({format_elapsed(state.duration_seconds)})" if show_duration else ""
+        # The elapsed value is right-aligned to the row's trailing edge, so its
+        # columns are reserved out of the label budget and the row never grows
+        # past `width`.
+        fixed = len(prefix) + len(marker) + 1 + len(tail)
+        duration_width = len(duration) + 1 if duration else 0
+        if duration and fixed + duration_width + 8 > width:
+            duration = ""
+            duration_width = 0
+        label_width = max(8, width - fixed - duration_width)
         label = _tail_truncate(node.label, label_width).ljust(label_width)
         body = f"{prefix}{marker} {label}{tail}"
-        if show_duration:
-            body += f" ({format_elapsed(state.duration_seconds)})"
+        if duration:
+            body += " " * max(1, width - len(body) - len(duration)) + duration
         rows.append(RunwayRow(node.id, body, state.status, state.active, node.label))
     return rows
 

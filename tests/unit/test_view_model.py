@@ -58,6 +58,12 @@ class RenderRunwayTests(unittest.TestCase):
         # Inline means on the label line, not a detached trailing column.
         self.assertTrue(self.rows["prepare"].text.rstrip().endswith("(00:03)"))
 
+    def test_duration_is_right_aligned_to_the_row_edge(self):
+        for run_id, expected in (("prepare", "(00:03)"), ("verify", "(00:05)")):
+            row = self.rows[run_id].text
+            self.assertTrue(row.endswith(expected))
+            self.assertEqual(len(row), 36)
+
     def test_active_row_carries_inline_duration(self):
         graph = WorkflowDefinitionParser().parse(
             (
@@ -163,7 +169,7 @@ class NarrowRunwayTests(unittest.TestCase):
         self.assertIn("...", row.text)
         self.assertNotIn("long-name", row.text)
 
-    def test_inline_duration_does_not_shrink_the_label(self):
+    def test_inline_duration_stays_within_row_width(self):
         graph = WorkflowDefinitionParser().parse(
             (
                 {"id": "with-duration", "name": "x" * 40, "command": "demo.a"},
@@ -184,14 +190,12 @@ class NarrowRunwayTests(unittest.TestCase):
             now=NOW,
         )
         rows = {row.id: row for row in render_runway(projection, width=NARROW_WIDTH)}
-        self.assertIn("(00:09)", rows["with-duration"].text)
+        with_duration = rows["with-duration"].text
+        self.assertTrue(with_duration.endswith("(00:09)"))
+        self.assertEqual(len(with_duration), NARROW_WIDTH)
         self.assertNotIn("(", rows["no-duration"].text)
-        # The inline suffix rides outside the label budget, so both labels are
-        # truncated to the same number of characters.
-        self.assertEqual(
-            rows["with-duration"].text.count("x"),
-            rows["no-duration"].text.count("x"),
-        )
+        for row in rows.values():
+            self.assertLessEqual(len(row.text), NARROW_WIDTH)
 
 
 class SnapshotDefaultsTests(unittest.TestCase):

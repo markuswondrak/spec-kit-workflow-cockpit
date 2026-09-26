@@ -150,7 +150,9 @@ class Runway(OptionList):
 
     def update_projection(self, projection) -> None:
         scroll_y = self.scroll_y
-        rows = render_runway(projection, width=max(12, self.size.width or 36))
+        option_padding = self.get_component_styles("option-list--option").padding.width
+        width = max(12, (self.size.width or 38) - option_padding)
+        rows = render_runway(projection, width=width)
         self._full_labels = {str(row.id): row.full_label for row in rows}
         current = projection.current_node_id if projection is not None else None
         options: list[Option] = []
