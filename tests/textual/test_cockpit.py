@@ -152,7 +152,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(status=status):
                 self.assertNotEqual(active_tone(), status_tone(status))
 
-    async def test_current_node_rendered_bold_underline(self):
+    async def test_current_node_rendered_bold_without_underline(self):
         session = FakeSession(status="running")
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(CockpitScreen(session))
@@ -165,7 +165,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             from workflow_cockpit.ui.palette import palette
 
             self.assertIn("bold", styles["prepare"])
-            self.assertIn("underline", styles["prepare"])
+            self.assertNotIn("underline", styles["prepare"])
             self.assertIn(palette.cold, styles["prepare"])
             self.assertNotIn("underline", styles["review"])
 
