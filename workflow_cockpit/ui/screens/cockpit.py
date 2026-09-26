@@ -278,17 +278,21 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
             marker, tone, heading = "[X]", palette.fault, "RUN FAILED"
         self.query_one("#view-label", Static).update(Text.assemble((f"{marker} {heading}", f"bold {tone}")))
         detail = outcome.detail or ""
+        label = outcome.detail_label or ""
         step = outcome.step_id or snapshot.current_step_id or "—"
         engine = outcome.engine_status or snapshot.engine_status
-        self.query_one("#overview-content", Static).update(
-            Text.assemble(
-                (f"{heading} {marker}\n\n", f"bold {tone}"),
-                (f"{step}\n", palette.paper),
-                (f"status {snapshot.status}   /   engine {engine}\n", palette.fog),
-                (f"{detail}\n\n", tone if outcome.kind is not OutcomeKind.SUCCESS else palette.fog),
-                (self._resume_closing(snapshot), palette.paper),
-            )
+        segments: list[tuple[str, str]] = [
+            (f"{heading} {marker}\n\n", f"bold {tone}"),
+            (f"{step}\n", palette.paper),
+            (f"status {snapshot.status}   /   engine {engine}\n", palette.fog),
+        ]
+        if label:
+            segments.append((f"{label}\n", palette.fog))
+        segments.append(
+            (f"{detail}\n\n", tone if outcome.kind is not OutcomeKind.SUCCESS else palette.fog)
         )
+        segments.append((self._resume_closing(snapshot), palette.paper))
+        self.query_one("#overview-content", Static).update(Text.assemble(*segments))
         self._update_commands(snapshot)
 
     def _update_commands(self, snapshot) -> None:

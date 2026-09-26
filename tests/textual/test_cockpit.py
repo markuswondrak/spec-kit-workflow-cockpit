@@ -9,6 +9,7 @@ from workflow_cockpit.services.log_aggregator import StepTiming
 from workflow_cockpit.services.projection import GraphProjector
 from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
+from workflow_cockpit.session.lifecycle import STREAM_DETAIL_LABEL
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
 from workflow_cockpit.ui.screens.confirm import ConfirmScreen
@@ -151,7 +152,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(status=status):
                 self.assertNotEqual(active_tone(), status_tone(status))
 
-    async def test_current_node_rendered_bold_underline(self):
+    async def test_current_node_rendered_bold_without_underline(self):
         session = FakeSession(status="running")
         async with self.app.run_test(size=(120, 40)) as pilot:
             self.app.push_screen(CockpitScreen(session))
@@ -164,7 +165,7 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             from workflow_cockpit.ui.palette import palette
 
             self.assertIn("bold", styles["prepare"])
-            self.assertIn("underline", styles["prepare"])
+            self.assertNotIn("underline", styles["prepare"])
             self.assertIn(palette.cold, styles["prepare"])
             self.assertNotIn("underline", styles["review"])
 
@@ -251,6 +252,27 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")
             await pilot.pause()
             self.assertFalse(self.app.is_running)
+
+    async def test_failure_outcome_renders_stream_excerpt_label(self):
+        session = FakeSession(status="failed")
+        session.outcome_label = STREAM_DETAIL_LABEL
+        session.outcome_detail = "PR creation failed\nexit 1"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            rendered = str(self.app.screen.query_one("#overview-content").render())
+            self.assertIn(STREAM_DETAIL_LABEL, rendered)
+            self.assertIn("PR creation failed", rendered)
+            self.assertIn("exit 1", rendered)
+
+    async def test_failure_outcome_without_label_omits_it(self):
+        session = FakeSession(status="failed")
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            rendered = str(self.app.screen.query_one("#overview-content").render())
+            self.assertNotIn(STREAM_DETAIL_LABEL, rendered)
+            self.assertIn("test outcome", rendered)
 
     async def test_paused_surface_is_read_only_with_abort(self):
         session = FakeSession(status="paused")

@@ -167,6 +167,14 @@ and power loss carry no cleanup guarantee.
 | live | any, after confirmed Abort | Aborting; signal only the verified owned group. |
 | reaped | any, after Cockpit Abort began | Cockpit-aborted after cleanup completes. |
 
+For a terminal failure the failure view shows the step's captured `stderr`/`stdout`, then the step or
+top-level `error`. When no step output was captured (dispatched `command`/`integration` steps leave
+it empty), a bounded excerpt of the live engine stream — labelled `engine output (last lines):` — is
+shown instead. The stream exists only while Cockpit owns the live session; a later read-only
+inspection has no output tail and degrades to the generic `Engine status:` message. The excerpt is
+presentation only: run state is never inferred from the stream, and persisted run files stay
+authoritative.
+
 ## Dogfooding workflow
 
 Repository changes run through the published `spec-kit-extended-flow` Feature Flow installed from

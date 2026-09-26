@@ -28,7 +28,12 @@ from .branch import BranchTracker
 from .dependencies import CockpitEnvironment, CockpitServices, EngineRuntime
 from .gate_decision import GateDecisionCoordinator, GateDecisionError, validate_shape
 from .identity import generate_run_id, owner_id
-from .lifecycle import check_launch_contract, classify_outcome, write_context_index
+from .lifecycle import (
+    STREAM_TAIL_LINES,
+    check_launch_contract,
+    classify_outcome,
+    write_context_index,
+)
 from .lifecycle import combine as _combine
 from .resume import ResumeCoordinator, ResumeDecision, ResumeError
 
@@ -456,6 +461,7 @@ class CockpitSession:
             state=state,
             owned_process=self._supervisor.started_at is not None,
             read_only=self._read_only,
+            stream_tail=tuple(self._supervisor.output_lines[-STREAM_TAIL_LINES:]),
         )
         timings: dict = {}
         aggregator_diag = ""
