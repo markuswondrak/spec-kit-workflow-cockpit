@@ -285,6 +285,28 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertEqual(log.scroll_y, before)
 
+    async def test_copy_output_puts_engine_text_on_clipboard(self):
+        session = FakeSession(status="running")
+        session.output_lines = ["line one", "line two"]
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            self.assertEqual(self.app.clipboard, "line one\nline two")
+            self.assertIn("copied", str(self.app.screen.query_one("#feedback").render()))
+
+    async def test_copy_output_with_no_retained_lines_is_a_no_op(self):
+        session = FakeSession(status="running")
+        session.output_lines = []
+        self.app._clipboard = "sentinel"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            self.assertEqual(self.app.clipboard, "sentinel")
+
     async def test_runway_uses_compact_strip_at_narrow_supported_width(self):
         session = FakeSession(status="running")
         async with self.app.run_test(size=(100, 40)) as pilot:

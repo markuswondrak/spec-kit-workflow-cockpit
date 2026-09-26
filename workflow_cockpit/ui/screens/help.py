@@ -41,6 +41,7 @@ class HelpScreen(ModalScreen):
                     "s  Show state     g  Show paused gate     c  Show Feature Files\n",
                     "l  Cycle Engine Output at a gate (tail / split / full)\n",
                     "e  Collapse Engine Output        End  Output tail\n",
+                    "y  Copy the visible Engine Output to the clipboard\n",
                     "f  Full file\n",
                     "/  Filter feature paths     o  Open selected file in $EDITOR\n\n",
                     ("DECIDE\n", palette.hold),
