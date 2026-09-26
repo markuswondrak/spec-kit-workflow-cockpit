@@ -150,7 +150,9 @@ class Runway(OptionList):
 
     def update_projection(self, projection) -> None:
         scroll_y = self.scroll_y
-        rows = render_runway(projection, width=max(12, self.size.width or 36))
+        option_padding = self.get_component_styles("option-list--option").padding.width
+        width = max(12, (self.size.width or 38) - option_padding)
+        rows = render_runway(projection, width=width)
         self._full_labels = {str(row.id): row.full_label for row in rows}
         current = projection.current_node_id if projection is not None else None
         options: list[Option] = []
@@ -181,6 +183,13 @@ class Runway(OptionList):
 class EngineOutput(Vertical):
     """Read-only bounded RichLog fed from the supervisor's normalizer."""
 
+    #: Maximum retained copy lines, matching the RichLog line bound.
+    MAX_COPY_LINES = 2000
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._copy_lines: list[str] = []
+
     def compose(self) -> ComposeResult:
         with Horizontal(id="output-heading"):
             yield Static(id="output-title")
@@ -208,11 +217,11 @@ class EngineOutput(Vertical):
     def _hint(status: str, expanded: bool, full: bool) -> str:
         if full:
             if status in ("running", "initializing", "aborting"):
-                return "[end] tail"
-            return "[l] close  [end] tail"
+                return "[end] tail  [y] copy"
+            return "[l] close  [end] tail  [y] copy"
         if expanded:
-            return "[l] full  [e] collapse  [end] tail"
-        return "[l] open  [end] tail"
+            return "[l] full  [e] collapse  [end] tail  [y] copy"
+        return "[l] open  [end] tail  [y] copy"
 
     def log(self) -> RichLog:
         return self.query_one("#engine", RichLog)
@@ -222,12 +231,20 @@ class EngineOutput(Vertical):
         at_tail = log.scroll_y >= max(0, log.virtual_size.height - log.size.height)
         if reset:
             log.clear()
+            self._copy_lines.clear()
+        if lines:
+            self._copy_lines.extend(lines)
+            del self._copy_lines[: -self.MAX_COPY_LINES]
         # RichLog.write auto-scrolls by default; suppress it so a reader who has
         # scrolled up keeps their place, then follow the tail explicitly.
         for line in lines:
             log.write(Text(line, style=palette.fog), scroll_end=False)
         if lines and at_tail:
             log.scroll_end(animate=False)
+
+    def output_text(self) -> str:
+        """The retained engine output, joinable for an explicit copy action."""
+        return "\n".join(self._copy_lines)
 
 
 class CommandRail(Horizontal):

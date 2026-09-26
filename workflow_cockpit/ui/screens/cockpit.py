@@ -53,6 +53,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
         Binding("slash", "filter", show=False),
         *[Binding(str(number), f"choose({number})", show=False) for number in range(1, 10)],
         Binding("end", "tail", show=False),
+        Binding("y", "copy_output", "Copy output", show=False),
         Binding("enter", "acknowledge", show=False, priority=True),
         Binding("question_mark", "help", "Help"),
     ]
@@ -346,6 +347,14 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
 
     def action_tail(self) -> None:
         self.query_one(EngineOutput).log().scroll_end(animate=False)
+
+    def action_copy_output(self) -> None:
+        text = self.query_one(EngineOutput).output_text()
+        if not text:
+            self._show_transient("No engine output to copy")
+            return
+        self.app.copy_to_clipboard(text)
+        self._show_transient("Engine output copied")
 
     def action_state(self) -> None:
         self._held_mode = "state"

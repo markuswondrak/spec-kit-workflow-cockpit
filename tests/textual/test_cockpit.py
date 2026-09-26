@@ -1,9 +1,13 @@
 import asyncio
 import unittest
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from tests.support import FakeSession, StyledApp
 from workflow_cockpit.services.graph import WorkflowDefinitionParser
+from workflow_cockpit.services.log_aggregator import StepTiming
+from workflow_cockpit.services.projection import GraphProjector
+from workflow_cockpit.services.run_state import RunStateData
 from workflow_cockpit.services.snapshot import GateSnapshot, GateState
 from workflow_cockpit.ui.screens.aborting import AbortingScreen
 from workflow_cockpit.ui.screens.cockpit import CockpitScreen
@@ -201,6 +205,42 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertFalse(self.app.screen.query_one("#runway-graph").can_focus)
 
+    async def test_runway_durations_are_right_aligned_without_wrapping(self):
+        session = FakeSession(status="running")
+        graph = WorkflowDefinitionParser().parse(
+            (
+                {"id": "quick-plan", "command": "demo.plan"},
+                {"id": "quick-implement", "command": "demo.impl"},
+            )
+        )
+        now = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+        start = now - timedelta(seconds=500)
+        projection = GraphProjector().project(
+            graph,
+            RunStateData(
+                status="running",
+                current_step_id="quick-implement",
+                step_results={"quick-plan": {"status": "completed"}},
+            ),
+            {
+                "quick-plan": StepTiming(1, start, start + timedelta(seconds=152), "completed"),
+                "quick-implement": StepTiming(1, start, None, "running"),
+            },
+            now=now,
+        )
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            runway = self.app.screen.query_one("#runway-graph")
+            padding = runway.get_component_styles("option-list--option").padding.width
+            usable = runway.size.width - padding
+            runway.update_projection(projection)
+            prompts = {str(option.id): str(option.prompt) for option in runway.options}
+            self.assertTrue(prompts["quick-plan"].endswith("(02:32)"))
+            self.assertTrue(prompts["quick-implement"].endswith("(08:20)"))
+            for prompt in prompts.values():
+                self.assertLessEqual(len(prompt), usable)
+
     async def test_outcome_acknowledged_with_enter(self):
         session = FakeSession(status="success")
         async with self.app.run_test(size=(120, 40)) as pilot:
@@ -284,6 +324,28 @@ class CockpitScreenTests(unittest.IsolatedAsyncioTestCase):
             self.app.screen._refresh()
             await pilot.pause()
             self.assertEqual(log.scroll_y, before)
+
+    async def test_copy_output_puts_engine_text_on_clipboard(self):
+        session = FakeSession(status="running")
+        session.output_lines = ["line one", "line two"]
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            self.assertEqual(self.app.clipboard, "line one\nline two")
+            self.assertIn("copied", str(self.app.screen.query_one("#feedback").render()))
+
+    async def test_copy_output_with_no_retained_lines_is_a_no_op(self):
+        session = FakeSession(status="running")
+        session.output_lines = []
+        self.app._clipboard = "sentinel"
+        async with self.app.run_test(size=(120, 40)) as pilot:
+            self.app.push_screen(CockpitScreen(session))
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            self.assertEqual(self.app.clipboard, "sentinel")
 
     async def test_runway_uses_compact_strip_at_narrow_supported_width(self):
         session = FakeSession(status="running")
