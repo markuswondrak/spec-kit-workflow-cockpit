@@ -23,6 +23,7 @@ class AdaptiveScreen(Screen):
         return self.size.width < MIN_WIDTH or self.size.height < MIN_HEIGHT
 
     def apply_size(self, width: int, height: int) -> None:
+        self.set_class(width < 140, "medium")
         self.set_class(width < 112, "compact")
         self.set_class(height < 38, "short")
         small = width < MIN_WIDTH or height < MIN_HEIGHT
