@@ -159,7 +159,7 @@ class Runway(OptionList):
         for row in rows:
             tone = status_tone(row.status)
             if str(row.id) == current:
-                options.append(Option(_text((row.text, f"bold underline {active_tone()}")), id=row.id))
+                options.append(Option(_text((row.text, f"bold {active_tone()}")), id=row.id))
             elif row.active:
                 options.append(Option(_text((row.text, f"bold {tone}")), id=row.id))
             else:

@@ -222,6 +222,8 @@ class FakeSession:
         self.reviewing = False
         self.process_live_override: bool | None = None
         self.diagnostic = ""
+        self.outcome_detail = "test outcome"
+        self.outcome_label = ""
         self.decisions: list[str] = []
         self.refreshed = 0
         self.editor_launches: list[str] = []
@@ -383,7 +385,12 @@ class FakeSession:
         }
         outcome = None
         if self.status in kind_map:
-            outcome = Outcome(kind=kind_map[self.status], detail="test outcome", engine_status=self.status)
+            outcome = Outcome(
+                kind=kind_map[self.status],
+                detail=self.outcome_detail,
+                engine_status=self.status,
+                detail_label=self.outcome_label,
+            )
         return RunSnapshot(
             run_id="cockpit-abcdef123456",
             workflow_id="demo",

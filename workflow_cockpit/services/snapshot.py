@@ -22,6 +22,8 @@ class Outcome:
     detail: str = ""
     step_id: str | None = None
     engine_status: str | None = None
+    #: Optional label marking the detail's source, e.g. a live-stream excerpt.
+    detail_label: str = ""
 
 
 class GateState(str, Enum):

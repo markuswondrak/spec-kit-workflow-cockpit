@@ -6,6 +6,7 @@ and the facade stays under its size budget.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,13 @@ from ..services.snapshot import Outcome, OutcomeKind
 
 #: Characters kept from a failure detail before the render budget is at risk.
 FAILURE_DETAIL_LIMIT = 2000
+
+#: Lines kept from the live engine stream when no step output was captured.
+STREAM_TAIL_LINES = 20
+
+#: Label marking a failure detail that came from the live engine stream rather
+#: than captured step output.
+STREAM_DETAIL_LABEL = "engine output (last lines):"
 
 
 def combine(*messages: str) -> str:
@@ -41,13 +49,26 @@ def _bounded(text: str) -> str:
     return trimmed[:FAILURE_DETAIL_LIMIT].rstrip() + "…"
 
 
-def _failure_detail(state: RunStateData | None, persisted: str) -> str:
-    """Derive the failure detail from the current step's captured output.
+def _stream_excerpt(stream_tail: Sequence[str]) -> str:
+    """Return a bounded suffix of already-normalised engine-stream lines."""
+    lines = list(stream_tail)[-STREAM_TAIL_LINES:]
+    return "\n".join(lines).strip()
 
-    Prefers the step's captured ``stderr``, then ``stdout``, then the step or
-    top-level ``error``; falls back to the generic persisted-status message when
-    no captured diagnostic exists. The result is trimmed and bounded so a large
-    output cannot stall rendering.
+
+def _failure_source(
+    state: RunStateData | None,
+    persisted: str,
+    stream_tail: Sequence[str],
+) -> tuple[str, str]:
+    """Select the failure detail and its label from captured output or the stream.
+
+    Prefers the step's captured ``stderr``, then ``stdout`` (authoritative).
+    When a step result exists but captured no output (a dispatched
+    ``command``/``integration`` step), a bounded excerpt of the live engine
+    stream is used before the step or top-level ``error``; without a step result
+    the persisted error is kept. Falls back to the generic persisted-status
+    message. The second value is a label marking a stream excerpt; it is empty
+    for captured output.
     """
     result = state.current_result() if state is not None else None
     if result is not None:
@@ -56,13 +77,42 @@ def _failure_detail(state: RunStateData | None, persisted: str) -> str:
             for key in ("stderr", "stdout"):
                 value = output.get(key)
                 if isinstance(value, str) and value.strip():
-                    return _bounded(value)
+                    return _bounded(value), ""
+        excerpt = _stream_excerpt(stream_tail)
+        if excerpt:
+            return _bounded(excerpt), STREAM_DETAIL_LABEL
         step_error = result.get("error")
         if isinstance(step_error, str) and step_error.strip():
-            return _bounded(step_error)
+            return _bounded(step_error), ""
     if state is not None and isinstance(state.error, str) and state.error.strip():
-        return _bounded(state.error)
-    return f"Engine status: {persisted}"
+        return _bounded(state.error), ""
+    return f"Engine status: {persisted}", ""
+
+
+def _failure_detail(
+    state: RunStateData | None,
+    persisted: str,
+    stream_tail: Sequence[str] = (),
+) -> str:
+    """Derive the failure detail from captured output or the live engine stream."""
+    detail, _label = _failure_source(state, persisted, stream_tail)
+    return detail
+
+
+def _failure_outcome(
+    state: RunStateData | None,
+    persisted: str,
+    stream_tail: Sequence[str],
+) -> Outcome:
+    """Build the FAILURE outcome with its detail and source label."""
+    detail, label = _failure_source(state, persisted, stream_tail)
+    return Outcome(
+        kind=OutcomeKind.FAILURE,
+        detail=detail,
+        detail_label=label,
+        step_id=state.current_step_id if state else None,
+        engine_status=persisted,
+    )
 
 
 def check_launch_contract(
@@ -124,13 +174,15 @@ def classify_outcome(
     state: RunStateData | None,
     owned_process: bool = True,
     read_only: bool = False,
+    stream_tail: Sequence[str] = (),
 ) -> Outcome | None:
     """Classify the run outcome from persisted state and process condition.
 
     ``owned_process`` is false for an adopted run that has not yet spawned a
     resume: a terminal persisted status is still authoritative, but an
     unexpected non-terminal status must not be reported as a crashed process.
-    ``read_only`` reflects a passively inspected run where no process is owned.
+    ``read_only`` reflects a passively inspected run where no process is owned;
+    it also has no live stream, so ``stream_tail`` is ignored in that mode.
     """
     if contract_error is not None and reaped:
         return Outcome(
@@ -149,24 +201,14 @@ def classify_outcome(
         if persisted == "completed":
             return Outcome(kind=OutcomeKind.SUCCESS, engine_status=persisted)
         if persisted in ("failed", "aborted"):
-            return Outcome(
-                kind=OutcomeKind.FAILURE,
-                detail=_failure_detail(state, persisted),
-                step_id=state.current_step_id if state else None,
-                engine_status=persisted,
-            )
+            return _failure_outcome(state, persisted, ())
         return None
     if not reaped:
         return None
     if persisted == "completed":
         return Outcome(kind=OutcomeKind.SUCCESS, engine_status=persisted)
     if persisted in ("failed", "aborted"):
-        return Outcome(
-            kind=OutcomeKind.FAILURE,
-            detail=_failure_detail(state, persisted),
-            step_id=state.current_step_id if state else None,
-            engine_status=persisted,
-        )
+        return _failure_outcome(state, persisted, stream_tail)
     if persisted == "paused":
         return None
     if not owned_process:
