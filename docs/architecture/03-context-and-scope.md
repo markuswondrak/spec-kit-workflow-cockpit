@@ -53,7 +53,8 @@ every run Cockpit starts or adopts; lifecycle state changes only through `specif
 - **Context index:** a Markdown index (not a snapshot) listing authoritative live sources for a
   user-chosen external agent.
 - **Skill:** `cockpit-run-context` consumes only the context-index path and never invokes workflow
-  lifecycle commands.
+  lifecycle commands. It stays inside the worktree: process liveness is read with `ps`, never
+  `/proc`, so it triggers no out-of-project permission prompt.
 - **Adoption, inspection, and deletion:** the launch screen lists bounded, read-only run descriptors.
   An adoptable `paused` run can be claimed and decided and an adoptable `failed` run claimed and
   resumed once from its recorded step; any usable run (including `running`, terminal, or

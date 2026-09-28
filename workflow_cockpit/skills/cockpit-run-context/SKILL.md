@@ -35,7 +35,12 @@ Read the sources named in the index with read-only tools:
 - `.specify/feature.json` for the declared feature directory (read the file; the
   index never copies the resolved path).
 - `.cockpit-owner.json` inside the run directory for the Cockpit owner identity
-  and liveness evidence (host, PID/PGID, process start time).
+  and recorded liveness evidence (host, PID/PGID, process start time).
+
+Read only paths inside the worktree. Do not open `/proc/<pid>` or any other
+path outside the project to inspect a process: the host agent treats it as an
+external directory and stops to ask the user for permission. Use the `ps`
+command for process liveness; it references no out-of-project path.
 
 If a source is missing or partially written, say so. Never infer workflow state
 from an index or from logs when `state.json` is readable; it is authoritative.
@@ -51,10 +56,14 @@ sources themselves and never from a cached value:
 - **What it is doing:** `status` in that run's `state.json`. A terminal status
   (`completed`, `failed`, `aborted`) means the engine has stopped; a `failed` run
   can still be adopted and resumed once by Cockpit from its recorded step.
-- **Who owns it:** the run's `.cockpit-owner.json`. A claim whose recorded host
-  and PID/start time still match a live process is a live owner; a claim whose
-  PID is gone, or whose start time changed, is stale; a missing claim means the
-  run has no recorded owner.
+- **Who owns it:** the run's `.cockpit-owner.json`. Report what the record holds
+  (`owner_id`, `host`, `pid`, `pgid`, `process_start`, `created_at`); a missing
+  claim means the run has no recorded owner. To tell a live owner from a claim
+  left by a crash, inspect the recorded PID with
+  `ps -p <pid> -o pid=,pgid=,lstart=`: no output means the PID is gone and the
+  claim is stale; matching PID/PGID output means a live owner. Never read
+  `/proc/<pid>` for this, and if liveness stays unclear, say so instead of
+  guessing.
 
 Treat the run as actively driven by Cockpit only when `state.json` is
 non-terminal and a live claim exists. If the claim is missing or stale, say so
