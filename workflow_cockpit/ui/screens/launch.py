@@ -53,6 +53,7 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
         self._dirty_confirmed = False
         self._pending_adopt: str | None = None
         self._pending_delete: str | None = None
+        self._catalog_summary = ""
         self._definition = None
         try:
             self._entries = session.list_workflows()
@@ -123,7 +124,17 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
             )
             return
         options = []
+        selectable: list[int] = []
+        first_failure = ""
         for index, entry in enumerate(self._entries):
+            failure = self._probe(entry.id)
+            if failure is None:
+                selectable.append(index)
+                footer, footer_tone = "Enter to configure", palette.cold
+            else:
+                if not first_failure:
+                    first_failure = f"{entry.name}: {failure}"
+                footer, footer_tone = f"Unavailable: {failure}", palette.fault
             options.append(
                 Option(
                     Text.assemble(
@@ -132,18 +143,29 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
                         (f"{entry.name}\n", f"bold {palette.paper}"),
                         ("    ", palette.fog),
                         (entry.description or "No description provided.", palette.fog),
-                        ("\n    Enter to configure\n", palette.cold),
+                        (f"\n    {footer}\n", footer_tone),
                     ),
                     id=entry.id,
+                    disabled=failure is not None,
                 )
             )
         listing.add_options(options)
-        if options:
-            listing.highlighted = 0
+        self._catalog_summary = (
+            f"{len(selectable)} of {len(options)} workflow{'s' if len(options) != 1 else ''} runnable"
+            if first_failure
+            else f"{len(options)} workflow{'s' if len(options) != 1 else ''} available"
+        )
+        if selectable:
+            self.selected = selectable[0]
+            listing.highlighted = self.selected
             listing.focus()
+            self._set_catalog_note(self._catalog_summary)
             await self.update_selection()
-            self.query_one("#catalog-note", Static).update(
-                Text.assemble((f"{len(options)} workflow{'s' if len(options) != 1 else ''} available", palette.fog))
+        elif options:
+            self._show_empty_state(
+                "WORKFLOWS UNAVAILABLE",
+                first_failure or "Every installed workflow failed to load.",
+                "Reinstall with:  specify workflow add <id>",
             )
         else:
             self._show_empty_state(
@@ -151,6 +173,27 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
                 "This project has no enabled workflows to run.",
                 "Install one with:  specify workflow add <id>",
             )
+
+    def _probe(self, workflow_id: str) -> str | None:
+        """Return a failure reason when a workflow's definition cannot be loaded.
+
+        The registry can outlive the definition YAML (for example after a checkout
+        that restores the tracked registry but not the ignored workflow files), so
+        each listed entry is resolved once up front. A failure disables the option
+        instead of presenting a card that silently does nothing on Enter.
+        """
+        try:
+            self.session.select(workflow_id)
+        except Exception as exc:  # noqa: BLE001 - any load failure marks the entry unavailable
+            return str(exc)
+        return None
+
+    def _set_catalog_note(self, text: str, *, fault: bool = False) -> None:
+        try:
+            note = self.query_one("#catalog-note", Static)
+        except NoMatches:
+            return
+        note.update(Text.assemble((text, palette.fault if fault else palette.fog)))
 
     def _render_style_note(self) -> None:
         """Always show the resolved style; name the fallback reason non-fatally."""
@@ -194,9 +237,13 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
             self.query_one("#detail-name", Static).update(Text.assemble((entry.name, palette.paper)))
             self.query_one("#detail-description", Static).update(Text.assemble((str(exc), palette.fault)))
             self.query_one("#detail-flow", Static).update("")
-            self.query_one("#start", Button).display = False
+            await self.query_one("#config-form", Vertical).remove_children()
+            self._apply_start_readiness(str(exc))
+            self._set_catalog_note(f"{entry.name} is unavailable: {exc}", fault=True)
+            self._render_commands()
             return
         definition = self._definition
+        self._set_catalog_note(self._catalog_summary)
         self.query_one("#detail-name", Static).update(Text.assemble((definition.name, palette.paper)))
         self.query_one("#detail-description", Static).update(Text.assemble((definition.description, palette.fog)))
         flow = " -> ".join(step.id for step in definition.steps)
@@ -209,8 +256,24 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
         self.query_one("#launch-detail").display = self.configuring
         self.query_one("#launch-content").set_class(self.configuring, "configuring")
         await self._build_form(definition.presented_inputs)
+        self._apply_start_readiness(self.session.compatibility_error or None)
         self._render_state()
         self._render_commands()
+
+    def _apply_start_readiness(self, reason: str | None) -> None:
+        """Keep Start visible; when blocked, disable it and name the reason.
+
+        Hiding the button silently loses the affordance and, once hidden, it used
+        to stay hidden for the rest of the session even after a startable workflow
+        was selected. A visible, disabled button plus the reason in the validation
+        line keeps the user oriented and matches the "operational certainty" goal.
+        """
+        button = self.query_one("#start", Button)
+        button.display = True
+        button.disabled = reason is not None
+        self.query_one("#validation", Static).update(
+            Text.assemble((reason, palette.fault)) if reason else ""
+        )
 
     def _render_state(self) -> None:
         branch = self.session.git.branch() or "unknown"
@@ -318,12 +381,16 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
             except NoMatches:
                 continue
         try:
-            self.query_one("#start", Button).focus()
+            button = self.query_one("#start", Button)
         except NoMatches:
-            pass
+            return
+        if not button.disabled:
+            button.focus()
 
     def start(self) -> None:
         if self._definition is None:
+            return
+        if self.query_one("#start", Button).disabled:
             return
         values = self._collect_values()
         _resolved, errors = self.session.validate(values)
