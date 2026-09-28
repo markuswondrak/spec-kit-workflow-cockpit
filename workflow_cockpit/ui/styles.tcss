@@ -11,6 +11,7 @@ Button:focus { text-style: bold; background: $focus; color: $paper; }
 Button.-primary { background: $signal; color: $ink; text-style: bold; }
 Button.-warning { background: $hold; color: $ink; text-style: bold; }
 Button.-error { background: $fault; color: $ink; text-style: bold; }
+Button:disabled { background: $raised; color: $fog; text-style: none; }
 Input, Select { background: $ink; border: tall $rail; color: $paper; }
 Input:focus { border: tall $cold; }
 SelectCurrent { background: $ink; border: tall $rail; }

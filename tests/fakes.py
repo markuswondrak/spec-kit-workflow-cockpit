@@ -230,6 +230,7 @@ class FakeSession:
         self.editor = "/usr/bin/true"
         self.context_path = ".specify/workflows/runs/current_run"
         self.context_error = ""
+        self.compatibility_error = ""
         self.current_step_id = "prepare"
         self.existing_runs: tuple = ()
         self.adopted_run: str | None = None
