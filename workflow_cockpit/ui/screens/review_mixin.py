@@ -12,7 +12,13 @@ from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
 from ..palette import palette
 from ..view_model import gate_decision
-from ..widgets import FeatureFileList, GateDecisionBar, MarkdownDocumentView, ReviewDocumentView
+from ..widgets import (
+    FeatureFileList,
+    FeatureFileSelect,
+    GateDecisionBar,
+    MarkdownDocumentView,
+    ReviewDocumentView,
+)
 
 
 class ReviewMixin:
@@ -133,8 +139,10 @@ class ReviewMixin:
     def _render_review_files(self, snapshot) -> None:
         files = self._visible_files(snapshot)
         file_list = self.query_one(FeatureFileList)
+        file_select = self.query_one(FeatureFileSelect)
         if not files:
             file_list.update_files(())
+            file_select.update_files((), None)
             self._selected_review_path = None
             self._current_document = None
             if snapshot.review is not None and snapshot.review.status == "error":
@@ -149,6 +157,7 @@ class ReviewMixin:
             return
         file_list.update_files(files, self._selected_review_path)
         self._selected_review_path = file_list.selected_path
+        file_select.update_files(files, self._selected_review_path)
         self._load_document(self._selected_review_path)
 
     def on_input_changed(self, event: Input.Changed) -> None:

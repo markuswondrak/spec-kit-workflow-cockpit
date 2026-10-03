@@ -120,6 +120,11 @@ class CockpitSkillTests(unittest.TestCase):
         ):
             self.assertIn(rule, content)
 
+    def test_skill_keeps_process_checks_inside_the_project(self):
+        content = SKILL_PATH.read_text(encoding="utf-8")
+        self.assertIn("Do not open `/proc/<pid>`", content)
+        self.assertIn("`ps -p <pid> -o pid=,pgid=,lstart=`", content)
+
 
 if __name__ == "__main__":
     unittest.main()

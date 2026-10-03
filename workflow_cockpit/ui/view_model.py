@@ -39,6 +39,13 @@ def format_elapsed(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def format_duration(seconds: float) -> str:
+    """Inline runway duration: ``(MM:SS)``, or a lone ``-`` when it took no time."""
+    if int(max(0.0, seconds)) == 0:
+        return "-"
+    return f"({format_elapsed(seconds)})"
+
+
 TAIL_COLUMN = 8
 """Fixed width of the gate/attempt tail that follows a label."""
 
@@ -235,7 +242,7 @@ def render_runway(projection: GraphProjection | None, *, width: int = 36) -> lis
             and (active or state.status == "completed")
         )
         tail = ("  " + "  ".join(meta)) if meta else ""
-        duration = f"({format_elapsed(state.duration_seconds)})" if show_duration else ""
+        duration = format_duration(state.duration_seconds) if show_duration else ""
         # The elapsed value is right-aligned to the row's trailing edge, so its
         # columns are reserved out of the label budget and the row never grows
         # past `width`.

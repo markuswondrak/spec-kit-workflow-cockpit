@@ -58,6 +58,28 @@ class RenderRunwayTests(unittest.TestCase):
         # Inline means on the label line, not a detached trailing column.
         self.assertTrue(self.rows["prepare"].text.rstrip().endswith("(00:03)"))
 
+    def test_zero_duration_row_shows_a_lone_dash(self):
+        zero = GraphProjector().project(
+            WorkflowDefinitionParser().parse(WORKFLOW),
+            RunStateData(
+                status="paused",
+                current_step_id="review",
+                step_results={
+                    "prepare": {"status": "completed"},
+                    "verify": {"status": "completed"},
+                },
+            ),
+            {
+                "prepare": StepTiming(1, START, START, "completed"),
+                "verify": StepTiming(1, START, START + timedelta(seconds=5), "completed"),
+            },
+            now=NOW,
+        )
+        rows = {row.id: row for row in render_runway(zero)}
+        self.assertTrue(rows["prepare"].text.rstrip().endswith("-"))
+        self.assertNotIn("00:00", rows["prepare"].text)
+        self.assertIn("(00:05)", rows["verify"].text)
+
     def test_duration_is_right_aligned_to_the_row_edge(self):
         for run_id, expected in (("prepare", "(00:03)"), ("verify", "(00:05)")):
             row = self.rows[run_id].text

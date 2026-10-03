@@ -94,9 +94,12 @@ OptionList:focus > .option-list--option-highlighted { background: $selection; co
 #overview.compact-summary { height: 4; padding: 0 2; }
 #overview-content { margin-bottom: 1; }
 #overview.gate-summary { height: auto; max-height: 9; }
-#review-panel { display: none; height: 1fr; }
+#review-panel { display: none; height: 1fr; layout: vertical; }
+#review-picker { height: auto; }
+#review-file-select { display: none; width: 1fr; }
+#review-filter { width: 42; border: none; background: $ink; height: 1; padding: 0 1; }
+#review-body { height: 1fr; }
 #review-index { width: 42; height: 1fr; border-right: solid $rail; }
-#review-filter { border: none; background: $ink; height: 1; padding: 0 1; }
 #changed-files { width: 100%; height: 1fr; padding: 0 1; }
 #review-scroll { width: 1fr; height: 1fr; }
 #review-document { padding: 1 2; }
@@ -113,7 +116,10 @@ OptionList:focus > .option-list--option-highlighted { background: $selection; co
 #gate-decision > Button:disabled { background: $raised; color: $fog; }
 #gate-select { width: auto; min-width: 24; }
 #decide-hint { width: auto; height: 3; color: $fog; content-align: right middle; padding-right: 1; }
-.compact #review-index { width: 28; }
+/* Medium viewports collapse the index into the picker combobox. */
+.medium #review-index { display: none; }
+.medium #review-file-select { display: block; }
+.medium #review-filter { width: 1fr; }
 #output { height: 5; border-top: solid $rail; background: $ink; }
 #output.expanded { height: 45%; min-height: 6; }
 #output.full-canvas { height: 1fr; }

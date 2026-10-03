@@ -21,6 +21,7 @@ from ..widgets import (
     EngineOutput,
     ErrorStrip,
     FeatureFileList,
+    FeatureFileSelect,
     GateDecisionBar,
     HeaderRail,
     MarkdownDocumentView,
@@ -96,13 +97,16 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
                         yield Static(id="review-status")
                     with VerticalScroll(id="overview"):
                         yield Static(id="overview-content")
-                    with Horizontal(id="review-panel"):
-                        with Vertical(id="review-index"):
+                    with Vertical(id="review-panel"):
+                        with Horizontal(id="review-picker"):
+                            yield FeatureFileSelect(id="review-file-select")
                             yield Input(placeholder="filter paths", id="review-filter")
-                            yield FeatureFileList(id="feature-files")
-                        with VerticalScroll(id="review-scroll"):
-                            yield ReviewDocumentView(id="review-document")
-                            yield MarkdownDocumentView(id="review-markdown")
+                        with Horizontal(id="review-body"):
+                            with Vertical(id="review-index"):
+                                yield FeatureFileList(id="feature-files")
+                            with VerticalScroll(id="review-scroll"):
+                                yield ReviewDocumentView(id="review-document")
+                                yield MarkdownDocumentView(id="review-markdown")
                     with Horizontal(id="decide-bar"):
                         yield Static("DECIDE", id="decide-label")
                         yield GateDecisionBar(id="gate-decision")
@@ -195,6 +199,20 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
         # when the gate still declares options.
         decision = gate_decision(snapshot) if mode == "gate" else None
         decide.display = decision is not None and bool(decision.options)
+
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        # The picker combobox owns Enter while it (or its overlay list) is
+        # focused; otherwise the global acknowledge binding swallows the key
+        # and a narrow-viewport file choice can never be confirmed.
+        if action == "acknowledge" and self._file_picker_focused():
+            return False
+        return super().check_action(action, parameters)
+
+    def _file_picker_focused(self) -> bool:
+        focused = self.app.focused
+        if focused is None:
+            return False
+        return any(isinstance(node, FeatureFileSelect) for node in focused.ancestors_with_self)
 
     def _render_state(self, snapshot, step_label) -> None:
         self.query_one("#review-status", Static).update("")
@@ -455,10 +473,18 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
         if event.option.id is None:
             return
         if event.option_list.id in ("feature-files", "changed-files"):
-            self._selected_review_path = str(event.option.id)
-            self._full_file = False
-            self._load_document(self._selected_review_path)
+            self._select_review_path(str(event.option.id))
             event.stop()
+
+    def on_feature_file_select_file_chosen(self, message: FeatureFileSelect.FileChosen) -> None:
+        message.stop()
+        self._select_review_path(message.path)
+
+    def _select_review_path(self, path: str) -> None:
+        """Route both the list and the combobox through one selection path."""
+        self._selected_review_path = path
+        self._full_file = False
+        self._load_document(self._selected_review_path)
 
     def action_abort(self) -> None:
         snapshot = self._snapshot_now()

@@ -14,7 +14,7 @@ from ..theme import active_style
 from ..view_model import render_runway, state_grammar
 from .gate import GateDecisionBar
 from .indicator import BounceIndicator
-from .review import FeatureFileList, MarkdownDocumentView, ReviewDocumentView
+from .review import FeatureFileList, FeatureFileSelect, MarkdownDocumentView, ReviewDocumentView
 
 __all__ = [
     "TRUNCATION_MARKER",
@@ -23,6 +23,7 @@ __all__ = [
     "EngineOutput",
     "ErrorStrip",
     "FeatureFileList",
+    "FeatureFileSelect",
     "GateDecisionBar",
     "HeaderRail",
     "MarkdownDocumentView",

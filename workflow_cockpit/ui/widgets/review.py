@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual.binding import Binding
-from textual.widgets import Markdown, OptionList, Static
+from textual.message import Message
+from textual.widgets import Markdown, OptionList, Select, Static
 from textual.widgets.option_list import Option
 
 from ...services.review import ReviewDocument
@@ -39,13 +40,60 @@ class FeatureFileList(OptionList):
         self.add_options(options)
         if options:
             index_by_path = {str(option.id): index for index, option in enumerate(options)}
-            preferred = live_path or selected_path or self.selected_path
+            # The caller-supplied path is the single source of truth; the live
+            # highlight is only a fallback when no explicit selection is known.
+            preferred = selected_path or live_path or self.selected_path
             with self.prevent(OptionList.OptionHighlighted):
                 self.highlighted = index_by_path.get(preferred or "", 0)
             self.selected_path = str(options[self.highlighted].id)
             self.scroll_to(y=scroll_y, animate=False)
         else:
             self.selected_path = None
+
+
+class FeatureFileSelect(Select):
+    """Narrow-viewport file selector mirroring the shared review selection.
+
+    Presentation only: it renders the already-filtered files and posts the
+    chosen path so the screen routes it through the same ``_load_document``
+    path the ``OptionList`` uses. It never owns selection state itself.
+    """
+
+    class FileChosen(Message):
+        """Posted when the operator picks a feature file from the combobox."""
+
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("prompt", "select file")
+        super().__init__((), *args, **kwargs)
+        self._signature: tuple | None = None
+
+    def update_files(self, files, selected_path: str | None = None) -> None:
+        options = []
+        for feature_file in files:
+            suffix = "  (binary)" if feature_file.binary else ""
+            options.append((f"{feature_file.label}{suffix}", feature_file.path))
+        # The review surface re-renders on every poll; rebuilding the options
+        # would close an overlay the operator is still using. Only touch the
+        # control when the filtered set or the shared selection actually moved.
+        signature = (selected_path, tuple(options))
+        if signature == self._signature:
+            return
+        self._signature = signature
+        with self.prevent(Select.Changed):
+            self.set_options(options)
+            if selected_path is not None and any(value == selected_path for _, value in options):
+                self.value = selected_path
+        self.disabled = not options
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        event.stop()
+        if event.value is Select.NULL:
+            return
+        self.post_message(self.FileChosen(str(event.value)))
 
 
 class ReviewDocumentView(Static):
