@@ -1,0 +1,9 @@
+{
+  "default": { "model": "github-copilot/claude-haiku-5.5" },
+  "specify": { "model": "github-copilot/claude-sonnet-5.5" },
+  "plan": { "model": "github-copilot/claude-sonnet-5.5" },
+  "analyze": { "model": "github-copilot/claude-sonnet-5.5" },
+  "converge": { "model": "github-copilot/gpt-6-sol" },
+  "quick-plan": { "model": "github-copilot/claude-sonnet-5.5" },
+  "bug-assess": { "model": "github-copilot/claude-sonnet-5.5" }
+}
