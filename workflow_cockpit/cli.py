@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import replace
 
+from . import diagnostics
 from .bootstrap.compatibility import Compatibility
 from .bootstrap.discovery import ProjectDiscovery, ProjectDiscoveryError
 from .bootstrap.preflight import Preflight
@@ -50,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    diagnostics.configure()
     args = build_parser().parse_args(argv)
     try:
         project = ProjectDiscovery().discover(args.project)

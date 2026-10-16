@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from rich.text import Text
 from textual import work
 from textual.containers import VerticalScroll
 from textual.widgets import Input, Static
 
+from ... import diagnostics
 from ...services.context_index import SKILL_GUIDANCE
 from ...services.review import ReviewDocument
 from ..editor import resolve_editor_command
@@ -19,6 +22,8 @@ from ..widgets import (
     MarkdownDocumentView,
     ReviewDocumentView,
 )
+
+_LOG = logging.getLogger(__name__)
 
 
 class ReviewMixin:
@@ -55,7 +60,8 @@ class ReviewMixin:
     @work(thread=True, group="review", exclusive=True)
     def _refresh_review_worker(self, run_id: str) -> None:
         try:
-            review = self.session.refresh_review()
+            with diagnostics.timed("review refresh", warn_ms=200):
+                review = self.session.refresh_review()
             error = ""
         except Exception as exc:
             review = None
@@ -205,7 +211,8 @@ class ReviewMixin:
     @work(thread=True, group="review-document", exclusive=True)
     def _load_document_worker(self, run_id: str, path: str, full: bool, revision: int) -> None:
         try:
-            document = self.session.review_document(path, full=full)
+            with diagnostics.timed("document load", warn_ms=200):
+                document = self.session.review_document(path, full=full)
         except Exception as exc:
             document = ReviewDocument(path=path, error=str(exc))
         self.app.call_from_thread(self._apply_document, run_id, path, full, revision, document)
@@ -226,6 +233,12 @@ class ReviewMixin:
             return
         self._current_document = document
         self._document_key = key
+        _LOG.debug(
+            "document applied path=%s chars=%d revision=%d",
+            path,
+            len(document.text or ""),
+            revision,
+        )
         self._show_document(document)
 
     # -- view actions --------------------------------------------------
