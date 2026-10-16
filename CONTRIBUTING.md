@@ -65,6 +65,17 @@ files alone leaves `.specify/` on the previously installed version.
 The cockpit never modifies the workflow engine or imports its internals. Persisted run files are
 authoritative.
 
+## Diagnosing a frozen UI
+
+Start the cockpit with `WORKFLOW_COCKPIT_DEBUG_LOG=/tmp/cockpit-debug.log` to write a diagnostic log.
+Nothing is printed to the terminal. The log records UI stalls (the event loop did not run for
+more than 0.5 s), a count of keys, mouse events, and paste events every 30 s (lengths only, never
+content), slow snapshot, review, and document work, and uncaught exceptions.
+
+When the UI stops responding, send `kill -USR1 <pid>`. The stack of every thread is appended to the
+same file, and the process keeps running. The variable only takes effect for a newly started
+process.
+
 ## Releasing
 
 Maintainers cut releases from `main` with `scripts/release.sh`, which bumps the version, commits,
