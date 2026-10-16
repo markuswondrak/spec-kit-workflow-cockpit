@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from textual import work
 
+from ... import diagnostics
 from ...services.snapshot import RunSnapshot
 from ...session.polling import PollingLoop
 from ..messages import SnapshotPublished
@@ -47,14 +48,16 @@ class RunPollMixin:
 
     @work(thread=True, group="poll", exclusive=True)
     def _produce_snapshot(self) -> None:
-        snapshot = self._loop.produce()
+        with diagnostics.timed("snapshot production", warn_ms=200):
+            snapshot = self._loop.produce()
         self.post_message(SnapshotPublished(snapshot, self._loop.last_error))
 
     def on_snapshot_published(self, message: SnapshotPublished) -> None:
         if message.snapshot is not None:
             self._snapshot = message.snapshot
         self._poll_error = message.error
-        self._apply_snapshot(self._snapshot_now())
+        with diagnostics.timed("snapshot apply", warn_ms=100):
+            self._apply_snapshot(self._snapshot_now())
 
     def _request_branch(self) -> None:
         if self._branch_pending:
