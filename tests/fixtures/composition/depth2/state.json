@@ -1,0 +1,212 @@
+{
+  "run_id": "08770dce",
+  "workflow_id": "deep-release",
+  "installed_workflow_id": null,
+  "installed_registry_root": null,
+  "status": "paused",
+  "current_step_index": 1,
+  "current_step_id": "deep-review",
+  "step_results": {
+    "build": {
+      "type": "shell",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "status": "completed",
+      "error": null
+    },
+    "middle-call": {
+      "type": "workflow",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "workflow": "middle",
+        "status": "paused"
+      },
+      "status": "paused",
+      "error": null
+    }
+  },
+  "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project",
+  "created_at": "2026-10-17T07:57:52.016100+00:00",
+  "updated_at": "2026-10-17T07:57:52.038688+00:00",
+  "error": null,
+  "inputs": {
+    "approval": ""
+  },
+  "execution": {
+    "version": 2,
+    "sequence": {
+      "source": "- id: build\n  type: shell\n  run: 'true'\n- id: middle-call\n  type: workflow\n  workflow: middle\n  input:\n    approval: '{{ inputs.approval }}'\n- id: publish\n  type: shell\n  run: 'true'\n",
+      "nodes": [
+        {
+          "phase": "done",
+          "active": false,
+          "result": {
+            "type": "shell",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "status": "completed",
+            "error": null
+          },
+          "outcome": "completed",
+          "error": null
+        },
+        {
+          "phase": "blocked",
+          "active": false,
+          "binding": {
+            "workflow": "middle",
+            "definition": "workflow:\n  id: middle\n  name: Middle\n  version: 1.0.0\n  description: Middle workflow that calls the innermost one.\ninputs:\n  approval:\n    type: string\n    default: ''\nsteps:\n- id: middle-prep\n  type: shell\n  run: 'true'\n- id: inner-call\n  type: workflow\n  workflow: inner\n  input:\n    approval: '{{ inputs.approval }}'\n",
+            "inputs": {
+              "approval": ""
+            },
+            "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project/.specify/workflows/middle"
+          },
+          "children": [
+            {
+              "nodes": [
+                {
+                  "phase": "done",
+                  "active": false,
+                  "result": {
+                    "type": "shell",
+                    "integration": null,
+                    "model": null,
+                    "options": {},
+                    "input": {},
+                    "output": {
+                      "exit_code": 0,
+                      "stdout": "",
+                      "stderr": ""
+                    },
+                    "status": "completed",
+                    "error": null
+                  },
+                  "outcome": "completed",
+                  "error": null
+                },
+                {
+                  "phase": "blocked",
+                  "active": false,
+                  "binding": {
+                    "workflow": "inner",
+                    "definition": "workflow:\n  id: inner\n  name: Inner\n  version: 1.0.0\n  description: Innermost called workflow with the deep gate.\ninputs:\n  approval:\n    type: string\n    default: ''\nsteps:\n- id: deep-draft\n  type: shell\n  run: 'true'\n- id: deep-review\n  type: gate\n  message: Approve the inner result?\n  options:\n  - approve\n  - reject\n  verdict_input: approval\n",
+                    "inputs": {
+                      "approval": ""
+                    },
+                    "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project/.specify/workflows/inner"
+                  },
+                  "children": [
+                    {
+                      "nodes": [
+                        {
+                          "phase": "done",
+                          "active": false,
+                          "result": {
+                            "type": "shell",
+                            "integration": null,
+                            "model": null,
+                            "options": {},
+                            "input": {},
+                            "output": {
+                              "exit_code": 0,
+                              "stdout": "",
+                              "stderr": ""
+                            },
+                            "status": "completed",
+                            "error": null
+                          },
+                          "outcome": "completed",
+                          "error": null
+                        },
+                        {
+                          "phase": "blocked",
+                          "active": false,
+                          "result": {
+                            "type": "gate",
+                            "integration": null,
+                            "model": null,
+                            "options": [
+                              "approve",
+                              "reject"
+                            ],
+                            "input": {},
+                            "output": {
+                              "message": "Approve the inner result?",
+                              "options": [
+                                "approve",
+                                "reject"
+                              ],
+                              "on_reject": "abort",
+                              "show_file": null,
+                              "choice": null
+                            },
+                            "status": "paused",
+                            "error": null
+                          },
+                          "outcome": "paused",
+                          "error": null
+                        }
+                      ]
+                    }
+                  ],
+                  "result": {
+                    "type": "workflow",
+                    "integration": null,
+                    "model": null,
+                    "options": {},
+                    "input": {},
+                    "output": {
+                      "workflow": "inner",
+                      "status": "paused"
+                    },
+                    "status": "paused",
+                    "error": null
+                  },
+                  "outcome": "paused",
+                  "error": null
+                }
+              ]
+            }
+          ],
+          "result": {
+            "type": "workflow",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "workflow": "middle",
+              "status": "paused"
+            },
+            "status": "paused",
+            "error": null
+          },
+          "outcome": "paused",
+          "error": null
+        },
+        {
+          "phase": "ready"
+        }
+      ]
+    },
+    "offset": 0,
+    "initial": {}
+  }
+}

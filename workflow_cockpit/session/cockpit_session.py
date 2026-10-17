@@ -13,8 +13,7 @@ from ..services.definition import (
     inputs_to_argv,
     validate_inputs,
 )
-from ..services.graph import ControlFlowGraph, WorkflowDefinitionParser, resolve_declared_id
-from ..services.log_aggregator import RunLogAggregator
+from ..services.graph import ControlFlowGraph
 from ..services.projection import GraphProjector
 from ..services.registry import WorkflowEntry
 from ..services.review import ReviewDocument, ReviewSnapshot
@@ -25,6 +24,7 @@ from ..services.run_store import RunStore
 from ..services.snapshot import RunSnapshot
 from .adoption import AdoptError, RunAdopter
 from .branch import BranchTracker
+from .composition import CompositionContext
 from .dependencies import CockpitEnvironment, CockpitServices, EngineRuntime
 from .gate_decision import GateDecisionCoordinator, GateDecisionError, validate_shape
 from .identity import generate_run_id, owner_id
@@ -89,9 +89,13 @@ class CockpitSession:
         self._last_abort_result = None
         self._lock = threading.RLock()
         self._contract_error: str | None = None
+        self._composition = CompositionContext(
+            resolver=self.resolver,
+            registry=self.registry,
+            runs_dir=self.runs_dir,
+        )
         self._graph: ControlFlowGraph | None = None
         self._projector = GraphProjector()
-        self._log_aggregator: RunLogAggregator | None = None
         self._review: ReviewSnapshot | None = None
         self._review_lock = threading.Lock()
         self._reviewing = False
@@ -155,11 +159,20 @@ class CockpitSession:
     def _activate_definition(
         self, definition: WorkflowDefinition, *, adopted: bool = False, read_only: bool = False
     ) -> None:
-        """Build the graph, gate projection, and coordinator for one definition."""
+        """Build the graph, gate projection, and coordinator for one definition.
+
+        The graph follows literal call targets into their installed definitions,
+        so Start validation covers every scope. A run that is already bound is
+        projected from its frozen execution tree instead (see :meth:`_graph_for`).
+        """
         self._definition = definition
-        self._graph = WorkflowDefinitionParser().parse(definition.effective_steps)
-        self._log_aggregator = RunLogAggregator(self._graph.declared_ids)
-        support = validate_shape(self._graph, self.compatibility.version)
+        self._graph = self._composition.reset(definition)
+        support = validate_shape(
+            self._graph,
+            self.compatibility.version,
+            resolve_definition=self.resolver.effective_steps_of,
+            installed=self._composition.target_install_error,
+        )
         self._shape_error = "" if support.ok else support.error
         self._stdin_policy = support.stdin
         self._coordinator = GateDecisionCoordinator(
@@ -315,20 +328,7 @@ class CockpitSession:
         return self.snapshot()
 
     def _gate_attempt(self, state) -> int:
-        """Authoritative execution count of the current declared step.
-
-        The engine appends one ``step_started`` log event per execution, so this
-        increments exactly when a gate is re-executed (a retry) and never when
-        an unrelated state write only changes ``updated_at``.
-        """
-        if self._graph is None or state is None or self._log_aggregator is None or not self.run_id:
-            return 0
-        declared_id = resolve_declared_id(state.current_step_id, self._graph.declared_ids)
-        if declared_id is None:
-            return 0
-        timings = self._log_aggregator.update(self.runs_dir / self.run_id / "log.jsonl")
-        timing = timings.get(declared_id)
-        return timing.attempts if timing is not None else 0
+        return self._composition.gate_attempt(state, self.run_id)
 
     def submit_decision(self, choice: str, token: str | None) -> RunSnapshot:
         """Submit one confirmed declared gate choice through the coordinator.
@@ -465,9 +465,9 @@ class CockpitSession:
         )
         timings: dict = {}
         aggregator_diag = ""
-        if self._log_aggregator is not None and run_id:
-            timings = self._log_aggregator.update(self.runs_dir / run_id / "log.jsonl")
-            aggregator_diag = self._log_aggregator.diagnostic
+        if run_id:
+            timings = self._composition.timings(state, run_id)
+            aggregator_diag = self._composition.diagnostic()
 
         with self._lock:
             if self._supervisor.abort_requested:
@@ -521,18 +521,14 @@ class CockpitSession:
                 elapsed = max(0.0, end - self._supervisor.started_at)
 
             definition = self._definition
-            graph = self._graph
+            graph = self._composition.graph_for(state)
             workflow_name = definition.name if definition else ""
             inputs_tuple = tuple(state.inputs.items()) if state else ()
             gate = None
             if self._coordinator is not None:
-                declared_id = None
-                if graph is not None and state is not None:
-                    declared_id = resolve_declared_id(state.current_step_id, graph.declared_ids)
                 gate_attempt = 0
-                if declared_id is not None:
-                    timing = timings.get(declared_id)
-                    gate_attempt = timing.attempts if timing is not None else 0
+                if state is not None:
+                    gate_attempt = self._gate_attempt(state)
                 gate = self._coordinator.project(
                     state=state,
                     run_id=run_id,

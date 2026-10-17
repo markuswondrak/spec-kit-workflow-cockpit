@@ -96,15 +96,25 @@ the complete source; output is diagnostic, not a second state model.
 
 ```mermaid
 flowchart TB
-    gate{Declared gate} -->|has verdict_input| structured[resume -i name=choice --json]
-    gate -->|otherwise| pty[write selected choice once to managed PTY]
+    gate{Current gate} -->|execution tree present| active[active node from the persisted tree]
+    gate -->|legacy run| declared[declared node of current_step_id]
+    active --> rules{decidable from this process?}
+    rules -->|no| abortOnly[undecidable: named scope and reason, Abort only]
+    rules -->|unresolved or unsupported version| abortOnly
+    rules -->|yes| kind{has verdict_input}
+    declared --> kind
+    kind -->|yes| trace[trace call mappings to the root input name]
+    trace --> structured[resume -i root_input=choice --json]
+    kind -->|no| pty[write selected choice once to managed PTY]
     structured --> persisted[(persisted state authoritative)]
     pty --> persisted
     persisted -->|advanced| observe[continue observing]
-    persisted -->|not advanced| abortOnly[show sent-once state; offer Abort only]
+    persisted -->|not advanced| abortOnly
 ```
 
-The decide bar selects its affordance from the declared choice count: one to three choices render as equal-weight buttons, four or more render as one compact select box. Every declared choice is confirmed before dispatch. A PTY submission is sent at most once and never resent while state stays paused. Mixed, dynamic, loop/fan-out, and interactive-retry gate shapes are rejected before Start when deterministic prompt ownership cannot be proven.
+The decide bar selects its affordance from the declared choice count: one to three choices render as equal-weight buttons, four or more render as one compact select box. Every declared choice is confirmed before dispatch. A PTY submission is sent at most once and never resent while state stays paused. Mixed, dynamic, loop/fan-out, and interactive-retry gate shapes are rejected before Start when deterministic prompt ownership cannot be proven, and the same rules are re-applied to a dynamically bound subtree when the engine binds it.
+
+For a composed run the gate is the *active node* of the execution tree, with its own persisted message and options, so a child gate is never confused with a root step of the same id. Its `verdict_input` is traced upward through every call's `input:` mapping: a mapping value that is exactly `{{ inputs.<name> }}` continues the trace, and anything else makes the gate undecidable. The decision is then exactly one `resume -i <root_input>=<choice>`, and the write-once attempt is keyed per scope occurrence, so the same child called twice can be decided once per occurrence. An unresolved position, an unsupported `execution.version`, or an undecidable bound gate yields a named Abort-only state with the scope path and reason, never a guessed gate.
 
 ## Resume a failed run
 
@@ -117,7 +127,7 @@ sequenceDiagram
     participant R as run files
     U->>B: press r on an adopted failed run
     B->>Y: project (persisted status is failed)
-    Y-->>B: available, named step (and enclosing step when nested), write-once token
+    Y-->>B: available, named step (and enclosing call when nested), write-once token
     U->>B: confirm Resume
     B->>Y: submit(token)
     Y->>Y: reserve the attempt under the lock
@@ -128,11 +138,13 @@ sequenceDiagram
 ```
 
 Only an adopted run whose persisted status is `failed` offers Resume. The confirmation names the
-recorded current step and, when it is nested, its immediate enclosing step and the whole nested body
-that runs again. A refusal (view-only, stale token, status outside `paused`/`failed`, or spawn
-failure) writes nothing and leaves the run resumable; exactly one bare
-`specify workflow resume <run_id>` is issued per confirmation
-([ADR 0014](../decisions/0014-resume-failed-runs.md)).
+recorded current step and, when it is nested, its enclosing call chain and the whole nested body
+that runs again; for a composed run both the failing leaf and its calls come from the frozen
+execution tree, so a child step id is never presented as a root step. A refusal (view-only, stale
+token, status outside `paused`/`failed`, or spawn failure) writes nothing and leaves the run
+resumable; exactly one bare `specify workflow resume <run_id>` is issued per confirmation
+([ADR 0014](../decisions/0014-resume-failed-runs.md)). A call whose own result failed under
+`continue_on_error` is shown as failed-and-handled and never changes the persisted run status.
 
 ## Abort and lifecycle
 
@@ -161,6 +173,7 @@ and power loss carry no cleanup guarantee.
 | reaped normally | paused | Paused with no signalable process; Abort only. |
 | reaped | completed | Success after output drain and reap. |
 | reaped | failed/aborted | Engine terminal result with persisted step/cause when available. |
+| reaped | paused at a composed gate | Gate from the execution tree's active node; scope path shown; one `resume -i root_input=choice`. |
 | reaped | missing/nonterminal | Unexpected process death; preserve output tail and report failure. |
 | live | paused/failed, after confirmed Resume | Running; the resume has started but `state.json` has not advanced yet. |
 | reaped non-zero | failed | Resume returned non-zero; the run remains failed and resumable; surface the exit diagnostic. |

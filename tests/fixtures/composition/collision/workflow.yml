@@ -1,0 +1,31 @@
+workflow:
+  id: release-collision
+  name: Release Collision
+  version: 1.0.0
+  description: A root gate id that collides with the called workflow's gate id.
+inputs:
+  approval:
+    type: string
+    default: ''
+  root_approval:
+    type: string
+    default: ''
+steps:
+- id: build
+  type: shell
+  run: 'true'
+- id: review
+  type: gate
+  message: Approve the root release?
+  options:
+  - approve
+  - reject
+  verdict_input: root_approval
+- id: review-release
+  type: workflow
+  workflow: release-notes
+  input:
+    approval: '{{ inputs.approval }}'
+- id: publish
+  type: shell
+  run: 'true'

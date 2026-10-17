@@ -53,6 +53,11 @@ class RunAdopter:
             raise AdoptError(str(exc)) from exc
         if not descriptor.usable:
             raise AdoptError(f"This run cannot be adopted: {descriptor.reason}.")
+        if not descriptor.execution_supported:
+            raise AdoptError(
+                "This run cannot be adopted: its execution version is not supported, so "
+                "the engine itself would refuse to load it; it stays view-only."
+            )
         if descriptor.status not in ("paused", "failed"):
             raise AdoptError(
                 "This run cannot be adopted: only a paused or failed run can be adopted; "

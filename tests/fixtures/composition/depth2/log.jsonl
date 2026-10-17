@@ -1,0 +1,13 @@
+{"event": "step_started", "step_id": "build", "type": "shell", "timestamp": "2026-10-17T07:57:52.022064+00:00"}
+{"event": "step_completed", "step_id": "build", "status": "completed", "timestamp": "2026-10-17T07:57:52.023239+00:00"}
+{"event": "step_started", "step_id": "middle-call", "type": "workflow", "timestamp": "2026-10-17T07:57:52.023508+00:00"}
+{"event": "step_started", "step_id": "middle-prep", "type": "shell", "execution_path": [1, "workflow", 0], "workflow_id": "middle", "timestamp": "2026-10-17T07:57:52.028202+00:00"}
+{"event": "step_completed", "step_id": "middle-prep", "status": "completed", "execution_path": [1, "workflow", 0], "workflow_id": "middle", "timestamp": "2026-10-17T07:57:52.029652+00:00"}
+{"event": "step_started", "step_id": "inner-call", "type": "workflow", "execution_path": [1, "workflow", 1], "workflow_id": "middle", "timestamp": "2026-10-17T07:57:52.029958+00:00"}
+{"event": "step_started", "step_id": "deep-draft", "type": "shell", "execution_path": [1, "workflow", 1, "workflow", 0], "workflow_id": "inner", "timestamp": "2026-10-17T07:57:52.034189+00:00"}
+{"event": "step_completed", "step_id": "deep-draft", "status": "completed", "execution_path": [1, "workflow", 1, "workflow", 0], "workflow_id": "inner", "timestamp": "2026-10-17T07:57:52.035473+00:00"}
+{"event": "step_started", "step_id": "deep-review", "type": "gate", "execution_path": [1, "workflow", 1, "workflow", 1], "workflow_id": "inner", "timestamp": "2026-10-17T07:57:52.035789+00:00"}
+{"event": "step_completed", "step_id": "deep-review", "status": "paused", "execution_path": [1, "workflow", 1, "workflow", 1], "workflow_id": "inner", "timestamp": "2026-10-17T07:57:52.036154+00:00"}
+{"event": "step_completed", "step_id": "inner-call", "status": "paused", "execution_path": [1, "workflow", 1], "workflow_id": "middle", "timestamp": "2026-10-17T07:57:52.036505+00:00"}
+{"event": "step_completed", "step_id": "middle-call", "status": "paused", "timestamp": "2026-10-17T07:57:52.036895+00:00"}
+{"event": "workflow_finished", "status": "paused", "timestamp": "2026-10-17T07:57:52.038613+00:00"}

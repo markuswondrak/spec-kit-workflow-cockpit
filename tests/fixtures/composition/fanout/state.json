@@ -1,0 +1,224 @@
+{
+  "run_id": "63330abf",
+  "workflow_id": "fanout-release",
+  "installed_workflow_id": null,
+  "installed_registry_root": null,
+  "status": "paused",
+  "current_step_index": 1,
+  "current_step_id": "review",
+  "step_results": {
+    "prep": {
+      "type": "shell",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "status": "completed",
+      "error": null
+    },
+    "fan": {
+      "type": "fan-out",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "items": [
+          "alpha",
+          "beta"
+        ],
+        "max_concurrency": 1,
+        "item_count": 2,
+        "results": [
+          {
+            "workflow": "interactive-notes",
+            "status": "paused"
+          }
+        ]
+      },
+      "status": "completed",
+      "error": null
+    },
+    "fan:notes:0": {
+      "type": "workflow",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "workflow": "interactive-notes",
+        "status": "paused"
+      },
+      "status": "paused",
+      "error": null
+    }
+  },
+  "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project",
+  "created_at": "2026-10-17T07:57:58.319264+00:00",
+  "updated_at": "2026-10-17T07:57:58.338248+00:00",
+  "error": null,
+  "inputs": {},
+  "execution": {
+    "version": 2,
+    "sequence": {
+      "source": "- id: prep\n  type: shell\n  run: 'true'\n- id: fan\n  type: fan-out\n  items:\n  - alpha\n  - beta\n  step:\n    id: notes\n    type: workflow\n    workflow: interactive-notes\n- id: after\n  type: shell\n  run: 'true'\n",
+      "nodes": [
+        {
+          "phase": "done",
+          "active": false,
+          "result": {
+            "type": "shell",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "status": "completed",
+            "error": null
+          },
+          "outcome": "completed",
+          "error": null
+        },
+        {
+          "phase": "children",
+          "active": false,
+          "result": {
+            "type": "fan-out",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "items": [
+                "alpha",
+                "beta"
+              ],
+              "max_concurrency": 1,
+              "item_count": 2
+            },
+            "status": "completed",
+            "error": null
+          },
+          "children": [
+            {
+              "nodes": [
+                {
+                  "phase": "blocked",
+                  "active": false,
+                  "binding": {
+                    "workflow": "interactive-notes",
+                    "definition": "workflow:\n  id: interactive-notes\n  name: Interactive Notes\n  version: 1.0.0\n  description: Draft and review notes through an interactive prompt.\nsteps:\n- id: draft\n  type: shell\n  run: 'true'\n- id: review\n  type: gate\n  message: Review the interactive notes.\n  options:\n  - approve\n  - reject\n- id: publish-notes\n  type: shell\n  run: 'true'\n",
+                    "inputs": {},
+                    "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project/.specify/workflows/interactive-notes"
+                  },
+                  "children": [
+                    {
+                      "nodes": [
+                        {
+                          "phase": "done",
+                          "active": false,
+                          "result": {
+                            "type": "shell",
+                            "integration": null,
+                            "model": null,
+                            "options": {},
+                            "input": {},
+                            "output": {
+                              "exit_code": 0,
+                              "stdout": "",
+                              "stderr": ""
+                            },
+                            "status": "completed",
+                            "error": null
+                          },
+                          "outcome": "completed",
+                          "error": null
+                        },
+                        {
+                          "phase": "blocked",
+                          "active": false,
+                          "result": {
+                            "type": "gate",
+                            "integration": null,
+                            "model": null,
+                            "options": [
+                              "approve",
+                              "reject"
+                            ],
+                            "input": {},
+                            "output": {
+                              "message": "Review the interactive notes.",
+                              "options": [
+                                "approve",
+                                "reject"
+                              ],
+                              "on_reject": "abort",
+                              "show_file": null,
+                              "choice": null
+                            },
+                            "status": "paused",
+                            "error": null
+                          },
+                          "outcome": "paused",
+                          "error": null
+                        },
+                        {
+                          "phase": "ready"
+                        }
+                      ]
+                    }
+                  ],
+                  "result": {
+                    "type": "workflow",
+                    "integration": null,
+                    "model": null,
+                    "options": {},
+                    "input": {},
+                    "output": {
+                      "workflow": "interactive-notes",
+                      "status": "paused"
+                    },
+                    "status": "paused",
+                    "error": null
+                  },
+                  "outcome": "paused",
+                  "error": null
+                }
+              ]
+            },
+            {
+              "nodes": [
+                {
+                  "phase": "ready"
+                }
+              ]
+            }
+          ],
+          "template": "id: notes\ntype: workflow\nworkflow: interactive-notes\n",
+          "outcome": "paused",
+          "error": null,
+          "fan_results": [
+            {
+              "workflow": "interactive-notes",
+              "status": "paused"
+            }
+          ]
+        },
+        {
+          "phase": "ready"
+        }
+      ]
+    },
+    "offset": 0,
+    "initial": {}
+  }
+}

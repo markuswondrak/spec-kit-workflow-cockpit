@@ -1,0 +1,43 @@
+{
+  "run_id": "08770dce",
+  "workflow_id": "deep-release",
+  "status": "paused",
+  "current_step_id": "deep-review",
+  "current_step_index": 1,
+  "gate": {
+    "step_id": "deep-review",
+    "message": "Approve the inner result?",
+    "options": [
+      "approve",
+      "reject"
+    ],
+    "choice": null,
+    "scope_path": [
+      "middle-call",
+      "inner-call"
+    ]
+  },
+  "workflow_scopes": [
+    {
+      "scope_path": [
+        "middle-call"
+      ],
+      "workflow_id": "middle",
+      "status": "paused"
+    },
+    {
+      "scope_path": [
+        "middle-call",
+        "inner-call"
+      ],
+      "workflow_id": "inner",
+      "status": "paused"
+    }
+  ],
+  "created_at": "2026-10-17T07:57:52.016100+00:00",
+  "updated_at": "2026-10-17T07:57:52.038688+00:00",
+  "steps": {
+    "build": "completed",
+    "middle-call": "paused"
+  }
+}

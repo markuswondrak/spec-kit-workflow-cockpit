@@ -260,10 +260,17 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
     def _step_label(self, snapshot, definition) -> str:
         selected = snapshot.current_step_id
         projection = snapshot.graph_projection
-        if projection is not None and selected:
-            node = projection.graph.by_id.get(selected)
-            if node is not None:
-                return node.label
+        if projection is not None:
+            if projection.current_node_key is not None:
+                # A composed run's position is scope-qualified: a bare
+                # current_step_id can collide with a root step of the same id.
+                node = projection.graph.by_key.get(projection.current_node_key)
+                if node is not None:
+                    return node.label
+            elif selected:
+                node = projection.graph.by_id.get(selected)
+                if node is not None:
+                    return node.label
         if definition is not None:
             for step in definition.steps:
                 if step.id == selected:

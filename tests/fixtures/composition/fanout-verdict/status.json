@@ -1,0 +1,26 @@
+{
+  "run_id": "a0cdca1d",
+  "workflow_id": "fanout-verdict",
+  "status": "failed",
+  "current_step_id": "review",
+  "current_step_index": 1,
+  "error": "Gate step 'review': 'verdict_input' is not supported inside fan-out templates.",
+  "workflow_scopes": [
+    {
+      "scope_path": [
+        "fan",
+        "0",
+        "notes"
+      ],
+      "workflow_id": "release-notes",
+      "status": "failed"
+    }
+  ],
+  "created_at": "2026-10-17T07:58:00.313736+00:00",
+  "updated_at": "2026-10-17T07:58:00.334424+00:00",
+  "steps": {
+    "prep": "completed",
+    "fan": "completed",
+    "fan:notes:0": "failed"
+  }
+}

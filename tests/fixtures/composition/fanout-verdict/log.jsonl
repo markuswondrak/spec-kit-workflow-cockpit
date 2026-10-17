@@ -1,0 +1,13 @@
+{"event": "step_started", "step_id": "prep", "type": "shell", "timestamp": "2026-10-17T07:58:00.320282+00:00"}
+{"event": "step_completed", "step_id": "prep", "status": "completed", "timestamp": "2026-10-17T07:58:00.322254+00:00"}
+{"event": "step_started", "step_id": "fan", "type": "fan-out", "timestamp": "2026-10-17T07:58:00.322531+00:00"}
+{"event": "step_completed", "step_id": "fan", "status": "completed", "timestamp": "2026-10-17T07:58:00.323464+00:00"}
+{"event": "step_started", "step_id": "fan:notes:0", "type": "workflow", "timestamp": "2026-10-17T07:58:00.324218+00:00"}
+{"event": "step_started", "step_id": "draft", "type": "shell", "execution_path": [1, "item", 0, 0, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:58:00.329563+00:00"}
+{"event": "step_completed", "step_id": "draft", "status": "completed", "execution_path": [1, "item", 0, 0, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:58:00.331358+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "execution_path": [1, "item", 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:58:00.331699+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "failed", "execution_path": [1, "item", 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:58:00.332048+00:00"}
+{"event": "step_failed", "step_id": "review", "error": "Gate step 'review': 'verdict_input' is not supported inside fan-out templates.", "execution_path": [1, "item", 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:58:00.332093+00:00"}
+{"event": "step_completed", "step_id": "fan:notes:0", "status": "failed", "timestamp": "2026-10-17T07:58:00.332440+00:00"}
+{"event": "step_failed", "step_id": "fan:notes:0", "error": "Gate step 'review': 'verdict_input' is not supported inside fan-out templates.", "timestamp": "2026-10-17T07:58:00.332482+00:00"}
+{"event": "workflow_finished", "status": "failed", "timestamp": "2026-10-17T07:58:00.334342+00:00"}

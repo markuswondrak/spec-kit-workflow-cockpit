@@ -1,0 +1,213 @@
+{
+  "run_id": "8b54bf08",
+  "workflow_id": "release-collision",
+  "installed_workflow_id": null,
+  "installed_registry_root": null,
+  "status": "paused",
+  "current_step_index": 2,
+  "current_step_id": "review",
+  "step_results": {
+    "build": {
+      "type": "shell",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "status": "completed",
+      "error": null
+    },
+    "review": {
+      "type": "gate",
+      "integration": null,
+      "model": null,
+      "options": [
+        "approve",
+        "reject"
+      ],
+      "input": {},
+      "output": {
+        "message": "Approve the root release?",
+        "options": [
+          "approve",
+          "reject"
+        ],
+        "on_reject": "abort",
+        "show_file": null,
+        "choice": "approve"
+      },
+      "status": "completed",
+      "error": null
+    },
+    "review-release": {
+      "type": "workflow",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "workflow": "release-notes",
+        "status": "paused"
+      },
+      "status": "paused",
+      "error": null
+    }
+  },
+  "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project",
+  "created_at": "2026-10-17T07:57:49.742209+00:00",
+  "updated_at": "2026-10-17T07:57:50.075908+00:00",
+  "error": null,
+  "inputs": {
+    "approval": "",
+    "root_approval": "approve"
+  },
+  "execution": {
+    "version": 2,
+    "sequence": {
+      "source": "- id: build\n  type: shell\n  run: 'true'\n- id: review\n  type: gate\n  message: Approve the root release?\n  options:\n  - approve\n  - reject\n  verdict_input: root_approval\n- id: review-release\n  type: workflow\n  workflow: release-notes\n  input:\n    approval: '{{ inputs.approval }}'\n- id: publish\n  type: shell\n  run: 'true'\n",
+      "nodes": [
+        {
+          "phase": "done",
+          "active": false,
+          "result": {
+            "type": "shell",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "status": "completed",
+            "error": null
+          },
+          "outcome": "completed",
+          "error": null
+        },
+        {
+          "phase": "done",
+          "active": false,
+          "result": {
+            "type": "gate",
+            "integration": null,
+            "model": null,
+            "options": [
+              "approve",
+              "reject"
+            ],
+            "input": {},
+            "output": {
+              "message": "Approve the root release?",
+              "options": [
+                "approve",
+                "reject"
+              ],
+              "on_reject": "abort",
+              "show_file": null,
+              "choice": "approve"
+            },
+            "status": "completed",
+            "error": null
+          },
+          "outcome": "completed",
+          "error": null
+        },
+        {
+          "phase": "blocked",
+          "active": false,
+          "binding": {
+            "workflow": "release-notes",
+            "definition": "workflow:\n  id: release-notes\n  name: Release Notes\n  version: 1.0.0\n  description: Draft and review release notes.\ninputs:\n  approval:\n    type: string\n    default: ''\nsteps:\n- id: draft\n  type: shell\n  run: 'true'\n- id: review\n  type: gate\n  message: Approve the release notes?\n  options:\n  - approve\n  - reject\n  verdict_input: approval\n- id: publish-notes\n  type: shell\n  run: 'true'\n",
+            "inputs": {
+              "approval": ""
+            },
+            "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project/.specify/workflows/release-notes"
+          },
+          "children": [
+            {
+              "nodes": [
+                {
+                  "phase": "done",
+                  "active": false,
+                  "result": {
+                    "type": "shell",
+                    "integration": null,
+                    "model": null,
+                    "options": {},
+                    "input": {},
+                    "output": {
+                      "exit_code": 0,
+                      "stdout": "",
+                      "stderr": ""
+                    },
+                    "status": "completed",
+                    "error": null
+                  },
+                  "outcome": "completed",
+                  "error": null
+                },
+                {
+                  "phase": "blocked",
+                  "active": false,
+                  "result": {
+                    "type": "gate",
+                    "integration": null,
+                    "model": null,
+                    "options": [
+                      "approve",
+                      "reject"
+                    ],
+                    "input": {},
+                    "output": {
+                      "message": "Approve the release notes?",
+                      "options": [
+                        "approve",
+                        "reject"
+                      ],
+                      "on_reject": "abort",
+                      "show_file": null,
+                      "choice": null
+                    },
+                    "status": "paused",
+                    "error": null
+                  },
+                  "outcome": "paused",
+                  "error": null
+                },
+                {
+                  "phase": "ready"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "type": "workflow",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "workflow": "release-notes",
+              "status": "paused"
+            },
+            "status": "paused",
+            "error": null
+          },
+          "outcome": "paused",
+          "error": null
+        },
+        {
+          "phase": "ready"
+        }
+      ]
+    },
+    "offset": 0,
+    "initial": {}
+  }
+}

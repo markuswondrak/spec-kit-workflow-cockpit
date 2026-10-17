@@ -17,13 +17,14 @@ from typing import Any
 import yaml
 
 from .launch_definition import MAX_LAUNCH_WORKFLOW_BYTES
+from .limits import MAX_STATE_BYTES
 from .run_claim import ClaimState
 
 #: Maximum number of run directories inspected per discovery.
 MAX_RUNS = 200
 
-#: Bounded read for ``state.json`` (FR-003, FR-024).
-MAX_STATE_BYTES = 256 * 1024
+#: Bounded read for ``state.json``: one shared bound with the live reader (FR-017).
+MAX_STATE_BYTES = MAX_STATE_BYTES
 
 #: Bounded read for the launch-copy ``workflow.yml`` display fields.
 MAX_WORKFLOW_BYTES = MAX_LAUNCH_WORKFLOW_BYTES
@@ -58,12 +59,15 @@ class RunDescriptor:
     launch_copy: bool = True
     claim_state: ClaimState = ClaimState.NONE
     is_default: bool = False
+    #: False when ``state.json`` holds an execution version Cockpit cannot read.
+    execution_supported: bool = True
 
     @property
     def adoptable(self) -> bool:
         """A paused or failed run with a usable launch copy and no live foreign owner."""
         return (
             self.usable
+            and self.execution_supported
             and self.launch_copy
             and self.status in ("paused", "failed")
             and self.claim_state in (ClaimState.NONE, ClaimState.OWNED, ClaimState.STALE)
@@ -190,6 +194,7 @@ class RunCatalog:
                 is_default=False,
                 claim_state=self._claim_state(run_id),
             )
+        execution_error = _execution_support_error(state)
         return RunDescriptor(
             run_id=run_id,
             workflow_id=workflow_id,
@@ -199,10 +204,15 @@ class RunCatalog:
             current_step_id=_state_string(state, "current_step_id") or None,
             updated_at=_state_string(state, "updated_at") or None,
             usable=True,
-            reason="",
+            reason=(
+                f"{execution_error}; this run can be viewed but not adopted."
+                if execution_error
+                else ""
+            ),
             launch_copy=launch_error == "",
             claim_state=self._claim_state(run_id),
             is_default=run_id == current_run_id,
+            execution_supported=not execution_error,
         )
 
     def _read_state(self, run_dir: Path) -> tuple[dict[str, Any], str]:
@@ -266,3 +276,16 @@ class RunCatalog:
 def _state_string(state: dict[str, Any], key: str) -> str:
     value = state.get(key)
     return value if isinstance(value, str) else ""
+
+
+def _execution_support_error(state: dict[str, Any]) -> str:
+    """The unsupported-execution-version diagnostic, or an empty string."""
+    execution = state.get("execution")
+    if execution is None:
+        return ""
+    if not isinstance(execution, dict):
+        return "state.json execution is not readable"
+    version = execution.get("version")
+    if version == 2:
+        return ""
+    return f"state.json execution version {version!r} is not supported"

@@ -1,0 +1,15 @@
+workflow:
+  id: failed-release
+  name: Failed Release
+  version: 1.0.0
+  description: A called workflow whose second step fails.
+steps:
+- id: build
+  type: shell
+  run: 'true'
+- id: broken-call
+  type: workflow
+  workflow: broken-child
+- id: publish
+  type: shell
+  run: 'true'

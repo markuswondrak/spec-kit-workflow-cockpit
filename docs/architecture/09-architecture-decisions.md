@@ -26,6 +26,7 @@ section is the index; each ADR records context, the decision, consequences, and 
 | [0012](../decisions/0012-release-versioning.md) | The package version is single-sourced and releases are tag-driven from main. |
 | [0013](../decisions/0013-context-index-pointer-and-start-claim.md) | The context index is a pointer, and every Cockpit-owned run holds the claim. |
 | [0014](../decisions/0014-resume-failed-runs.md) | A failed run may be adopted and resumed once from its recorded step. |
+| [0015](../decisions/0015-read-the-persisted-execution-tree.md) | The persisted execution tree is read as a versioned structure, never guessed at. |
 
 ## How to add an ADR
 

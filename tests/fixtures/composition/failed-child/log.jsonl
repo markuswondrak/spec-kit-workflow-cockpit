@@ -1,0 +1,11 @@
+{"event": "step_started", "step_id": "build", "type": "shell", "timestamp": "2026-10-17T07:58:02.376384+00:00"}
+{"event": "step_completed", "step_id": "build", "status": "completed", "timestamp": "2026-10-17T07:58:02.378071+00:00"}
+{"event": "step_started", "step_id": "broken-call", "type": "workflow", "timestamp": "2026-10-17T07:58:02.378348+00:00"}
+{"event": "step_started", "step_id": "good", "type": "shell", "execution_path": [1, "workflow", 0], "workflow_id": "broken-child", "timestamp": "2026-10-17T07:58:02.382535+00:00"}
+{"event": "step_completed", "step_id": "good", "status": "completed", "execution_path": [1, "workflow", 0], "workflow_id": "broken-child", "timestamp": "2026-10-17T07:58:02.384179+00:00"}
+{"event": "step_started", "step_id": "boom", "type": "shell", "execution_path": [1, "workflow", 1], "workflow_id": "broken-child", "timestamp": "2026-10-17T07:58:02.384473+00:00"}
+{"event": "step_completed", "step_id": "boom", "status": "failed", "execution_path": [1, "workflow", 1], "workflow_id": "broken-child", "timestamp": "2026-10-17T07:58:02.385758+00:00"}
+{"event": "step_failed", "step_id": "boom", "error": "Shell command exited with code 1.", "execution_path": [1, "workflow", 1], "workflow_id": "broken-child", "timestamp": "2026-10-17T07:58:02.385814+00:00"}
+{"event": "step_completed", "step_id": "broken-call", "status": "failed", "timestamp": "2026-10-17T07:58:02.386151+00:00"}
+{"event": "step_failed", "step_id": "broken-call", "error": "Shell command exited with code 1.", "timestamp": "2026-10-17T07:58:02.386195+00:00"}
+{"event": "workflow_finished", "status": "failed", "timestamp": "2026-10-17T07:58:02.387112+00:00"}

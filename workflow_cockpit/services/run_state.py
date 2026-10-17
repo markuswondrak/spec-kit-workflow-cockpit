@@ -13,11 +13,15 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from .execution_tree import ExecutionTree, Resolution, UnsupportedExecution
+from .execution_tree import parse as parse_execution
+from .limits import MAX_STATE_BYTES
 
 _UNSET = object()
 
@@ -49,9 +53,33 @@ class RunStateData:
     diagnostic: str = ""
     state_freshness: Freshness = Freshness.PENDING
     log_freshness: Freshness = Freshness.PENDING
+    #: The persisted execution tree, an unsupported version, or ``None`` (legacy).
+    execution: ExecutionTree | UnsupportedExecution | None = None
+    #: True when ``state.json`` exceeds the shared bound and was not parsed.
+    too_large: bool = False
+
+    @property
+    def active_node(self):
+        """The engine-equivalent active node, when the tree is readable."""
+        if isinstance(self.execution, ExecutionTree) and self.execution.resolution is Resolution.OK:
+            return self.execution.active
+        return None
 
     def current_result(self) -> dict[str, Any] | None:
-        """The recorded result mapping for the current runtime step, if any."""
+        """The recorded result mapping for the current runtime step, if any.
+
+        For a composed run the authoritative result is the active node's own
+        persisted result: ``step_results`` holds root-scope steps only, so a
+        child gate's evidence is not addressable by ``current_step_id``.
+        """
+        execution = self.execution
+        if isinstance(execution, ExecutionTree) and execution.resolution is Resolution.OK:
+            active = execution.active
+            if active is None:
+                return None
+            if isinstance(active.result, Mapping):
+                return dict(active.result)
+            return None
         if not self.current_step_id:
             return None
         result = self.step_results.get(self.current_step_id)
@@ -70,6 +98,18 @@ def _combine(*messages: str) -> str:
         if message and message not in seen:
             seen.append(message)
     return " ".join(seen)
+
+
+def _execution_diagnostic(execution: ExecutionTree | UnsupportedExecution | None) -> str:
+    if isinstance(execution, UnsupportedExecution):
+        version = execution.version
+        return (
+            f"state.json execution version {version!r} is not supported; "
+            "this run can be viewed but not decided or resumed."
+        )
+    if isinstance(execution, ExecutionTree) and not execution.structurally_valid:
+        return "state.json execution tree is malformed; the run position cannot be trusted."
+    return ""
 
 
 class RunStateReader:
@@ -95,6 +135,7 @@ class RunStateReader:
         self._lock = threading.RLock()
         self._state_cache: _CacheEntry | None = None
         self._inputs_cache: _CacheEntry | None = None
+        self._execution_cache: tuple[tuple[int, int, int] | None, object] | None = None
         self._log_signature: tuple[int, int, int] | None = None
         self._log_tail: tuple[dict[str, Any], ...] = ()
         self._log_diagnostic = ""
@@ -116,19 +157,32 @@ class RunStateReader:
         path: Path,
         cache: _CacheEntry | None,
         valid: Callable[[Any], bool],
-    ) -> tuple[Any, _CacheEntry, Freshness, str]:
+        *,
+        max_bytes: int = MAX_STATE_BYTES,
+    ) -> tuple[Any, _CacheEntry, Freshness, str, bool]:
         name = path.name
         before = self._signature(path)
         if before is None:
             if self._has_value(cache):
-                return cache.value, cache, Freshness.STALE, f"{name} is missing; showing the last good value."
-            return _UNSET, _CacheEntry(None, _UNSET), Freshness.PENDING, ""
+                return cache.value, cache, Freshness.STALE, f"{name} is missing; showing the last good value.", False
+            return _UNSET, _CacheEntry(None, _UNSET), Freshness.PENDING, "", False
         if cache is not None and cache.signature == before and self._has_value(cache):
-            return cache.value, cache, Freshness.OK, ""
+            return cache.value, cache, Freshness.OK, "", False
+        if before[1] > max_bytes:
+            # Refuse to read an oversized source instead of buffering it.
+            return (
+                _UNSET,
+                _CacheEntry(before, _UNSET),
+                Freshness.OK,
+                f"{name} is too large to read ({before[1]} bytes; limit {max_bytes}).",
+                True,
+            )
 
         try:
             with open(path, encoding="utf-8") as handle:
-                text = handle.read()
+                text = handle.read(max_bytes + 1)
+            if len(text.encode("utf-8", errors="ignore")) > max_bytes:
+                raise ValueError("file grew past the bound")
             value = json.loads(text)
             if not valid(value):
                 raise ValueError("invalid JSON shape")
@@ -143,21 +197,22 @@ class RunStateReader:
                     _CacheEntry(after, cache.value),
                     Freshness.STALE,
                     f"{name} could not be read; showing the last good value.",
+                    False,
                 )
-            return _UNSET, _CacheEntry(after, _UNSET), Freshness.PENDING, ""
+            return _UNSET, _CacheEntry(after, _UNSET), Freshness.PENDING, "", False
 
         after = self._signature(path)
         if after != before:
             # The source changed during the read: treat as an in-progress write.
             return self._retain(cache)
-        return value, _CacheEntry(after, value), Freshness.OK, ""
+        return value, _CacheEntry(after, value), Freshness.OK, "", False
 
     @staticmethod
     def _retain(cache: _CacheEntry | None):
         # Do not cache a signature for a read that raced a write: the next poll
         # must re-read rather than treat the retained value as fresh.
         value = cache.value if cache is not None else _UNSET
-        return value, _CacheEntry(None, value), Freshness.UNSTABLE, ""
+        return value, _CacheEntry(None, value), Freshness.UNSTABLE, "", False
 
     def _read_log(self) -> tuple[tuple[dict[str, Any], ...], Freshness, str]:
         path = self.run_dir / "log.jsonl"
@@ -219,18 +274,33 @@ class RunStateReader:
         )
         return self._log_tail, Freshness.OK, self._log_diagnostic
 
+    def _parse_cached(self, state: dict[str, Any]):
+        """Parse the execution tree once per file signature, not once per poll.
+
+        The tree's YAML sources are the only expensive part of a composed run's
+        ``state.json``, so they must not be decoded again while the file is
+        unchanged.
+        """
+        signature = self._state_cache.signature if self._state_cache is not None else None
+        cached = self._execution_cache
+        if cached is not None and cached[0] == signature and signature is not None:
+            return cached[1]
+        execution = parse_execution(state)
+        self._execution_cache = (signature, execution)
+        return execution
+
     def read(self) -> RunStateData | None:
         if not self.run_dir.is_dir():
             return None
         with self._lock:
-            state, self._state_cache, state_fresh, state_diag = self._read_json(
+            state, self._state_cache, state_fresh, state_diag, too_large = self._read_json(
                 self.run_dir / "state.json",
                 self._state_cache,
                 lambda value: isinstance(value, dict)
                 and isinstance(value.get("status"), str)
                 and bool(value["status"]),
             )
-            inputs, self._inputs_cache, inputs_fresh, inputs_diag = self._read_json(
+            inputs, self._inputs_cache, inputs_fresh, inputs_diag, _ = self._read_json(
                 self.run_dir / "inputs.json",
                 self._inputs_cache,
                 lambda value: isinstance(value, dict) and isinstance(value.get("inputs", {}), dict),
@@ -238,7 +308,6 @@ class RunStateReader:
             log_tail, log_fresh, log_diag = self._read_log()
 
         stale = Freshness.STALE in (state_fresh, inputs_fresh, log_fresh)
-        diagnostic = _combine(state_diag, inputs_diag, log_diag)
         inputs_map = inputs.get("inputs", {}) if isinstance(inputs, dict) else {}
 
         if state is _UNSET or not isinstance(state, dict):
@@ -247,13 +316,15 @@ class RunStateReader:
                 log_tail=log_tail,
                 complete=False,
                 stale=stale,
-                diagnostic=diagnostic,
+                diagnostic=_combine(state_diag, inputs_diag, log_diag),
                 state_freshness=state_fresh,
                 log_freshness=log_fresh,
+                too_large=too_large,
             )
 
         status = state.get("status")
         step_results = state.get("step_results")
+        execution = self._parse_cached(state)
         return RunStateData(
             status=str(status) if isinstance(status, str) and status else "initializing",
             current_step_id=(
@@ -273,7 +344,9 @@ class RunStateReader:
             log_tail=log_tail,
             complete=state_fresh is Freshness.OK,
             stale=stale,
-            diagnostic=diagnostic,
+            diagnostic=_combine(state_diag, inputs_diag, log_diag, _execution_diagnostic(execution)),
             state_freshness=state_fresh,
             log_freshness=log_fresh,
+            execution=execution,
+            too_large=too_large,
         )

@@ -1,0 +1,23 @@
+{
+  "run_id": "8c6fc115",
+  "workflow_id": "failed-release",
+  "status": "failed",
+  "current_step_id": "boom",
+  "current_step_index": 1,
+  "error": "Shell command exited with code 1.",
+  "workflow_scopes": [
+    {
+      "scope_path": [
+        "broken-call"
+      ],
+      "workflow_id": "broken-child",
+      "status": "failed"
+    }
+  ],
+  "created_at": "2026-10-17T07:58:02.370638+00:00",
+  "updated_at": "2026-10-17T07:58:02.387194+00:00",
+  "steps": {
+    "build": "completed",
+    "broken-call": "failed"
+  }
+}

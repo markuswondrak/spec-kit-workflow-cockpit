@@ -54,11 +54,29 @@ class GateSnapshot:
     token: str | None = None
     reason: str = ""
     acknowledged: str = ""
+    #: The scope that contains the gate; ``()`` for a root-scope gate.
+    scope_path: tuple = ()
+    #: The root input a child gate's verdict is submitted under, when traced.
+    root_input: str | None = None
+    #: ``unresolved`` / ``unsupported-version`` / ``undecidable`` when blocked.
+    reason_kind: str = ""
 
     @property
     def selectable(self) -> bool:
         """True only when a confirmed declared choice may be submitted."""
         return self.state is GateState.READY and bool(self.token)
+
+    @property
+    def display_scope_path(self) -> str:
+        """The path the user sees, e.g. ``review-release > review``."""
+        parts = [*self.scope_path]
+        if self.step_id:
+            parts.append(self.step_id)
+        return " > ".join(str(part) for part in parts)
+
+    @property
+    def nested(self) -> bool:
+        return bool(self.scope_path)
 
 
 @dataclass(frozen=True)

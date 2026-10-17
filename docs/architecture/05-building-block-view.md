@@ -55,9 +55,15 @@ flowchart TB
 | Component | Responsibility |
 |---|---|
 | `WorkflowRegistry` | Parse `workflow-registry.json` and list installed workflows. |
-| `WorkflowDefinitionResolver` | Parse YAML and apply enabled overlays; provide effective launch inputs and steps. |
-| `WorkflowDefinitionParser` | Turn the effective definition into declared control flow. |
-| `ControlFlowGraph` | Generic graph of nodes, edges, branches, loops, gates, and overlays. |
+| `WorkflowDefinitionResolver` | Parse YAML and apply enabled overlays; provide effective launch inputs and steps, and the root inputs a called workflow's gate consumes. |
+| `WorkflowDefinitionParser` | Turn the effective definition into declared control flow, following literal call targets into their installed definitions so every scope is validated. |
+| `ControlFlowGraph` | Generic graph of nodes, edges, branches, loops, gates, and calls; node identity is the engine's scope path, so a bare step id in two scopes stays distinct. |
+| `ExecutionTree` (`services/execution_tree.py`) | Decode `state.json` `execution` version 2 into frozen dataclasses: zip each sequence's YAML `source` against its `nodes`, apply the engine's source-sharing rule, and version-guard everything else as unsupported. |
+| `execution_walk` (`services/execution_walk.py`) | Walk the tree: the engine-equivalent active node (children-first, skipping settled subtrees), qualified ids, scope paths, occurrence paths, and the scope-occurrence timing key. |
+| `VerdictTrace` (`services/verdict_trace.py`) | Trace a child gate's `verdict_input` through every call's `input:` mapping to the root input name `resume -i` accepts, or report it undecidable. |
+| `ShapeRules` (`services/shape_rules.py`) | Cross-scope validation of every gate and call target before Start: mixing, parallel interactive gates, retry, dynamic values, `verdict_input` under fan-out, and missing or disabled targets. |
+| `GateTarget` (`services/gate_target.py`) | Resolve the one current gate from persisted evidence — the active node for a composed run, the declared node for a legacy run — or a named Abort-only state. |
+| `Limits` (`services/limits.py`) | The one shared `state.json` bound used by both the live reader and run discovery. |
 | `RunStateReader` | Tolerant reads of independently written `state.json`, `inputs.json`, and `log.jsonl`; skip unchanged files while detecting atomic replacements. |
 | `RunCatalog` | Bounded, read-only discovery of `.specify/workflows/runs/` into `RunDescriptor`s; never infers status and imports no engine internals. |
 | `RunStore` | Delete one run directory under explicit single-owner safety: single path segment, no live owner, not the session's run, and not `running`/`initializing`. |
@@ -75,7 +81,7 @@ flowchart TB
 |---|---|
 | `CockpitSession` | Presentation facade that composes services; starts a new run, adopts an existing one, inspects an existing run read-only, or deletes a stale one; exposes the `submit_decision(choice, token)` and `resume_run(token)` seams. |
 | `RunAdopter` | Orchestrate describe -> claim -> launch-copy definition for an existing paused or failed run; binds identity and spawns nothing. |
-| `GateDecisionCoordinator` | Project every current declared gate into one transport-independent `GateSnapshot`; own opaque tokens and write-once reconciliation, including the single adopted gate resume. |
+| `GateDecisionCoordinator` | Project every current gate into one transport-independent `GateSnapshot`; own opaque tokens and write-once reconciliation per scope occurrence, including the single adopted gate resume. |
 | `ResumeCoordinator` | Project the resume affordance for an adopted `failed` run and issue exactly one bare `resume`; own the opaque write-once token, the reserve-before-boundary rule, and the release-on-`NOT_WRITTEN` rule. |
 | `PollingLoop` | Publish an immutable `RunSnapshot` on a 250 ms monotonic schedule. |
 | `RunSnapshot` | Immutable view of status, graph projection, gate, review data, output tail, and outcome. |

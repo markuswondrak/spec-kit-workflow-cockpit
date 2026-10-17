@@ -1,0 +1,26 @@
+workflow:
+  id: loop-release
+  name: Loop Release
+  version: 1.0.0
+  description: Calls the same child workflow twice in a loop.
+inputs:
+  approval:
+    type: string
+    default: ''
+  keep_going:
+    type: string
+    default: 'yes'
+steps:
+- id: notes-loop
+  type: do-while
+  condition: '{{ inputs.keep_going | contains(''yes'') }}'
+  max_iterations: 2
+  steps:
+  - id: notes-call
+    type: workflow
+    workflow: release-notes
+    input:
+      approval: '{{ inputs.approval }}'
+- id: after
+  type: shell
+  run: 'true'

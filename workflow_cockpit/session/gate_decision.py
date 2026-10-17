@@ -1,12 +1,17 @@
 """Unified gate decision coordinator.
 
 The coordinator owns the decision state machine. It projects the current
-persisted state, declared graph node, process condition, and verified engine
-contract into one :class:`GateSnapshot`; selects the structured or PTY
-transport internally; issues and validates opaque decision tokens; serializes
-submission, the write-once ledger, and Abort visibility; and reconciles
-submitted, unverified, and advanced attempts without ever trusting
-``updated_at`` as an attempt identity.
+persisted state, the resolved gate target (declared node or execution-tree
+active node), the process condition, and the verified engine contract into one
+:class:`GateSnapshot`; selects the structured or PTY transport internally;
+issues and validates opaque decision tokens; serializes submission, the
+write-once ledger, and Abort visibility; and reconciles submitted, unverified,
+and advanced attempts without ever trusting ``updated_at`` as an attempt
+identity.
+
+The write-once ledger is keyed per scope occurrence, so a root gate and a
+same-named child gate, or the same child called twice, can never share or
+block each other's attempt (FR-008).
 """
 
 from __future__ import annotations
@@ -27,111 +32,26 @@ from ..engine.supervisor import (
     SupervisorError,
     build_interactive_resume_argv,
 )
-from ..services.graph import ControlFlowGraph, GraphNode, resolve_declared_id
+from ..services.gate_target import GateTarget, resolve_gate_target
+from ..services.graph import ControlFlowGraph
 from ..services.run_state import RunStateData
+from ..services.shape_rules import ShapeSupport, validate_shape
 from ..services.snapshot import GateSnapshot, GateState
 
 #: Bounded post-submission watch (about 40 ticks at the 250 ms cadence).
 SUBMISSION_WATCH_SECONDS = 10.0
 
-_PARALLEL_TYPES = frozenset({"while", "do-while", "fan-out"})
+__all__ = [
+    "GateDecisionCoordinator",
+    "GateDecisionError",
+    "ShapeSupport",
+    "SUBMISSION_WATCH_SECONDS",
+    "validate_shape",
+]
 
 
 class GateDecisionError(Exception):
     """Raised when a confirmed gate decision cannot be submitted."""
-
-
-@dataclass(frozen=True)
-class ShapeSupport:
-    """Whether an effective workflow's gates can be decided, and how."""
-
-    ok: bool
-    stdin: StdinPolicy
-    error: str = ""
-
-
-def _is_dynamic(value: str) -> bool:
-    return "{{" in value
-
-
-def _nested_in_parallel(graph: ControlFlowGraph, node: GraphNode) -> bool:
-    """True when a gate executes under a loop or fan-out container."""
-    by_id = graph.by_id
-    parent_id = node.parent_id
-    while parent_id is not None:
-        parent = by_id.get(parent_id)
-        if parent is None:
-            return False
-        if parent.type in _PARALLEL_TYPES:
-            return True
-        parent_id = parent.parent_id
-    return False
-
-
-def validate_shape(
-    graph: ControlFlowGraph | None,
-    version: object,
-) -> ShapeSupport:
-    """Validate the effective workflow before Start.
-
-    Interactive gates change the stdin policy for the whole child, so mixed
-    workflows, dynamic interactive values, retry over the PTY, and parallel or
-    looped interactive gates are rejected with an actionable error rather than
-    started and left undecidable later. Structured-only workflows keep the
-    non-TTY policy and are always supported.
-    """
-    if graph is None:
-        return ShapeSupport(True, StdinPolicy.DEVNULL)
-    gates = [node for node in graph.nodes if node.gate]
-    non_verdict = [node for node in gates if not node.verdict_input]
-    if not non_verdict:
-        return ShapeSupport(True, StdinPolicy.DEVNULL)
-
-    contract = resolve_contract(version)
-    if any(node.verdict_input for node in gates):
-        return ShapeSupport(
-            False,
-            StdinPolicy.DEVNULL,
-            "Workflows that mix gates with and without verdict_input cannot be decided "
-            "safely; remove one gate type or split the workflow.",
-        )
-    if contract is None:
-        return ShapeSupport(
-            False,
-            StdinPolicy.DEVNULL,
-            f"Could not determine the specify version from {version!r}; interactive gates "
-            "cannot be mapped. Reinstall a supported CLI or use verdict_input gates.",
-        )
-    for node in non_verdict:
-        if _nested_in_parallel(graph, node):
-            return ShapeSupport(
-                False,
-                StdinPolicy.DEVNULL,
-                f"Gate {node.id!r} runs inside a loop or fan-out, where interactive prompt "
-                "ownership is not deterministic; make the gate sequential.",
-            )
-        if node.on_reject == "retry":
-            return ShapeSupport(
-                False,
-                StdinPolicy.DEVNULL,
-                f"Gate {node.id!r} uses on_reject: retry, which requires re-prompting across "
-                "processes and is not supported for interactive gates; use skip or abort, or "
-                "a verdict_input gate.",
-            )
-        if _is_dynamic(node.message) or any(_is_dynamic(option) for option in node.options):
-            return ShapeSupport(
-                False,
-                StdinPolicy.DEVNULL,
-                f"Gate {node.id!r} uses dynamic message or options that cannot be verified "
-                "before Start; make them static or use a verdict_input gate.",
-            )
-        if not node.options:
-            return ShapeSupport(
-                False,
-                StdinPolicy.DEVNULL,
-                f"Gate {node.id!r} declares no options; interactive decisions need explicit options.",
-            )
-    return ShapeSupport(True, StdinPolicy.PTY)
 
 
 @dataclass
@@ -181,11 +101,9 @@ class GateDecisionCoordinator:
     def contract(self) -> PromptContract | None:
         return self._contract
 
-    def _declared_node(self, runtime_id: str | None) -> GraphNode | None:
-        if self._graph is None or not runtime_id:
-            return None
-        declared_id = resolve_declared_id(runtime_id, self._graph.declared_ids)
-        return self._graph.by_id.get(declared_id) if declared_id else None
+    def target(self, state: RunStateData | None) -> GateTarget | None:
+        """The current gate target, resolution rules included."""
+        return resolve_gate_target(state, self._graph)
 
     def project(
         self,
@@ -228,80 +146,75 @@ class GateDecisionCoordinator:
         condition: ProcessCondition,
         gate_attempt: int,
     ) -> GateSnapshot | None:
-        node = self._declared_node(state.current_step_id if state else None)
-        if state is None or not run_id or node is None or not node.gate:
+        target = self.target(state)
+        if state is None or not run_id or target is None:
             self._attempt = None
             return None
-        kind = "structured" if node.verdict_input else "interactive"
-        key = (run_id, node.id, kind, gate_attempt)
+        if target.blocked:
+            # A gate Cockpit cannot decide never mints a token.
+            self._attempt = None
+            return self._snapshot(target, GateState.BLOCKED, reason=target.reason)
+        key = (
+            run_id,
+            target.scope_path,
+            target.step_id,
+            target.occurrence,
+            target.kind,
+            gate_attempt,
+        )
         if self._attempt is not None and self._attempt.key != key:
             # The run left the consumed attempt or began a new execution.
             self._attempt = None
-        runtime_id = state.current_step_id or node.id
         if self._read_only:
-            message = node.message or "Gate evidence is unavailable."
-            return self._blocked(
-                node,
-                runtime_id,
-                message,
-                node.options,
-                "View-only mode: gate decisions cannot be submitted.",
+            return self._snapshot(
+                target,
+                GateState.BLOCKED,
+                reason="View-only mode: gate decisions cannot be submitted.",
             )
-        if kind == "structured":
-            return self._project_structured(state, node, runtime_id, condition, key)
-        return self._project_interactive(state, node, runtime_id, condition, key)
+        if target.kind == "structured":
+            return self._project_structured(state, target, condition, key)
+        return self._project_interactive(state, target, condition, key)
 
     def _project_structured(
         self,
         state: RunStateData,
-        node: GraphNode,
-        runtime_id: str,
+        target: GateTarget,
         condition: ProcessCondition,
         key: tuple,
     ) -> GateSnapshot:
-        message, options, reason = self._structured_evidence(state, node)
         if self._attempt is not None and self._attempt.state is not GateState.READY:
-            return self._attempt_snapshot(node, runtime_id, message, options)
-        if reason:
-            return self._blocked(node, runtime_id, message, options, reason)
+            return self._attempt_snapshot(target)
         if state.status != "paused":
-            return self._blocked(
-                node,
-                runtime_id,
-                message,
-                options,
-                "The persisted gate is not paused; only Abort is available.",
+            return self._snapshot(
+                target,
+                GateState.BLOCKED,
+                reason="The persisted gate is not paused; only Abort is available.",
             )
         if condition.live:
-            return self._blocked(
-                node,
-                runtime_id,
-                message,
-                options,
-                "The engine is still running; wait for the gate to pause.",
+            return self._snapshot(
+                target,
+                GateState.BLOCKED,
+                reason="The engine is still running; wait for the gate to pause.",
             )
         if self._attempt is None:
             self._attempt = self._new_attempt(key)
-        return self._attempt_snapshot(node, runtime_id, message, options)
+        return self._attempt_snapshot(target)
 
     def _project_interactive(
         self,
         state: RunStateData,
-        node: GraphNode,
-        runtime_id: str,
+        target: GateTarget,
         condition: ProcessCondition,
         key: tuple,
     ) -> GateSnapshot:
-        message = node.message or "Review required."
-        options = node.options
         if self._attempt is not None and self._attempt.state is not GateState.READY:
-            return self._attempt_snapshot(node, runtime_id, message, options)
+            return self._attempt_snapshot(target)
         reason = self._interactive_blocked_reason(state, condition)
         if reason:
-            return self._blocked(node, runtime_id, message, options, reason)
+            return self._snapshot(target, GateState.BLOCKED, reason=reason)
         if self._attempt is None:
             self._attempt = self._new_attempt(key)
-        return self._attempt_snapshot(node, runtime_id, message, options)
+        return self._attempt_snapshot(target)
 
     def _interactive_blocked_reason(
         self, state: RunStateData, condition: ProcessCondition
@@ -334,42 +247,6 @@ class GateDecisionCoordinator:
             )
         return ""
 
-    def _structured_evidence(
-        self, state: RunStateData, node: GraphNode
-    ) -> tuple[str, tuple[str, ...], str]:
-        """Resolve message/options from authoritative persisted evidence."""
-        result = state.current_result()
-        declared_message = node.message or "Gate evidence is unavailable."
-        declared_options = node.options
-        if state.status != "paused":
-            return declared_message, declared_options, ""
-        if not isinstance(result, dict) or result.get("type") != "gate":
-            return declared_message, declared_options, (
-                "The persisted gate evidence is unavailable; only Abort is available."
-            )
-        output = result.get("output")
-        if not isinstance(output, dict):
-            return declared_message, declared_options, (
-                "The persisted gate output is malformed; only Abort is available."
-            )
-        raw_message = output.get("message")
-        valid_message = isinstance(raw_message, str) and bool(raw_message)
-        message = raw_message if valid_message else declared_message
-        raw_options = output.get("options")
-        if isinstance(raw_options, list):
-            options = tuple(item for item in raw_options if isinstance(item, str))
-            valid_options = len(options) == len(raw_options) and bool(options)
-        else:
-            options = ()
-            valid_options = False
-        if not valid_options:
-            options = options or declared_options
-        if not valid_message:
-            return message, options, "The persisted gate message is missing or malformed; only Abort is available."
-        if not valid_options:
-            return message, options, "The persisted gate options are missing or malformed; only Abort is available."
-        return message, options, ""
-
     # -- submission ----------------------------------------------------
 
     def _submit(
@@ -395,15 +272,15 @@ class GateDecisionCoordinator:
             )
         if choice not in gate.options:
             raise GateDecisionError(f"{choice!r} is not one of the declared gate options.")
-        node = self._declared_node(state.current_step_id if state else None)
-        if node is None or not node.gate or self._attempt is None:
+        target = self.target(state)
+        if target is None or target.blocked or self._attempt is None:
             raise GateDecisionError("The gate attempt is no longer available.")
         attempt = self._attempt
         # Reserve the attempt under the coordinator lock before the engine
         # boundary runs, so a concurrent confirmation cannot also write.
         attempt.choice = choice
         attempt.written_at = self._clock()
-        result = self._decide(node, run_id or "", choice, gate.options)
+        result = self._decide(target, run_id or "", choice, gate.options)
         if result.result is WriteOutcome.NOT_WRITTEN:
             # Zero bytes were written: release the reservation and report it.
             attempt.choice = None
@@ -417,11 +294,17 @@ class GateDecisionCoordinator:
         )
 
     def _decide(
-        self, node: GraphNode, run_id: str, choice: str, options: tuple[str, ...]
+        self, target: GateTarget, run_id: str, choice: str, options: tuple[str, ...]
     ) -> DecisionResult:
-        if node.verdict_input:
+        if target.kind == "structured":
+            verdict_input = target.root_input or target.verdict_input
+            if not verdict_input:
+                return DecisionResult(
+                    WriteOutcome.NOT_WRITTEN,
+                    "The gate's verdict input could not be traced to a root input.",
+                )
             return self._verdict_decider.submit(
-                run_id=run_id, verdict_input=node.verdict_input, choice=choice
+                run_id=run_id, verdict_input=verdict_input, choice=choice
             )
         if self._pty_decider is None:
             return DecisionResult(WriteOutcome.NOT_WRITTEN, "Interactive submission is unavailable.")
@@ -443,9 +326,7 @@ class GateDecisionCoordinator:
     def _new_attempt(self, key: tuple) -> _Attempt:
         return _Attempt(key=key, token=secrets.token_urlsafe(12))
 
-    def _attempt_snapshot(
-        self, node: GraphNode, runtime_id: str, message: str, options: tuple[str, ...]
-    ) -> GateSnapshot:
+    def _attempt_snapshot(self, target: GateTarget) -> GateSnapshot:
         attempt = self._attempt
         if attempt is None:
             raise GateDecisionError("The gate attempt is no longer available.")
@@ -467,31 +348,33 @@ class GateDecisionCoordinator:
                 "The choice was submitted once and will not be sent again. "
                 "Expand Engine Output to inspect the prompt state."
             )
-        return GateSnapshot(
-            runtime_step_id=runtime_id,
-            step_id=node.id,
-            message=message,
-            options=options,
-            on_reject=node.on_reject,
-            state=state,
-            token=(attempt.token if state is GateState.READY else None),
+        return self._snapshot(
+            target,
+            state,
             acknowledged=acknowledged,
+            token=(attempt.token if state is GateState.READY else None),
         )
 
-    def _blocked(
+    def _snapshot(
         self,
-        node: GraphNode,
-        runtime_id: str,
-        message: str,
-        options: tuple[str, ...],
-        reason: str,
+        target: GateTarget,
+        state: GateState,
+        *,
+        reason: str = "",
+        acknowledged: str = "",
+        token: str | None = None,
     ) -> GateSnapshot:
         return GateSnapshot(
-            runtime_step_id=runtime_id,
-            step_id=node.id,
-            message=message,
-            options=options,
-            on_reject=node.on_reject,
-            state=GateState.BLOCKED,
+            runtime_step_id=target.runtime_step_id or target.step_id,
+            step_id=target.step_id or None,
+            message=target.message,
+            options=target.options,
+            on_reject=target.on_reject,
+            state=state,
+            token=token,
             reason=reason,
+            acknowledged=acknowledged,
+            scope_path=target.scope_path,
+            root_input=target.root_input,
+            reason_kind=target.reason_kind,
         )

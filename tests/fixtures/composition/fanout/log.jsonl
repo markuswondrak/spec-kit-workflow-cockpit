@@ -1,0 +1,11 @@
+{"event": "step_started", "step_id": "prep", "type": "shell", "timestamp": "2026-10-17T07:57:58.325825+00:00"}
+{"event": "step_completed", "step_id": "prep", "status": "completed", "timestamp": "2026-10-17T07:57:58.327420+00:00"}
+{"event": "step_started", "step_id": "fan", "type": "fan-out", "timestamp": "2026-10-17T07:57:58.327710+00:00"}
+{"event": "step_completed", "step_id": "fan", "status": "completed", "timestamp": "2026-10-17T07:57:58.328548+00:00"}
+{"event": "step_started", "step_id": "fan:notes:0", "type": "workflow", "timestamp": "2026-10-17T07:57:58.329217+00:00"}
+{"event": "step_started", "step_id": "draft", "type": "shell", "execution_path": [1, "item", 0, 0, "workflow", 0], "workflow_id": "interactive-notes", "timestamp": "2026-10-17T07:57:58.333983+00:00"}
+{"event": "step_completed", "step_id": "draft", "status": "completed", "execution_path": [1, "item", 0, 0, "workflow", 0], "workflow_id": "interactive-notes", "timestamp": "2026-10-17T07:57:58.335507+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "execution_path": [1, "item", 0, 0, "workflow", 1], "workflow_id": "interactive-notes", "timestamp": "2026-10-17T07:57:58.335846+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "paused", "execution_path": [1, "item", 0, 0, "workflow", 1], "workflow_id": "interactive-notes", "timestamp": "2026-10-17T07:57:58.336210+00:00"}
+{"event": "step_completed", "step_id": "fan:notes:0", "status": "paused", "timestamp": "2026-10-17T07:57:58.336560+00:00"}
+{"event": "workflow_finished", "status": "paused", "timestamp": "2026-10-17T07:57:58.338172+00:00"}

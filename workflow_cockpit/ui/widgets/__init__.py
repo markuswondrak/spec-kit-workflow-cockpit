@@ -155,11 +155,16 @@ class Runway(OptionList):
         width = max(12, (self.size.width or 38) - option_padding)
         rows = render_runway(projection, width=width)
         self._full_labels = {str(row.id): row.full_label for row in rows}
-        current = projection.current_node_id if projection is not None else None
+        current_key = projection.current_node_key if projection is not None else None
+        current_id = projection.current_node_id if projection is not None else None
         options: list[Option] = []
         for row in rows:
             tone = status_tone(row.status)
-            if str(row.id) == current:
+            row_key = row.key or (row.id,)
+            is_current = (current_key is not None and row_key == current_key) or (
+                len(row_key) == 1 and current_id is not None and row.id == current_id
+            )
+            if is_current:
                 options.append(Option(_text((row.text, f"bold {active_tone()}")), id=row.id))
             elif row.active:
                 options.append(Option(_text((row.text, f"bold {tone}")), id=row.id))

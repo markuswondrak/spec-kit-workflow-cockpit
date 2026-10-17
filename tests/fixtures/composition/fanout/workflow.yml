@@ -1,0 +1,21 @@
+workflow:
+  id: fanout-release
+  name: Fanout Release
+  version: 1.0.0
+  description: Fan-out over a call whose child holds an interactive gate.
+steps:
+- id: prep
+  type: shell
+  run: 'true'
+- id: fan
+  type: fan-out
+  items:
+  - alpha
+  - beta
+  step:
+    id: notes
+    type: workflow
+    workflow: interactive-notes
+- id: after
+  type: shell
+  run: 'true'

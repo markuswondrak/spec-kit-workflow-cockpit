@@ -77,10 +77,30 @@ workflow capability probe; every row is covered by a Cockpit test or a code refe
 - **Run files.** `runs/<run_id>/` contains `workflow.yml` (written first), then atomic
   `state.json`/`inputs.json` (temp file + `os.replace`) and append-only `log.jsonl`. Cockpit
   refuses to spawn when the run directory already exists.
+- **Run-file bounds.** Every read of `state.json` is bounded by one shared constant,
+  `MAX_STATE_BYTES` = 4 MiB (`workflow_cockpit/services/limits.py`), in both run discovery and the
+  live reader. Above it the run is reported "state.json too large" and never read unbounded; the
+  log tail keeps its separate 256 KiB window. A composed run's `state.json` embeds one frozen
+  definition per bound call and retains each step's output after completion, which is why the bound
+  is above the old 256 KiB discovery limit.
+- **Execution tree.** From `specify 1.1.3`, `state.json` also carries `execution` (version 2): the
+  persisted tree of the root and called scopes, with a YAML `source` string zipped against a
+  parallel `nodes` list of `phase`/`active`/`result`/`outcome` records, and one frozen definition
+  per bound `type: workflow` call. Cockpit reads it as a persisted structure
+  ([ADR 0015](../decisions/0015-read-the-persisted-execution-tree.md)): only version 2 is
+  interpreted, an absent `execution` is a legacy run, and the active node is the engine's first
+  unfinished node in a children-first walk — never the per-node `active` marker, which every
+  entered node carries. `log.jsonl` events from a called scope add `workflow_id` and an index-based
+  `execution_path`; Cockpit treats the path as an opaque tuple key, so scopes never merge. Cockpit
+  never imports the engine: the reading is re-verified by a gated contract test that diffs it
+  against the engine's own `status --json`.
 - **Gates.** `verdict_input` gates resume with `resume -i <name>=<choice> --json`; gates without it
   are answered by one write to the managed PTY. The recorded prompt contract applies to any
   supported engine, so interactive gates are not restricted to a single release. The engine exposes
-  no abort command, so Abort uses signals.
+  no abort command, so Abort uses signals. A gate inside a called scope is taken from the active
+  node of the execution tree, and its `verdict_input` is traced through every call's `input:`
+  mapping to the root input name the engine accepts, so the submission is always one
+  `resume -i <root_input>=<choice>`.
 
 Out of scope: workflow authoring/installation, built-in multi-run history, multi-run dashboards,
 automatic run cleanup or archiving, launching or editing workflow definitions, adopting `running`

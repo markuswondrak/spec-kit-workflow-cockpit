@@ -1,0 +1,21 @@
+{
+  "run_id": "622447a3",
+  "workflow_id": "dynamic-release",
+  "status": "paused",
+  "current_step_id": "pre-gate",
+  "current_step_index": 0,
+  "gate": {
+    "step_id": "pre-gate",
+    "message": "Proceed with the dynamic release?",
+    "options": [
+      "approve",
+      "reject"
+    ],
+    "choice": null
+  },
+  "created_at": "2026-10-17T07:58:06.308264+00:00",
+  "updated_at": "2026-10-17T07:58:06.316273+00:00",
+  "steps": {
+    "pre-gate": "paused"
+  }
+}

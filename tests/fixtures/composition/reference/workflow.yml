@@ -1,0 +1,21 @@
+workflow:
+  id: release
+  name: Release
+  version: 1.0.0
+  description: Build, review the notes, publish.
+inputs:
+  approval:
+    type: string
+    default: ''
+steps:
+- id: build
+  type: shell
+  run: 'true'
+- id: review-release
+  type: workflow
+  workflow: release-notes
+  input:
+    approval: '{{ inputs.approval }}'
+- id: publish
+  type: shell
+  run: 'true'

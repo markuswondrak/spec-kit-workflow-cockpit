@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..services.graph import resolve_declared_id
-from ..services.projection import GraphProjection
+from ..services.projection import GraphProjection, NodeState
 from ..services.snapshot import GateState, RunSnapshot
 from ..session.resume import ResumeDecision
 
@@ -57,6 +57,12 @@ class RunwayRow:
     status: str
     active: bool
     full_label: str = ""
+    #: Scope-qualified identity, so a nested row is distinct from a root one.
+    key: tuple = ()
+    #: Display scope path for a nested row (``review-release > review``).
+    scope_path: str = ""
+    #: A handled ``continue_on_error`` call failure.
+    handled: bool = False
 
 
 def default_focus_mode(snapshot: RunSnapshot) -> str:
@@ -94,6 +100,8 @@ class GateDecision:
     selectable: bool
     hint: str
     affordance: str
+    #: The scope the gate lives in, e.g. ``review-release > review`` ("" at root).
+    scope_line: str = ""
 
 
 def gate_decision(snapshot: RunSnapshot) -> GateDecision:
@@ -143,6 +151,7 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
         notice = gate.reason or "This gate cannot be decided; only Abort is available."
         tone = "fault"
         hint = "only x  abort run is available"
+    scope_line = f"scope {gate.display_scope_path}" if gate.nested else ""
     return GateDecision(
         mode=gate.state.value,
         message=gate.message,
@@ -152,6 +161,7 @@ def gate_decision(snapshot: RunSnapshot) -> GateDecision:
         selectable=selectable,
         hint=hint,
         affordance=affordance,
+        scope_line=scope_line,
     )
 
 
@@ -206,15 +216,21 @@ def _tail_truncate(value: str, limit: int) -> str:
     return value[: limit - 3] + "..."
 
 
+def _row_key(node) -> tuple:
+    return node.key if node.key else (node.id,)
+
+
 def render_runway(projection: GraphProjection | None, *, width: int = 36) -> list[RunwayRow]:
     """Render graph data into stable, terminal-sized runway rows."""
     if projection is None:
         return []
-    states = projection.by_id
+    states = projection.by_key or projection.by_id
+    current_key = projection.current_node_key
     first_in_branch: set[tuple[str | None, str | None]] = set()
     rows: list[RunwayRow] = []
     for node in projection.graph.nodes:
-        state = states[node.id]
+        key = _row_key(node)
+        state = states.get(key) or states.get(node.id) or NodeState(id=node.id, key=key)
         branch_key = (node.parent_id, node.branch)
         connector = ""
         if node.branch:
@@ -229,17 +245,28 @@ def render_runway(projection: GraphProjection | None, *, width: int = 36) -> lis
             "skipped": "[-]",
             "failed": "[X]",
             "aborted": "[/]",
+            "blocked": "[!]",
         }.get(state.status, "[ ]")
         meta: list[str] = []
         if node.gate:
             meta.append("gate")
+        if node.is_call and not node.target_resolved:
+            meta.append("target not yet resolved")
+        if state.handled:
+            meta.append("handled")
         if state.attempts > 1:
             meta.append(f"#{state.attempts}")
-        active = node.id == projection.current_node_id
+        scope_path = " > ".join(str(part) for part in key)
+        if len(key) > 1:
+            meta.append("in " + " > ".join(str(part) for part in key[:-1]))
+        active = state.active or (current_key is not None and key == current_key)
+        is_current = current_key is not None and key == current_key
+        if not is_current and len(key) == 1 and projection.current_node_id is not None:
+            is_current = node.id == projection.current_node_id
         show_duration = (
             state.duration_seconds is not None
             and not node.gate
-            and (active or state.status == "completed")
+            and (is_current or state.status == "completed")
         )
         tail = ("  " + "  ".join(meta)) if meta else ""
         duration = format_duration(state.duration_seconds) if show_duration else ""
@@ -256,7 +283,18 @@ def render_runway(projection: GraphProjection | None, *, width: int = 36) -> lis
         body = f"{prefix}{marker} {label}{tail}"
         if duration:
             body += " " * max(1, width - len(body) - len(duration)) + duration
-        rows.append(RunwayRow(node.id, body, state.status, state.active, node.label))
+        rows.append(
+            RunwayRow(
+                node.id if len(key) == 1 else ">".join(str(part) for part in key),
+                body,
+                state.status,
+                active,
+                node.label,
+                key=key,
+                scope_path=scope_path,
+                handled=state.handled,
+            )
+        )
     return rows
 
 

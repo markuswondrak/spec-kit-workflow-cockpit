@@ -1,0 +1,21 @@
+workflow:
+  id: deep-release
+  name: Deep Release
+  version: 1.0.0
+  description: A gate two calls deep.
+inputs:
+  approval:
+    type: string
+    default: ''
+steps:
+- id: build
+  type: shell
+  run: 'true'
+- id: middle-call
+  type: workflow
+  workflow: middle
+  input:
+    approval: '{{ inputs.approval }}'
+- id: publish
+  type: shell
+  run: 'true'

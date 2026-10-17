@@ -1,0 +1,16 @@
+workflow:
+  id: handled-release
+  name: Handled Release
+  version: 1.0.0
+  description: A call that fails under continue_on_error and the run continues.
+steps:
+- id: build
+  type: shell
+  run: 'true'
+- id: broken-call
+  type: workflow
+  workflow: broken-child
+  continue_on_error: true
+- id: publish
+  type: shell
+  run: 'true'
