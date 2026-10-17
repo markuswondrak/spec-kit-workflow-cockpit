@@ -1,0 +1,26 @@
+{"event": "step_started", "step_id": "notes-loop", "type": "do-while", "timestamp": "2026-10-17T07:57:55.980872+00:00"}
+{"event": "step_completed", "step_id": "notes-loop", "status": "completed", "timestamp": "2026-10-17T07:57:55.981646+00:00"}
+{"event": "step_started", "step_id": "notes-call", "type": "workflow", "timestamp": "2026-10-17T07:57:55.982157+00:00"}
+{"event": "step_started", "step_id": "draft", "type": "shell", "execution_path": [0, 0, 0, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:55.987437+00:00"}
+{"event": "step_completed", "step_id": "draft", "status": "completed", "execution_path": [0, 0, 0, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:55.989132+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "execution_path": [0, 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:55.989456+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "paused", "execution_path": [0, 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:55.989792+00:00"}
+{"event": "step_completed", "step_id": "notes-call", "status": "paused", "timestamp": "2026-10-17T07:57:55.990154+00:00"}
+{"event": "workflow_finished", "status": "paused", "timestamp": "2026-10-17T07:57:55.991950+00:00"}
+{"event": "step_started", "step_id": "notes-call", "type": "workflow", "timestamp": "2026-10-17T07:57:56.282260+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "execution_path": [0, 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.285231+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "completed", "execution_path": [0, 0, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.285602+00:00"}
+{"event": "step_started", "step_id": "publish-notes", "type": "shell", "execution_path": [0, 0, 0, "workflow", 2], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.285950+00:00"}
+{"event": "step_completed", "step_id": "publish-notes", "status": "completed", "execution_path": [0, 0, 0, "workflow", 2], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.287644+00:00"}
+{"event": "step_completed", "step_id": "notes-call", "status": "completed", "timestamp": "2026-10-17T07:57:56.288358+00:00"}
+{"event": "step_started", "step_id": "notes-loop:notes-call:1", "type": "workflow", "timestamp": "2026-10-17T07:57:56.290036+00:00"}
+{"event": "step_started", "step_id": "draft", "type": "shell", "execution_path": [0, 1, 0, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.297858+00:00"}
+{"event": "step_completed", "step_id": "draft", "status": "completed", "execution_path": [0, 1, 0, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.299433+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "execution_path": [0, 1, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.299840+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "completed", "execution_path": [0, 1, 0, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.300982+00:00"}
+{"event": "step_started", "step_id": "publish-notes", "type": "shell", "execution_path": [0, 1, 0, "workflow", 2], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.301469+00:00"}
+{"event": "step_completed", "step_id": "publish-notes", "status": "completed", "execution_path": [0, 1, 0, "workflow", 2], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:56.303093+00:00"}
+{"event": "step_completed", "step_id": "notes-loop:notes-call:1", "status": "completed", "timestamp": "2026-10-17T07:57:56.304009+00:00"}
+{"event": "step_started", "step_id": "after", "type": "shell", "timestamp": "2026-10-17T07:57:56.305408+00:00"}
+{"event": "step_completed", "step_id": "after", "status": "completed", "timestamp": "2026-10-17T07:57:56.306864+00:00"}
+{"event": "workflow_finished", "status": "completed", "timestamp": "2026-10-17T07:57:56.307464+00:00"}

@@ -1,0 +1,14 @@
+{"event": "step_started", "step_id": "build", "type": "shell", "timestamp": "2026-10-17T07:57:49.748197+00:00"}
+{"event": "step_completed", "step_id": "build", "status": "completed", "timestamp": "2026-10-17T07:57:49.749918+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "timestamp": "2026-10-17T07:57:49.750240+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "paused", "timestamp": "2026-10-17T07:57:49.750571+00:00"}
+{"event": "workflow_finished", "status": "paused", "timestamp": "2026-10-17T07:57:49.751400+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "timestamp": "2026-10-17T07:57:50.063507+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "completed", "timestamp": "2026-10-17T07:57:50.063873+00:00"}
+{"event": "step_started", "step_id": "review-release", "type": "workflow", "timestamp": "2026-10-17T07:57:50.064176+00:00"}
+{"event": "step_started", "step_id": "draft", "type": "shell", "execution_path": [2, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:50.071699+00:00"}
+{"event": "step_completed", "step_id": "draft", "status": "completed", "execution_path": [2, "workflow", 0], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:50.073402+00:00"}
+{"event": "step_started", "step_id": "review", "type": "gate", "execution_path": [2, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:50.073739+00:00"}
+{"event": "step_completed", "step_id": "review", "status": "paused", "execution_path": [2, "workflow", 1], "workflow_id": "release-notes", "timestamp": "2026-10-17T07:57:50.074090+00:00"}
+{"event": "step_completed", "step_id": "review-release", "status": "paused", "timestamp": "2026-10-17T07:57:50.074451+00:00"}
+{"event": "workflow_finished", "status": "paused", "timestamp": "2026-10-17T07:57:50.075825+00:00"}

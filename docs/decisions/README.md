@@ -19,5 +19,6 @@ rejected. The set is indexed from [§9 Architecture Decisions](../architecture/0
 | [0012](0012-release-versioning.md) | The package version is single-sourced and releases are tag-driven from main | Accepted |
 | [0013](0013-context-index-pointer-and-start-claim.md) | The context index is a pointer, and every Cockpit-owned run holds the claim | Accepted |
 | [0014](0014-resume-failed-runs.md) | A failed run may be adopted and resumed once from its recorded step | Accepted |
+| [0015](0015-read-the-persisted-execution-tree.md) | The persisted execution tree is read as a versioned structure | Accepted |
 
 An ADR test asserts every file here is listed and every listed ADR resolves to a file.

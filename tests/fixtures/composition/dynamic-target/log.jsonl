@@ -1,0 +1,3 @@
+{"event": "step_started", "step_id": "pre-gate", "type": "gate", "timestamp": "2026-10-17T07:58:06.315251+00:00"}
+{"event": "step_completed", "step_id": "pre-gate", "status": "paused", "timestamp": "2026-10-17T07:58:06.315598+00:00"}
+{"event": "workflow_finished", "status": "paused", "timestamp": "2026-10-17T07:58:06.316211+00:00"}

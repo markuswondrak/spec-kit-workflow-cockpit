@@ -1,0 +1,31 @@
+workflow:
+  id: dynamic-release
+  name: Dynamic Release
+  version: 1.0.0
+  description: A call whose target is chosen by an input expression.
+inputs:
+  target:
+    type: string
+    default: release-notes
+  approval:
+    type: string
+    default: ''
+  go:
+    type: string
+    default: ''
+steps:
+- id: pre-gate
+  type: gate
+  message: Proceed with the dynamic release?
+  options:
+  - approve
+  - reject
+  verdict_input: go
+- id: dyn-call
+  type: workflow
+  workflow: '{{ inputs.target }}'
+  input:
+    approval: '{{ inputs.approval }}'
+- id: publish
+  type: shell
+  run: 'true'

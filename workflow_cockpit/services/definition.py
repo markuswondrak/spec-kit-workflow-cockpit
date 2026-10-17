@@ -9,28 +9,37 @@ from typing import Any
 
 import yaml
 
+from .definition_inputs import (
+    InputSpec,
+    coerce_input_value,
+    inputs_to_argv,
+    parse_inputs,
+    validate_inputs,
+)
+from .verdict_trace import collect_verdict_traces
+
+__all__ = [
+    "DefinitionError",
+    "InputSpec",
+    "OverlayEdit",
+    "OverlayLayer",
+    "StepSpec",
+    "WorkflowDefinition",
+    "WorkflowDefinitionResolver",
+    "coerce_input_value",
+    "definition_signature",
+    "inputs_to_argv",
+    "normalized_signature",
+    "validate_inputs",
+    "verdict_input_names",
+]
+
 NESTED_LIST_KEYS = ("then", "else", "steps", "default")
 VALID_OPERATIONS = ("insert_after", "insert_before", "replace", "remove")
 
 
 class DefinitionError(Exception):
     """Raised when a workflow definition or overlay cannot be resolved."""
-
-
-@dataclass(frozen=True)
-class InputSpec:
-    name: str
-    type: str = "string"
-    required: bool = False
-    has_default: bool = False
-    default: Any = None
-    prompt: str = ""
-    description: str = ""
-    enum: tuple[Any, ...] | None = None
-
-    @property
-    def label(self) -> str:
-        return self.description or self.prompt or self.name
 
 
 @dataclass(frozen=True)
@@ -56,16 +65,21 @@ class WorkflowDefinition:
     source: Path | None = None
     raw: dict[str, Any] | None = None
     effective_steps: tuple[dict[str, Any], ...] = ()
+    #: Root inputs consumed only by a called workflow's verdict gate (FR-009).
+    cross_scope_verdict_inputs: frozenset[str] = frozenset()
 
     @property
     def presented_inputs(self) -> tuple[InputSpec, ...]:
         """User-configurable inputs, excluding gate verdict bindings.
 
         A ``verdict_input`` names an input the engine owns as a gate's decision
-        channel, so it is never offered as a launch-time variable.
+        channel, so it is never offered as a launch-time variable. The same
+        holds across scopes: an input a called workflow's gate consumes through
+        the call's ``input:`` mapping is a decision channel for that gate.
         """
         hidden = {step.verdict_input for step in self.steps if step.verdict_input}
         hidden |= verdict_input_names(self.effective_steps)
+        hidden |= self.cross_scope_verdict_inputs
         return tuple(spec for spec in self.inputs if spec.name not in hidden)
 
 
@@ -82,29 +96,6 @@ class OverlayLayer:
     priority: int
     source: str
     edits: tuple[OverlayEdit, ...]
-
-
-def _parse_inputs(raw: Any) -> tuple[InputSpec, ...]:
-    if not isinstance(raw, dict):
-        return ()
-    specs: list[InputSpec] = []
-    for name, spec in raw.items():
-        if not isinstance(name, str) or not isinstance(spec, dict):
-            continue
-        enum = spec.get("enum")
-        specs.append(
-            InputSpec(
-                name=name,
-                type=str(spec.get("type", "string")),
-                required=bool(spec.get("required", False)),
-                has_default="default" in spec,
-                default=spec.get("default"),
-                prompt=str(spec.get("prompt") or ""),
-                description=str(spec.get("description") or ""),
-                enum=tuple(enum) if isinstance(enum, list) else None,
-            )
-        )
-    return tuple(specs)
 
 
 def _step_from_dict(raw: dict[str, Any], index: int) -> StepSpec:
@@ -128,6 +119,10 @@ def _step_from_dict(raw: dict[str, Any], index: int) -> StepSpec:
         verdict_input=(str(raw["verdict_input"]) if raw.get("verdict_input") else None),
         on_reject=(str(raw["on_reject"]) if raw.get("on_reject") else None),
     )
+
+
+#: Historical private name kept for launch_definition's import.
+_parse_inputs = parse_inputs
 
 
 def _top_level_steps(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -338,6 +333,7 @@ class WorkflowDefinitionResolver:
     def __init__(self, project_root: Path) -> None:
         self.project_root = Path(project_root)
         self.workflows_dir = self.project_root / ".specify" / "workflows"
+        self._composed_cache: dict[str, tuple[dict[str, Any], list[Any]]] = {}
 
     def base_path(self, workflow_id: str) -> Path:
         return self.workflows_dir / workflow_id / "workflow.yml"
@@ -362,6 +358,39 @@ class WorkflowDefinitionResolver:
         return layers
 
     def resolve(self, workflow_id: str) -> WorkflowDefinition:
+        data, composed_steps = self._compose(workflow_id)
+        workflow = data.get("workflow")
+        workflow = workflow if isinstance(workflow, dict) else {}
+        step_specs = tuple(
+            _step_from_dict(step, index) for index, step in enumerate(composed_steps) if isinstance(step, dict)
+        )
+        report = collect_verdict_traces(composed_steps, self.effective_steps_of)
+        return WorkflowDefinition(
+            id=str(workflow.get("id") or workflow_id),
+            name=str(workflow.get("name") or workflow_id),
+            version=str(workflow.get("version") or ""),
+            description=str(workflow.get("description") or ""),
+            inputs=parse_inputs(data.get("inputs")),
+            steps=step_specs,
+            source=self.base_path(workflow_id),
+            raw=data,
+            effective_steps=tuple(composed_steps),
+            cross_scope_verdict_inputs=report.root_inputs,
+        )
+
+    def effective_steps_of(self, workflow_id: str) -> tuple[dict[str, Any], ...] | None:
+        """Overlay-composed steps of one workflow, or ``None`` when unavailable."""
+        try:
+            _data, composed = self._compose(workflow_id)
+        except DefinitionError:
+            return None
+        return tuple(composed)
+
+    def _compose(self, workflow_id: str) -> tuple[dict[str, Any], list[Any]]:
+        """Read one base workflow and apply its enabled overlays (cached)."""
+        cached = self._composed_cache.get(workflow_id)
+        if cached is not None:
+            return cached
         path = self.base_path(workflow_id)
         if not path.is_file():
             raise DefinitionError(f"Workflow definition not found: {path}")
@@ -371,94 +400,9 @@ class WorkflowDefinitionResolver:
             raise DefinitionError(f"Invalid workflow definition {path}: {exc}") from exc
         if not isinstance(data, dict):
             raise DefinitionError(f"Workflow definition must be a mapping: {path}")
-
-        overlays = self.collect_overlays(workflow_id)
-        composed_steps = _apply_overlays(data, overlays)
-
-        workflow = data.get("workflow")
-        workflow = workflow if isinstance(workflow, dict) else {}
-        step_specs = tuple(
-            _step_from_dict(step, index) for index, step in enumerate(composed_steps) if isinstance(step, dict)
-        )
-        return WorkflowDefinition(
-            id=str(workflow.get("id") or workflow_id),
-            name=str(workflow.get("name") or workflow_id),
-            version=str(workflow.get("version") or ""),
-            description=str(workflow.get("description") or ""),
-            inputs=_parse_inputs(data.get("inputs")),
-            steps=step_specs,
-            source=path,
-            raw=data,
-            effective_steps=tuple(composed_steps),
-        )
-
-
-def coerce_input_value(name: str, value: Any, spec: InputSpec) -> Any:
-    """Coerce one value to its declared type, mirroring the engine."""
-    if spec.type == "number":
-        if isinstance(value, bool):
-            raise ValueError(f"Input {name!r} expected a number.")
-        try:
-            number = float(value)
-        except (TypeError, ValueError, OverflowError):
-            raise ValueError(f"Input {name!r} expected a number, got {value!r}.") from None
-        coerced: Any = int(number) if number == int(number) else number
-    elif spec.type == "boolean":
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in ("true", "1", "yes", "on"):
-                coerced = True
-            elif lowered in ("false", "0", "no", "off"):
-                coerced = False
-            else:
-                raise ValueError(f"Input {name!r} expected a boolean, got {value!r}.")
-        elif isinstance(value, bool):
-            coerced = value
-        else:
-            raise ValueError(f"Input {name!r} expected a boolean, got {value!r}.")
-    else:
-        if not isinstance(value, str):
-            raise ValueError(f"Input {name!r} expected a string, got {value!r}.")
-        coerced = value
-
-    if spec.enum is not None and coerced not in spec.enum:
-        raise ValueError(f"Input {name!r} value {coerced!r} not in allowed values: {list(spec.enum)}.")
-    return coerced
-
-
-def validate_inputs(definition: WorkflowDefinition, provided: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
-    """Return (resolved_values, field_errors) for a schema-driven form."""
-    resolved: dict[str, Any] = {}
-    errors: dict[str, str] = {}
-    for spec in definition.presented_inputs:
-        raw = provided.get(spec.name)
-        blank = raw is None or (isinstance(raw, str) and raw.strip() == "")
-        if not blank:
-            candidate = raw
-        elif spec.has_default:
-            candidate = spec.default
-        elif spec.required:
-            errors[spec.name] = "Required."
-            continue
-        else:
-            continue
-        try:
-            resolved[spec.name] = coerce_input_value(spec.name, candidate, spec)
-        except ValueError as exc:
-            errors[spec.name] = str(exc)
-    return resolved, errors
-
-
-def inputs_to_argv(values: dict[str, Any]) -> list[str]:
-    """Render resolved inputs as repeated ``-i key=value`` argv pairs."""
-    argv: list[str] = []
-    for name, value in values.items():
-        if isinstance(value, bool):
-            rendered = "true" if value else "false"
-        else:
-            rendered = str(value)
-        argv.extend(["-i", f"{name}={rendered}"])
-    return argv
+        composed = _apply_overlays(data, self.collect_overlays(workflow_id))
+        self._composed_cache[workflow_id] = (data, composed)
+        return data, composed
 
 
 def normalized_signature(data: dict[str, Any]) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:

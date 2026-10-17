@@ -20,7 +20,8 @@ instead of working around it.
   There is no multi-run, multi-project, or history model.
 - **Persisted run files are authoritative.** `state.json`, `inputs.json`, and `log.jsonl` under
   `.specify/workflows/runs/<run_id>/` decide workflow state. Engine Output is diagnostic evidence,
-  never a state source.
+  never a state source. For composed runs this includes the `execution` tree in `state.json`
+  ([ADR 0015](../decisions/0015-read-the-persisted-execution-tree.md)).
 - **Adoption is explicit and single-owner.** Only a run whose persisted status is `paused` or
   `failed` with a parseable launch-copy `workflow.yml` may be adopted, and only after Cockpit writes
   and holds a durable ownership claim. A live foreign owner is refused; a stale claim may be recovered

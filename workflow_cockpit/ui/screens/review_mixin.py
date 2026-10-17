@@ -95,9 +95,15 @@ class ReviewMixin:
         phase = "running" if snapshot.process_live else "paused"
         parts: list = [
             (f"{step_label}   /   engine {phase}\n\n", palette.paper),
-            (decision.message + "\n\n", palette.hold),
-            (decision.notice + "\n\n", tone),
         ]
+        if decision.scope_line:
+            parts.append((decision.scope_line + "\n\n", palette.cold))
+        parts.extend(
+            [
+                (decision.message + "\n\n", palette.hold),
+                (decision.notice + "\n\n", tone),
+            ]
+        )
         diagnostic = self._diagnostic or snapshot.diagnostic
         if diagnostic:
             parts.append((diagnostic + "\n\n", palette.fault))

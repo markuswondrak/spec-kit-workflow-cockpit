@@ -1,0 +1,35 @@
+{
+  "run_id": "6f85e87d",
+  "workflow_id": "loop-release",
+  "status": "completed",
+  "current_step_id": "after",
+  "current_step_index": 1,
+  "workflow_scopes": [
+    {
+      "scope_path": [
+        "notes-loop",
+        "0",
+        "notes-call"
+      ],
+      "workflow_id": "release-notes",
+      "status": "completed"
+    },
+    {
+      "scope_path": [
+        "notes-loop",
+        "1",
+        "notes-call"
+      ],
+      "workflow_id": "release-notes",
+      "status": "completed"
+    }
+  ],
+  "created_at": "2026-10-17T07:57:55.973984+00:00",
+  "updated_at": "2026-10-17T07:57:56.307532+00:00",
+  "steps": {
+    "notes-loop": "completed",
+    "notes-call": "completed",
+    "notes-loop:notes-call:1": "completed",
+    "after": "completed"
+  }
+}

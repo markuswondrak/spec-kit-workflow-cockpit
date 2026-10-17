@@ -1,0 +1,39 @@
+{
+  "run_id": "63330abf",
+  "workflow_id": "fanout-release",
+  "status": "paused",
+  "current_step_id": "review",
+  "current_step_index": 1,
+  "gate": {
+    "step_id": "review",
+    "message": "Review the interactive notes.",
+    "options": [
+      "approve",
+      "reject"
+    ],
+    "choice": null,
+    "scope_path": [
+      "fan",
+      "0",
+      "notes"
+    ]
+  },
+  "workflow_scopes": [
+    {
+      "scope_path": [
+        "fan",
+        "0",
+        "notes"
+      ],
+      "workflow_id": "interactive-notes",
+      "status": "paused"
+    }
+  ],
+  "created_at": "2026-10-17T07:57:58.319264+00:00",
+  "updated_at": "2026-10-17T07:57:58.338248+00:00",
+  "steps": {
+    "prep": "completed",
+    "fan": "completed",
+    "fan:notes:0": "paused"
+  }
+}

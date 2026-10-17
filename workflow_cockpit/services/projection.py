@@ -1,11 +1,21 @@
-"""Project persisted run state over a declared control-flow graph."""
+"""Project persisted run state over a declared or bound control-flow graph.
+
+Two paths share one projection shape. A legacy run (no execution tree) keeps the
+original flat projection over ``step_results``. A composed run projects over the
+scoped graph built from its execution tree, so the active nested step, its scope
+path and the state of its enclosing calls are all marked from persisted phases
+rather than inferred.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from .graph import ControlFlowGraph, resolve_declared_id
+from .execution_tree import ExecutionTree, StepNode
+from .execution_walk import step_index, timing_key
+from .graph import ControlFlowGraph, GraphNode, resolve_declared_id
 from .log_aggregator import StepTiming
 from .run_state import RunStateData
 
@@ -17,6 +27,10 @@ class NodeState:
     active: bool = False
     attempts: int = 0
     duration_seconds: float | None = None
+    #: Scope-qualified identity; equal to ``(id,)`` for a flat root-scope node.
+    key: tuple[Any, ...] = ()
+    #: A ``continue_on_error`` call whose own result failed but the run went on.
+    handled: bool = False
 
 
 @dataclass(frozen=True)
@@ -24,13 +38,59 @@ class GraphProjection:
     graph: ControlFlowGraph
     nodes: tuple[NodeState, ...]
     current_node_id: str | None = None
+    current_node_key: tuple[Any, ...] | None = None
 
     @property
     def by_id(self) -> dict[str, NodeState]:
-        return {node.id: node for node in self.nodes}
+        found: dict[str, NodeState] = {}
+        for node in self.nodes:
+            found.setdefault(node.id, node)
+        return found
+
+    @property
+    def by_key(self) -> dict[tuple[Any, ...], NodeState]:
+        return {node.key: node for node in self.nodes}
+
+    @property
+    def next_node(self) -> GraphNode | None:
+        """The next pending node after the current one, or ``None``."""
+        if self.graph.edges:
+            next_id = self._next_edge_target_id()
+            return self.graph.by_id.get(next_id) if next_id else None
+        return self._next_in_sequence()
 
     @property
     def next_node_id(self) -> str | None:
+        node = self.next_node
+        return node.id if node else None
+
+    def _next_in_sequence(self) -> GraphNode | None:
+        """Next pending sibling of the current node, climbing out of finished calls.
+
+        A graph built from the execution tree carries no edges; its order and
+        ``parent_key`` already say what follows, resolved by scope key so a
+        same-named step in another scope is never mistaken for it.
+        """
+        if self.current_node_key is None:
+            return None
+        graph_by_key = self.graph.by_key
+        states = self.by_key
+        node = graph_by_key.get(self.current_node_key)
+        while node is not None:
+            following = False
+            for sibling in self.graph.nodes:
+                if sibling.parent_key != node.parent_key:
+                    continue
+                if sibling.key == node.key:
+                    following = True
+                    continue
+                state = states.get(sibling.key)
+                if following and state is not None and state.status == "pending" and not state.active:
+                    return sibling
+            node = graph_by_key.get(node.parent_key) if node.parent_key else None
+        return None
+
+    def _next_edge_target_id(self) -> str | None:
         """The next pending node reachable from the current/resolved frontier.
 
         Completed nodes only reach forward along plain sequence edges; branch and
@@ -53,20 +113,85 @@ class GraphProjection:
         return min(candidates, key=lambda node_id: order[node_id])
 
 
+def tree_node_status(node: StepNode) -> str:
+    """Map a persisted node phase/result onto the runway's status vocabulary."""
+    if node.phase == "done":
+        result = node.result or {}
+        if result.get("status") == "failed":
+            # A ``continue_on_error`` call is shown as failed too; ``handled``
+            # (set from the persisted derived field) carries the distinction.
+            return "failed"
+        if result.get("status") == "aborted":
+            return "aborted"
+        return "completed"
+    if node.phase == "blocked":
+        result = node.result or {}
+        status = result.get("status")
+        if status == "paused":
+            return "paused"
+        if status == "failed":
+            return "failed"
+        if status == "completed":
+            return "completed"
+        return "blocked"
+    if node.phase == "children":
+        return "running"
+    if node.phase == "outputs":
+        return "running"
+    return "pending"
+
+
+def _duration(
+    timing: StepTiming,
+    *,
+    now: datetime,
+    status: str,
+    active: bool,
+) -> float | None:
+    if timing.started_at is None:
+        return None
+    end = timing.finished_at
+    if end is None and active and status in ("running", "paused"):
+        end = now
+    if end is None:
+        return None
+    return max(0.0, (end - timing.started_at).total_seconds())
+
+
 class GraphProjector:
-    """Combine static graph, authoritative state, and log-derived timings."""
+    """Combine a graph, authoritative state, and log-derived timings."""
 
     def project(
         self,
         graph: ControlFlowGraph,
         state: RunStateData | None,
-        timings: dict[str, StepTiming] | None = None,
+        timings: dict[Any, StepTiming] | None = None,
         *,
         now: datetime | None = None,
         lifecycle_status: str | None = None,
     ) -> GraphProjection:
         timings = timings or {}
         now = now or datetime.now().astimezone()
+        execution = getattr(state, "execution", None) if state is not None else None
+        if isinstance(execution, ExecutionTree):
+            return self.project_tree(
+                graph,
+                execution,
+                timings,
+                now=now,
+                lifecycle_status=lifecycle_status,
+            )
+        return self._project_flat(graph, state, timings, now=now, lifecycle_status=lifecycle_status)
+
+    def _project_flat(
+        self,
+        graph: ControlFlowGraph,
+        state: RunStateData | None,
+        timings: dict[Any, StepTiming],
+        *,
+        now: datetime,
+        lifecycle_status: str | None,
+    ) -> GraphProjection:
         declared_ids = graph.declared_ids
         current = resolve_declared_id(state.current_step_id if state else None, declared_ids)
         result_statuses: dict[str, str] = {}
@@ -105,20 +230,79 @@ class GraphProjector:
                 elif effective_status in ("completed", "success"):
                     status = "completed"
             timing = timings.get(node.id, StepTiming())
-            duration: float | None = None
-            if timing.started_at is not None:
-                end = timing.finished_at
-                if end is None and node.id == current and status in ("running", "paused"):
-                    end = now
-                if end is not None:
-                    duration = max(0.0, (end - timing.started_at).total_seconds())
             projected.append(
                 NodeState(
                     id=node.id,
                     status=status,
                     active=node.id in active_ids,
                     attempts=timing.attempts,
-                    duration_seconds=duration,
+                    duration_seconds=_duration(
+                        timing,
+                        now=now,
+                        status=status,
+                        active=node.id == current,
+                    ),
+                    key=node.key,
                 )
             )
-        return GraphProjection(graph, tuple(projected), current)
+        return GraphProjection(
+            graph,
+            tuple(projected),
+            current,
+            (current,) if current is not None else None,
+        )
+
+    def project_tree(
+        self,
+        graph: ControlFlowGraph,
+        tree: ExecutionTree,
+        timings: dict[Any, StepTiming],
+        *,
+        now: datetime | None = None,
+        lifecycle_status: str | None = None,
+    ) -> GraphProjection:
+        """Project the scoped graph from the persisted execution tree.
+
+        Statuses come from each node's persisted ``phase``/``result``; the active
+        node and its enclosing calls are marked from the tree's own active-node
+        rule, never from a bare ``current_step_id``.
+        """
+        now = now or datetime.now().astimezone()
+        index = step_index(tree)
+        active = tree.active
+        active_key = active.node_key if active else None
+        # Every prefix of the active key is an enclosing node (call or container),
+        # so enclosing calls are marked active exactly as the engine behaves.
+        active_scope_keys = (
+            {active_key[:cut] for cut in range(1, len(active_key) + 1)}
+            if active_key is not None
+            else set()
+        )
+
+        projected: list[NodeState] = []
+        for node in graph.nodes:
+            tree_node = index.get(node.key)
+            if tree_node is None:
+                projected.append(NodeState(id=node.id, key=node.key))
+                continue
+            status = tree_node_status(tree_node)
+            is_active = node.key == active_key or node.key in active_scope_keys
+            timing = timings.get(timing_key(tree_node), StepTiming())
+            projected.append(
+                NodeState(
+                    id=node.id,
+                    status=status,
+                    active=is_active,
+                    attempts=timing.attempts,
+                    duration_seconds=_duration(
+                        timing,
+                        now=now,
+                        status=status,
+                        active=node.key == active_key,
+                    ),
+                    key=node.key,
+                    handled=tree_node.handled_failure,
+                )
+            )
+        current_id = active.step_id if active else None
+        return GraphProjection(graph, tuple(projected), current_id, active_key)

@@ -13,6 +13,9 @@ managed PTY. Presentation must not know which mechanism is in play.
 The engine transport (PTY or pipe) and the decision strategy (structured resume or PTY write) stay
 internal to the engine boundary. The presentation sees only `CockpitSession.submit_decision`.
 
+Related: [0015](0015-read-the-persisted-execution-tree.md) covers reading the persisted execution
+tree of composed runs; it does not change this boundary.
+
 ## Consequences
 
 - Adding or changing a transport does not touch screens or widgets.

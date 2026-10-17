@@ -1,0 +1,183 @@
+{
+  "run_id": "76d2174c",
+  "workflow_id": "handled-release",
+  "installed_workflow_id": null,
+  "installed_registry_root": null,
+  "status": "completed",
+  "current_step_index": 2,
+  "current_step_id": "publish",
+  "step_results": {
+    "build": {
+      "type": "shell",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "status": "completed",
+      "error": null
+    },
+    "broken-call": {
+      "type": "workflow",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "workflow": "broken-child",
+        "status": "failed",
+        "error": "Shell command exited with code 1."
+      },
+      "status": "failed",
+      "error": "Shell command exited with code 1."
+    },
+    "publish": {
+      "type": "shell",
+      "integration": null,
+      "model": null,
+      "options": {},
+      "input": {},
+      "output": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "status": "completed",
+      "error": null
+    }
+  },
+  "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project",
+  "created_at": "2026-10-17T07:58:04.333802+00:00",
+  "updated_at": "2026-10-17T07:58:04.351427+00:00",
+  "error": null,
+  "inputs": {},
+  "execution": {
+    "version": 2,
+    "sequence": {
+      "source": "- id: build\n  type: shell\n  run: 'true'\n- id: broken-call\n  type: workflow\n  workflow: broken-child\n  continue_on_error: true\n- id: publish\n  type: shell\n  run: 'true'\n",
+      "nodes": [
+        {
+          "phase": "done",
+          "active": false,
+          "result": {
+            "type": "shell",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "status": "completed",
+            "error": null
+          },
+          "outcome": "completed",
+          "error": null
+        },
+        {
+          "phase": "done",
+          "active": false,
+          "binding": {
+            "workflow": "broken-child",
+            "definition": "workflow:\n  id: broken-child\n  name: Broken Child\n  version: 1.0.0\n  description: Fails on its second step.\nsteps:\n- id: good\n  type: shell\n  run: 'true'\n- id: boom\n  type: shell\n  run: 'false'\n- id: never\n  type: shell\n  run: 'true'\n",
+            "inputs": {},
+            "workflow_dir": "/home/markus/workspace/spec-kit-workflow-cockpit/build/composition-record/project/.specify/workflows/broken-child"
+          },
+          "children": [
+            {
+              "nodes": [
+                {
+                  "phase": "done",
+                  "active": false,
+                  "result": {
+                    "type": "shell",
+                    "integration": null,
+                    "model": null,
+                    "options": {},
+                    "input": {},
+                    "output": {
+                      "exit_code": 0,
+                      "stdout": "",
+                      "stderr": ""
+                    },
+                    "status": "completed",
+                    "error": null
+                  },
+                  "outcome": "completed",
+                  "error": null
+                },
+                {
+                  "phase": "blocked",
+                  "active": false,
+                  "result": {
+                    "type": "shell",
+                    "integration": null,
+                    "model": null,
+                    "options": {},
+                    "input": {},
+                    "output": {
+                      "exit_code": 1,
+                      "stdout": "",
+                      "stderr": ""
+                    },
+                    "status": "failed",
+                    "error": "Shell command exited with code 1."
+                  },
+                  "outcome": "failed",
+                  "error": "Shell command exited with code 1."
+                },
+                {
+                  "phase": "ready"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "type": "workflow",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "workflow": "broken-child",
+              "status": "failed",
+              "error": "Shell command exited with code 1."
+            },
+            "status": "failed",
+            "error": "Shell command exited with code 1."
+          },
+          "outcome": "completed",
+          "error": "Shell command exited with code 1."
+        },
+        {
+          "phase": "done",
+          "active": false,
+          "result": {
+            "type": "shell",
+            "integration": null,
+            "model": null,
+            "options": {},
+            "input": {},
+            "output": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "status": "completed",
+            "error": null
+          },
+          "outcome": "completed",
+          "error": null
+        }
+      ]
+    },
+    "offset": 0,
+    "initial": {}
+  }
+}

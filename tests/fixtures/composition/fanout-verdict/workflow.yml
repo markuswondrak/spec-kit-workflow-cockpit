@@ -1,0 +1,26 @@
+workflow:
+  id: fanout-verdict
+  name: Fanout Verdict
+  version: 1.0.0
+  description: Fan-out over a call whose child holds a verdict_input gate.
+inputs:
+  approval:
+    type: string
+    default: ''
+steps:
+- id: prep
+  type: shell
+  run: 'true'
+- id: fan
+  type: fan-out
+  items:
+  - alpha
+  step:
+    id: notes
+    type: workflow
+    workflow: release-notes
+    input:
+      approval: '{{ inputs.approval }}'
+- id: after
+  type: shell
+  run: 'true'

@@ -26,6 +26,7 @@ from ..engine.supervisor import (
     SupervisorError,
     build_interactive_resume_argv,
 )
+from ..services.execution_tree import ExecutionTree
 from ..services.graph import ControlFlowGraph, resolve_declared_id
 from ..services.run_state import RunStateData
 
@@ -187,7 +188,15 @@ class ResumeCoordinator:
         )
 
     def _resume_point(self, state: RunStateData) -> tuple[str | None, str, bool, str]:
-        """Resolve the recorded current step to a declared node and its parent."""
+        """Resolve the recorded current step to a declared node and its parent.
+
+        For a composed run the failing leaf comes from the execution tree, with
+        every enclosing call named, so a child step id is never presented as if
+        it were a root step (FR-015).
+        """
+        tree = getattr(state, "execution", None)
+        if isinstance(tree, ExecutionTree) and tree.active is not None and tree.resolution.value == "ok":
+            return self._tree_resume_point(tree)
         runtime_id = state.current_step_id
         step_id = runtime_id
         step_label = runtime_id or "—"
@@ -206,6 +215,27 @@ class ResumeCoordinator:
             if parent is not None:
                 return step_id, step_label, True, parent.label or parent.id
         return step_id, step_label, False, ""
+
+    def _tree_resume_point(self, tree: ExecutionTree) -> tuple[str | None, str, bool, str]:
+        """Name the failing leaf and its enclosing calls from the frozen tree."""
+        from ..services.execution_walk import enclosing_calls, find_node
+
+        active = tree.active
+        if active is None:
+            return None, "—", False, ""
+        step_id = active.step_id
+        step_label = step_id
+        node = find_node(tree, active.scope_path, active.step_id)
+        if node is not None:
+            name = node.config.get("name")
+            step_label = str(name) if name else step_id
+        if node is None:
+            return step_id, step_label, False, ""
+        calls = enclosing_calls(tree, node)
+        if not calls:
+            return step_id, step_label, False, ""
+        labels = [str(call.config.get("name") or call.step_id) for call in calls]
+        return step_id, step_label, True, " > ".join(labels)
 
     # -- submission ----------------------------------------------------
 

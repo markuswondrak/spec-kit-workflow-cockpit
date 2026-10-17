@@ -25,6 +25,14 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **View-only inspection** | Observing an existing run's state, graph, and logs read-only without acquiring an ownership claim, binding a supervisor, or writing lifecycle state. | Adoption, which claims ownership and can decide gates. |
 | **Run deletion** | Removing one stale run directory from the launch screen after a destructive confirmation, refusing a live-owned, running, or currently open run. | Automatic pruning or engine cleanup; deletion is always explicit. |
 | **Gate** | A workflow-declared pause with a message and declared options. | A Cockpit confirmation dialog. |
+| **Workflow call** | A `type: workflow` step that runs another installed, enabled workflow as a private scope inside the same run. | A separate run; a call shares the run ID and run directory. |
+| **Scope** | One workflow's private execution context inside a run: the root workflow or a called workflow. | A step; a scope contains steps. |
+| **Scope path** | The chain of call step ids leading to a node, with item/iteration indices after fan-out and loop steps (for example `review-release > review`). | The occurrence path in the log, which is index based. |
+| **Scope occurrence** | One execution of a scope; a call inside a loop yields several occurrences of the same scope. | The scope itself; occurrences are distinguished by their scope path. |
+| **Execution tree** | The persisted, versioned record in `state.json` of the root and called scopes, with frozen definitions, bound inputs and per-node `phase`/`active`/`result`. | The control-flow graph, which is the declared shape. |
+| **Active node** | The engine's active step: the first node whose `phase` is not `done` in a children-first walk. | The node carrying `active: true`, which every entered node carries. |
+| **Frozen definition** | The called workflow's definition as the engine froze it at binding time inside the execution tree. | The installed definition, which may have changed since. |
+| **Handled call failure** | A call whose own result failed under `continue_on_error` while the run continued. | A failed run; the persisted run status is unchanged. |
 | **Gate affordance** | The presentation mode selected by a gate's declared choice count: equal-weight buttons for one to three choices, one compact select box for four or more. | The declared choices themselves, which are unchanged by the mode. |
 | **Decision** | The user's confirmed choice among a gate's declared options. | An Abort, which is a separate lifecycle action. |
 | **Verdict input** | A gate's declared `verdict_input` name, answered by structured `resume`. | The PTY fallback for gates without one. |
@@ -41,7 +49,7 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Context index** | The stable `current_run` Markdown pointer to the authoritative sources; it copies no value owned by another file. | A copied live snapshot; any value it copies can drift. |
 | **Skill** | `cockpit-run-context`, installed at start into the project integration's skills directory and invoked in a user-chosen external agent. | A Cockpit-managed process. |
 | **Overlay** | An enabled modification applied to a workflow definition before resolution. | A theme or styling template. |
-| **Control Flow Graph** | The declared nodes, edges, branches, loops, and gates of a workflow. | Runtime status. |
+| **Control Flow Graph** | The declared nodes, edges, branches, loops and calls of a workflow, and for a bound run the nested scopes built from the frozen execution tree. | Runtime status; the graph carries no persisted state. |
 | **Story slice** | A vertical implementation slice (`S01`-`S10`) tracked as a GitHub issue. | An epic (`E01`). |
 | **ADR** | A numbered architecture decision record under `docs/decisions/`. | A backlog issue. |
 | **AI Debt Register** | This set's §11 list of patterns that must not be replicated. | A general backlog. |
@@ -53,3 +61,4 @@ is used differently in code, the code wins for behavior; this file wins for inte
 - **Feature Files** is the whole declared directory; never call them "changes" or "diff".
 - **Engine Output** is diagnostic evidence; **run files** are authoritative state.
 - **Abort** is Cockpit's lifecycle action; the engine has no abort command.
+- A **scope path** names scopes; an **occurrence path** is the engine's index-based log key. They are not interchangeable.
