@@ -54,6 +54,8 @@ standalone experiment for custom multi-agent setups outside of Spec Kit.
   probes for the required workflow commands and flags; a version number alone is not sufficient.
   Interactive gates use the engine's builtin `input()` prompt, so they are supported for any CLI
   that passes the probe, not only the release the contract was recorded against.
+  Embedded workflows (`type: workflow` steps) need `specify` 1.1.3 or newer; older engines never
+  emit them and keep working unchanged.
 - **An initialized Spec Kit project** containing `.specify/`, in a Git worktree with at least
   one commit.
 - **An enabled, installed workflow** and the coding-agent integration it needs, configured and
