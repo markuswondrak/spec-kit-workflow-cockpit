@@ -64,6 +64,14 @@ def load_log(scenario: str) -> tuple[dict[str, Any], ...]:
     return tuple(events)
 
 
+def load_inputs(scenario: str) -> dict[str, Any]:
+    """The inputs the scenario was recorded with (empty when none)."""
+    path = scenario_dir(scenario) / "inputs.json"
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8")).get("inputs", {})
+
+
 def load_workflow_yaml(scenario: str) -> dict[str, Any]:
     """The launch-copy workflow definition of one scenario."""
     return yaml.safe_load((scenario_dir(scenario) / "workflow.yml").read_text(encoding="utf-8"))
@@ -183,6 +191,45 @@ def with_root_extra_step(state: dict[str, Any], step: dict[str, Any]) -> dict[st
     steps.append(step)
     sequence["source"] = yaml.safe_dump(steps, sort_keys=False)
     sequence["nodes"].append({"phase": "ready"})
+    return mutated
+
+
+def with_earlier_decoy_call(state: dict[str, Any], call_id: str, input_mapping: dict[str, str]) -> dict[str, Any]:
+    """Prepend a finished root call named ``call_id`` with a different ``input:``.
+
+    Models a same-named call in another scope that comes first in tree order, so
+    anything that resolves calls by bare step id picks the wrong mapping.
+    """
+    mutated = copy.deepcopy(state)
+    sequence = mutated["execution"]["sequence"]
+    steps = yaml.safe_load(sequence["source"])
+    steps.insert(
+        0,
+        {"id": call_id, "type": "workflow", "workflow": "decoy", "input": input_mapping},
+    )
+    sequence["source"] = yaml.safe_dump(steps, sort_keys=False)
+    sequence["nodes"].insert(0, {"phase": "done", "active": False, "outcome": "completed"})
+    return mutated
+
+
+def with_root_gate_paused(state: dict[str, Any], step_id: str) -> dict[str, Any]:
+    """Rewind a run so the root gate ``step_id`` is the paused step.
+
+    Every later root node becomes ``ready`` again; earlier nodes are untouched.
+    """
+    mutated = copy.deepcopy(state)
+    sequence = mutated["execution"]["sequence"]
+    steps = yaml.safe_load(sequence["source"])
+    index = next(i for i, step in enumerate(steps) if step["id"] == step_id)
+    node = sequence["nodes"][index]
+    node["phase"] = "blocked"
+    node["outcome"] = "paused"
+    node["result"]["status"] = "paused"
+    node["result"]["output"]["choice"] = None
+    sequence["nodes"][index + 1 :] = [{"phase": "ready"} for _ in sequence["nodes"][index + 1 :]]
+    mutated["current_step_id"] = step_id
+    mutated["current_step_index"] = index
+    mutated["status"] = "paused"
     return mutated
 
 

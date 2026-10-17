@@ -288,8 +288,7 @@ class CockpitScreen(RunPollMixin, ReviewMixin, ResumeMixin, AdaptiveScreen):
     def _next_step(snapshot) -> str:
         if snapshot.graph_projection is None:
             return "—"
-        next_id = snapshot.graph_projection.next_node_id
-        node = snapshot.graph_projection.graph.by_id.get(next_id) if next_id else None
+        node = snapshot.graph_projection.next_node
         return node.label if node else "—"
 
     def _render_outcome(self, snapshot) -> None:

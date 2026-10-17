@@ -94,6 +94,28 @@ class RunwayScopeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call.status, "failed")
         self.assertTrue(call.handled)
 
+    async def test_timings_are_keyed_per_scope_occurrence(self):
+        # The root ``review`` ran twice; the called workflow's ``review`` once.
+        projection = projection_for("collision")
+        self.assertEqual(projection.by_key[("review",)].attempts, 2)
+        self.assertEqual(projection.by_key[("review-release", "review")].attempts, 1)
+        self.assertEqual(projection.by_key[("publish",)].attempts, 0)
+
+    async def test_next_step_follows_the_active_scope(self):
+        projection = projection_for("reference")
+        self.assertEqual(projection.next_node.key, ("review-release", "publish-notes"))
+        self.assertEqual(projection.next_node_id, "publish-notes")
+
+    async def test_next_step_climbs_out_of_the_last_step_of_a_call(self):
+        # ``deep-review`` is the last step of ``inner``; what follows is the
+        # root's ``publish``, not another step called "publish" in a child.
+        projection = projection_for("depth2")
+        self.assertEqual(projection.next_node.key, ("publish",))
+
+    async def test_next_step_is_shown_in_the_cockpit(self):
+        snapshot = composed_snapshot("reference")
+        self.assertEqual(CockpitScreen._next_step(snapshot), "publish-notes")
+
     async def test_frozen_definition_is_used_after_the_install_changes(self):
         """US3.5: the runway reads the tree, not the current install."""
         with tempfile.TemporaryDirectory() as tmp:

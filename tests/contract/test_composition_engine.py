@@ -22,6 +22,8 @@ from pathlib import Path
 import yaml
 from packaging.version import Version
 
+from tests.composition_support import write_project
+from tests.fixtures import composition as fx
 from tests.support import REAL_SPECIFY, requires_real_specify
 from workflow_cockpit.bootstrap.compatibility import (
     CompatibilityResult,
@@ -197,8 +199,36 @@ class CompositionContractTests(unittest.TestCase):
             for node in graph.nodes
             if node.is_call
         }
-        for scope in oracle.get("workflow_scopes", []):
+        self.assertTrue(oracle["workflow_scopes"])
+        for scope in oracle["workflow_scopes"]:
             self.assertIn(tuple(str(part) for part in scope["scope_path"]), cockpit_scopes)
+
+    def test_cockpit_matches_the_engine_for_collisions_depth_and_loops(self):
+        """The scenarios that carry the same-name / scope defect class, live."""
+        for scenario in ("collision", "depth2", "loop-paused"):
+            with self.subTest(scenario=scenario):
+                write_project(self.root, scenario)
+                workflow_id = fx.load_state(scenario)["workflow_id"]
+                if self.session is not None:
+                    self.session.close()
+                self.session = CockpitSession(CockpitEnvironment(self.root, self.compatibility))
+                self.session.select(workflow_id)
+                self.session.start(fx.load_inputs(scenario))
+                snapshot = self._until_paused(self.session)
+                self.assertEqual(snapshot.status, "paused")
+
+                run_id = self.session.run_id
+                oracle = self._engine_status(run_id)
+                state = RunStateReader(self.root, run_id).read()
+                active = state.execution.active
+                self.assertEqual(active.step_id, oracle["gate"]["step_id"])
+                self.assertEqual(
+                    fx.normalized_scope_path(active.scope_path),
+                    fx.normalized_scope_path(oracle["gate"].get("scope_path")),
+                )
+                self.assertEqual(active.qualified_id, oracle["current_step_id"])
+                self.assertEqual(snapshot.gate.step_id, oracle["gate"]["step_id"])
+                self.assertEqual(snapshot.gate.message, oracle["gate"]["message"])
 
     def test_cockpit_gate_snapshot_matches_the_engine(self):
         self.session = CockpitSession(CockpitEnvironment(self.root, self.compatibility))
@@ -213,8 +243,8 @@ class CompositionContractTests(unittest.TestCase):
         self.assertEqual(snapshot.gate.root_input, "approval")
         self.assertEqual(snapshot.gate.display_scope_path, "review-release > review")
 
-    def test_cockpit_rejects_a_composition_the_engine_would_reject(self):
-        """A verdict gate under a fan-out is refused before Start."""
+    def test_cockpit_refuses_a_fanout_composition_before_start(self):
+        """Cockpit's own shape rules refuse a call under a fan-out before Start."""
         fanout = {
             "workflow": {"id": "fanout", "name": "Fanout", "version": "1.0.0"},
             "inputs": {"approval": {"type": "string", "default": ""}},

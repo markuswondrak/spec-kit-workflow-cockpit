@@ -1,6 +1,5 @@
 """Adoption of composed runs is scope-aware and version-guarded."""
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +7,7 @@ from pathlib import Path
 from tests.fixtures import composition as fx
 from workflow_cockpit.services.execution_tree import parse as parse_execution
 from workflow_cockpit.services.run_catalog import RunCatalog
+from workflow_cockpit.services.run_claim import RunClaimStore
 from workflow_cockpit.session.adoption import AdoptError, RunAdopter
 
 
@@ -56,14 +56,10 @@ class AdoptionScopeTests(unittest.TestCase):
         run_id = self._run("reference")
         adopter = RunAdopter(self.root)
         adopter.prepare_inspect(run_id)
-        claims_dir = self.root / ".specify" / "workflows" / "runs" / "claims"
-        if claims_dir.is_dir():
-            owned = [
-                path
-                for path in claims_dir.iterdir()
-                if json.loads(path.read_text()).get("run_id") == run_id
-            ]
-            self.assertEqual(owned, [])
+        self.assertFalse(RunClaimStore(self.root).claim_path(run_id).exists())
+        # Control: adopting the same run does write the claim file checked above.
+        adopter.prepare(run_id, "owner-1")
+        self.assertTrue(RunClaimStore(self.root).claim_path(run_id).exists())
 
     def test_legacy_run_adoption_is_unchanged(self):
         state = fx.without_execution(fx.load_state("reference"))

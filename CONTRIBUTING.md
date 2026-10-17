@@ -32,7 +32,8 @@ WORKFLOW_COCKPIT_REAL_SPECIFY=/path/to/specify python -m pytest tests/contract -
 ```
 
 The workflow composition contract tests additionally need `specify` 1.1.3 or newer and skip on
-older engines.
+older engines. CI runs them in the `composition-contract` job against `specify-cli==1.1.3`
+(the same pin as `scripts/record-composition-fixtures.sh`).
 
 ## Preferred development path
 

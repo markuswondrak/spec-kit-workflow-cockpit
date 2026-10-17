@@ -130,7 +130,7 @@ def _resolve_tree_target(
     verdict_input = node.verdict_input
     root_input: str | None = None
     if verdict_input:
-        traced = trace_chain(call_chain_from_tree(tree, active.enclosing_calls), verdict_input)
+        traced = trace_chain(call_chain_from_tree(tree, node), verdict_input)
         if scope_rules and under_fanout:
             return _blocked(
                 REASON_UNDECIDABLE,

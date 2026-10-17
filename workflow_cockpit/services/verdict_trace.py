@@ -169,21 +169,20 @@ def collect_verdict_traces(
     return VerdictTraceReport(frozenset(root_inputs), tuple(problems))
 
 
-def call_chain_from_tree(tree: Any, enclosing_calls: Iterable[str]) -> tuple[CallStep, ...]:
-    """The call chain to a node, using the frozen definitions in the tree."""
-    from .execution_walk import iter_steps
+def call_chain_from_tree(tree: Any, node: Any) -> tuple[CallStep, ...]:
+    """The call chain to ``node``, from the calls that enclose it in the tree.
 
-    by_id: dict[str, Mapping[str, Any]] = {}
-    for node in iter_steps(tree):
-        if node.is_call:
-            by_id.setdefault(node.step_id, node.config)
+    Each call is found by its scope key, so same-named calls in other scopes
+    cannot supply the wrong ``input:`` mapping.
+    """
+    from .execution_walk import enclosing_calls
+
     chain: list[CallStep] = []
-    for call_id in enclosing_calls:
-        config = by_id.get(call_id, {})
-        mapping = config.get("input") if isinstance(config, Mapping) else None
+    for call in enclosing_calls(tree, node):
+        mapping = call.config.get("input")
         chain.append(
             CallStep(
-                step_id=call_id,
+                step_id=call.step_id,
                 input_mapping=mapping if isinstance(mapping, Mapping) else {},
             )
         )

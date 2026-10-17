@@ -15,7 +15,7 @@ from typing import Any
 
 from .execution_tree import ExecutionTree, StepNode
 from .execution_walk import step_index, timing_key
-from .graph import ControlFlowGraph, resolve_declared_id
+from .graph import ControlFlowGraph, GraphNode, resolve_declared_id
 from .log_aggregator import StepTiming
 from .run_state import RunStateData
 
@@ -52,7 +52,45 @@ class GraphProjection:
         return {node.key: node for node in self.nodes}
 
     @property
+    def next_node(self) -> GraphNode | None:
+        """The next pending node after the current one, or ``None``."""
+        if self.graph.edges:
+            next_id = self._next_edge_target_id()
+            return self.graph.by_id.get(next_id) if next_id else None
+        return self._next_in_sequence()
+
+    @property
     def next_node_id(self) -> str | None:
+        node = self.next_node
+        return node.id if node else None
+
+    def _next_in_sequence(self) -> GraphNode | None:
+        """Next pending sibling of the current node, climbing out of finished calls.
+
+        A graph built from the execution tree carries no edges; its order and
+        ``parent_key`` already say what follows, resolved by scope key so a
+        same-named step in another scope is never mistaken for it.
+        """
+        if self.current_node_key is None:
+            return None
+        graph_by_key = self.graph.by_key
+        states = self.by_key
+        node = graph_by_key.get(self.current_node_key)
+        while node is not None:
+            following = False
+            for sibling in self.graph.nodes:
+                if sibling.parent_key != node.parent_key:
+                    continue
+                if sibling.key == node.key:
+                    following = True
+                    continue
+                state = states.get(sibling.key)
+                if following and state is not None and state.status == "pending" and not state.active:
+                    return sibling
+            node = graph_by_key.get(node.parent_key) if node.parent_key else None
+        return None
+
+    def _next_edge_target_id(self) -> str | None:
         """The next pending node reachable from the current/resolved frontier.
 
         Completed nodes only reach forward along plain sequence edges; branch and

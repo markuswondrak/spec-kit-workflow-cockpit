@@ -218,7 +218,7 @@ class ResumeCoordinator:
 
     def _tree_resume_point(self, tree: ExecutionTree) -> tuple[str | None, str, bool, str]:
         """Name the failing leaf and its enclosing calls from the frozen tree."""
-        from ..services.execution_walk import find_node, iter_steps
+        from ..services.execution_walk import enclosing_calls, find_node
 
         active = tree.active
         if active is None:
@@ -229,15 +229,12 @@ class ResumeCoordinator:
         if node is not None:
             name = node.config.get("name")
             step_label = str(name) if name else step_id
-        enclosing = tuple(active.enclosing_calls)
-        if not enclosing:
+        if node is None:
             return step_id, step_label, False, ""
-        call_labels: dict[str, str] = {}
-        for call in iter_steps(tree):
-            if call.is_call:
-                name = call.config.get("name")
-                call_labels.setdefault(call.step_id, str(name) if name else call.step_id)
-        labels = [call_labels.get(call_id, call_id) for call_id in enclosing]
+        calls = enclosing_calls(tree, node)
+        if not calls:
+            return step_id, step_label, False, ""
+        labels = [str(call.config.get("name") or call.step_id) for call in calls]
         return step_id, step_label, True, " > ".join(labels)
 
     # -- submission ----------------------------------------------------

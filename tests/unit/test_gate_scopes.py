@@ -53,6 +53,24 @@ class ComposedGateTests(unittest.TestCase):
         self.assertEqual(gate.root_input, "approval")
         self.assertEqual(gate.options, ("approve", "reject"))
 
+    def test_same_named_call_in_another_scope_does_not_change_the_traced_input(self):
+        # A finished root call named like the nested ``inner-call`` comes first in
+        # tree order; the chain must still follow the calls that enclose the gate.
+        from workflow_cockpit.services.execution_tree import parse as parse_execution
+
+        raw = fx.with_earlier_decoy_call(
+            fx.load_state("depth2"), "inner-call", {"approval": "{{ inputs.decoy }}"}
+        )
+        gate, _ = coordinator()
+        snapshot = gate.project(
+            state=state_data("depth2", execution=parse_execution(raw)),
+            run_id="run-1",
+            condition=condition(),
+            gate_attempt=1,
+        )
+        self.assertEqual(snapshot.state, GateState.READY)
+        self.assertEqual(snapshot.root_input, "approval")
+
     def test_root_gate_has_no_scope_line(self):
         gate, _ = self.project("dynamic-target")
         self.assertEqual(gate.display_scope_path, "pre-gate")
@@ -163,13 +181,40 @@ class ComposedGateTests(unittest.TestCase):
         self.assertEqual(after.state, GateState.SUBMITTED)
         self.assertFalse(after.selectable)
 
-    def test_a_second_occurrence_is_a_fresh_attempt(self):
-        # The same child called twice: iteration 1's gate is attempt 1 of its own
-        # scope instance, so a fresh scope path mints a new token.
+    def test_a_gate_in_another_scope_is_a_fresh_attempt(self):
+        # The child ``review`` is decided; the root ``review`` shares its bare id
+        # but is a different scope, so it mints its own token and stays READY.
+        from workflow_cockpit.services.execution_tree import parse as parse_execution
+
+        gate, supervisor = coordinator()
+        child_state = state_data("collision")
+        child = gate.project(state=child_state, run_id="run-1", condition=condition(), gate_attempt=1)
+        gate.submit(
+            choice="approve",
+            token=child.token,
+            state=child_state,
+            run_id="run-1",
+            condition=condition(),
+            gate_attempt=1,
+        )
+        raw = fx.with_root_gate_paused(fx.load_state("collision"), "review")
+        root = gate.project(
+            state=state_data("collision", execution=parse_execution(raw)),
+            run_id="run-1",
+            condition=condition(),
+            gate_attempt=1,
+        )
+        self.assertEqual(root.state, GateState.READY)
+        self.assertEqual(root.display_scope_path, "review")
+        self.assertEqual(root.root_input, "root_approval")
+        self.assertNotEqual(root.token, child.token)
+        self.assertEqual(len(supervisor.resume_calls), 1)
+
+    def test_a_settled_run_projects_no_gate(self):
         gate, _ = coordinator()
-        state = state_data("loop-twice")
-        snapshot = gate.project(state=state, run_id="run-1", condition=condition(), gate_attempt=1)
-        # A settled run projects no gate at all.
+        snapshot = gate.project(
+            state=state_data("loop-twice"), run_id="run-1", condition=condition(), gate_attempt=1
+        )
         self.assertIsNone(snapshot)
 
 

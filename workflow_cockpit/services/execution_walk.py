@@ -140,6 +140,15 @@ def ancestors(tree: ExecutionTree, node: StepNode) -> tuple[StepNode, ...]:
     return tuple(found)
 
 
+def enclosing_calls(tree: ExecutionTree, node: StepNode) -> tuple[StepNode, ...]:
+    """The ``type: workflow`` calls enclosing ``node``, outermost first.
+
+    Resolved by scope key, never by bare step id: the same call id may appear
+    in several scopes with different ``input:`` mappings.
+    """
+    return tuple(parent for parent in ancestors(tree, node) if parent.is_call)
+
+
 def _find_node(sequence: SequenceNode, key: tuple[Any, ...]) -> StepNode | None:
     for node in sequence.steps:
         if node.key == key:
