@@ -1,9 +1,6 @@
 {
-  "default": { "model": "github-copilot/claude-haiku-5.5" },
-  "specify": { "model": "github-copilot/claude-sonnet-5.5" },
+  "default": { "model": "opencode-go/glm-5.3-flash" },
   "plan": { "model": "github-copilot/claude-sonnet-5.5" },
-  "analyze": { "model": "github-copilot/claude-sonnet-5.5" },
-  "converge": { "model": "github-copilot/gpt-6-sol" },
-  "quick-plan": { "model": "github-copilot/claude-sonnet-5.5" },
-  "bug-assess": { "model": "github-copilot/claude-sonnet-5.5" }
+  "implement": { "model": "opencode-go/deepseek-v4.1-flash" },
+  "converge": { "model": "github-copilot/claude-sonnet-5.5" }
 }
