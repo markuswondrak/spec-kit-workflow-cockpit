@@ -4,9 +4,9 @@ This is the repository-owned Spec Kit catalog for Workflow Cockpit's dogfooding
 stack. It curates released components from `spec-kit-extended-flow`; it does not
 reimplement or republish them.
 
-The catalog pins Extended Flow `v0.21.0` and points at its GitHub release assets
-and tagged workflow definitions. Update all four catalog files together when
-adopting a new Extended Flow release; see
+The files under `catalog/` are the single source of truth for the pinned Extended Flow
+release: they name its version and point at its GitHub release assets and tag-pinned
+workflow definitions. Update them together when adopting a new Extended Flow release; see
 [Adopting a new Extended Flow release](#adopting-a-new-extended-flow-release).
 
 ## Adopting a new Extended Flow release
@@ -15,14 +15,8 @@ Adopting a release means updating the catalog **and** refreshing the components 
 installed in this worktree. Editing the catalog files alone does not touch `.specify/`,
 so the installed preset, extension, and workflow definitions keep running the old code.
 
-1. **Bump the catalog together.** Point all four catalog files at the new release and
-   update their `version` fields:
-   - `catalog/extension-catalog.json`
-   - `catalog/preset-catalog.json`
-   - `catalog/workflow-catalog.json`
-   - `catalog/bundle-catalog.json`
-
-   Update the pinned versions asserted in `tests/docs/test_release_assets.py` in the same
+1. **Bump every catalog together.** Point each file in `catalog/` at the new release.
+   Update the versions asserted in `tests/docs/test_release_assets.py` in the same
    change, then run `python -m pytest tests/docs -q`.
 
 2. **Reinstall so `.specify/` matches the catalog.** The registered catalogs are pinned to
