@@ -4,7 +4,7 @@ This is the repository-owned Spec Kit catalog for Workflow Cockpit's dogfooding
 stack. It curates released components from `spec-kit-extended-flow`; it does not
 reimplement or republish them.
 
-The catalog pins Extended Flow `v0.18.0` and points at its GitHub release assets
+The catalog pins Extended Flow `v0.21.0` and points at its GitHub release assets
 and tagged workflow definitions. Update all four catalog files together when
 adopting a new Extended Flow release; see
 [Adopting a new Extended Flow release](#adopting-a-new-extended-flow-release).
