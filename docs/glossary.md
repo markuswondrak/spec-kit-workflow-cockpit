@@ -47,6 +47,19 @@ is used differently in code, the code wins for behavior; this file wins for inte
 | **Runway** | The scrollable control-flow graph with runtime overlay. | A linear step list. |
 | **Focus** | The single state-driven canvas (State, Files, Gate, Output, Outcome). | A fixed set of panes. |
 | **Context index** | The stable `current_run` Markdown pointer to the authoritative sources; it copies no value owned by another file. | A copied live snapshot; any value it copies can drift. |
+| **Machine-readable pointer** | `current_run.json`: the JSON twin of the context index, carrying only `schema_version`, `run_id`, `run_dir`, and `workflow_id`. | Run state; the pointer names a run, it never describes one. |
+| **Pointer disagreement** | The reported state in which the Markdown index and the JSON twin name different runs, or only one exists; neither is trusted. | A missing run, which is reported as an empty pointer. |
+| **File view** | The read command's versioned, bounded, read-only JSON description of the current run, built from the persisted run files through the same readers the UI uses. | The UI itself, or a second state model. |
+| **Read envelope** | The JSON object `workflow-cockpit context --json` prints: pointer, run, step, gate, projection, bounded Feature Files index, per-source conditions, and an optional file. | A snapshot, which is an in-process immutable value. |
+| **Condition** | A per-source report that a source was missing, partial, stale, or too large; the fields derived from that source stay null. | A diagnostic or a log line. |
+| **Schema version** | The integer that versions the read envelope's shape; a frontend compares it for equality with the version it supports. | The package version or the host protocol version. |
+| **Protocol version** | The integer that versions the host protocol's message shape, carried on every message. | The read envelope's schema version; they version independently. |
+| **Headless host** | The detached `workflow-cockpit serve` process that owns one run through the existing session and supervisor services and speaks the line-delimited JSON protocol. | The TUI, or a second lifecycle implementation. |
+| **Owner view** | The host's operation set over the one run it owns: list, validate, start, status, gate, decide, abort, adopt, resume. | The read envelope, which is read-only. |
+| **Start guard** | The shared rule that refuses Start when the current-run pointer names a non-terminal run, naming the run and the adopt-or-abort alternatives. | The ownership claim, which is a write-side lock. |
+| **Integration installer** | `IntegrationInstaller`: the single install/update path for frontend artifacts, keyed on the project integration, with per-artifact policies. | A package manager or the engine's own installer. |
+| **User-editable artifact** | An installer artifact installed once and then owned by the user; an existing file is never overwritten. | A managed artifact, which the package may replace. |
+| **Managed artifact** | An installer artifact owned by the package, carrying a version marker and replaced atomically when the packaged version differs. | A user-editable artifact. |
 | **Skill** | `cockpit-run-context`, installed at start into the project integration's skills directory and invoked in a user-chosen external agent. | A Cockpit-managed process. |
 | **Overlay** | An enabled modification applied to a workflow definition before resolution. | A theme or styling template. |
 | **Control Flow Graph** | The declared nodes, edges, branches, loops and calls of a workflow, and for a bound run the nested scopes built from the frozen execution tree. | Runtime status; the graph carries no persisted state. |
@@ -62,3 +75,5 @@ is used differently in code, the code wins for behavior; this file wins for inte
 - **Engine Output** is diagnostic evidence; **run files** are authoritative state.
 - **Abort** is Cockpit's lifecycle action; the engine has no abort command.
 - A **scope path** names scopes; an **occurrence path** is the engine's index-based log key. They are not interchangeable.
+- A **file view** is the read command's envelope; a **snapshot** is the in-process value the UI renders. Never use them interchangeably.
+- The **context index** is Markdown for agents; the **machine-readable pointer** is its JSON twin. They are one pointer pair, not two pointers.

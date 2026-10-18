@@ -15,3 +15,8 @@ from __future__ import annotations
 
 #: Largest ``state.json`` Cockpit reads, in bytes (4 MiB).
 MAX_STATE_BYTES = 4 * 1024 * 1024
+
+#: Largest Feature Files index the read envelope reports (FR-008).
+#: The UI lists the declared feature directory without a cap; the scriptable
+#: envelope must be bounded, so the tail is dropped and reported as truncated.
+MAX_FEATURE_FILES = 200

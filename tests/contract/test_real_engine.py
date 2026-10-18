@@ -7,11 +7,14 @@ deterministic shell workflows so no agent integration is needed.
 
 from __future__ import annotations
 
+import asyncio
+import io
 import json
 import subprocess
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import yaml
@@ -19,6 +22,11 @@ from packaging.version import Version
 
 from tests.support import REAL_SPECIFY, requires_real_specify
 from workflow_cockpit.bootstrap.compatibility import CompatibilityResult
+from workflow_cockpit.cli import main
+from workflow_cockpit.host import protocol as p
+from workflow_cockpit.host.lifetime import HostLifetime
+from workflow_cockpit.host.operations import HostOperations
+from workflow_cockpit.host.server import HostServer
 from workflow_cockpit.session.cockpit_session import CockpitSession
 from workflow_cockpit.session.dependencies import CockpitEnvironment
 
@@ -251,7 +259,11 @@ class RealEngineTests(unittest.TestCase):
         started = session.start({"spec": "world"})
         self._until_terminal(session)
         run_prefix = f".specify/workflows/runs/{started.run_id}/"
-        allowed = {".specify/workflows/runs/current_run"}
+        allowed = {
+            ".specify/workflows/runs/current_run",
+            # The machine-readable twin of the Markdown pointer (FR-007).
+            ".specify/workflows/runs/current_run.json",
+        }
         unexpected = {
             path
             for path in self._tree() - before
@@ -260,6 +272,71 @@ class RealEngineTests(unittest.TestCase):
             and not path.startswith(".git/")
         }
         self.assertEqual(unexpected, set(), f"Cockpit wrote unexpected history: {unexpected}")
+
+    def test_context_command_matches_the_ui_for_a_real_run(self):
+        self._install_gate()
+        session = self._session()
+        session.start({"spec": "world"})
+        paused = self._until_paused(session)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["--project", str(self.root), "context", "--json"])
+        self.assertEqual(code, 0)
+        envelope = json.loads(out.getvalue())
+        self.assertEqual(envelope["run"]["run_id"], paused.run_id)
+        self.assertEqual(envelope["run"]["status"], "paused")
+        self.assertEqual(envelope["step"]["step_id"], paused.current_step_id)
+        self.assertEqual(envelope["gate"]["options"], list(paused.gate.options))
+        self.assertIsNone(envelope["gate"]["token"])
+
+    def test_host_answers_status_and_gate_over_a_real_run(self):
+        self._install_gate()
+        session = self._session()
+        session.start({"spec": "world"})
+        paused = self._until_paused(session)
+        lifetime = HostLifetime(grace_seconds=30.0)
+        operations = HostOperations(
+            session,
+            project_root=self.root,
+            lifetime=lifetime,
+            owner_id=session.owner_id,
+        )
+        server = HostServer(
+            project_root=self.root,
+            operations=operations,
+            session=session,
+            lifetime=lifetime,
+            poll_seconds=0.05,
+        )
+
+        async def scenario() -> tuple[dict, dict]:
+            task = asyncio.create_task(server.serve())
+            for _ in range(400):
+                if server.socket_path.exists():
+                    break
+                await asyncio.sleep(0.01)
+
+            async def call(op: str) -> dict:
+                reader, writer = await asyncio.open_unix_connection(str(server.socket_path))
+                try:
+                    writer.write(p.encode(p.request(op)))
+                    await writer.drain()
+                    line = await asyncio.wait_for(reader.readline(), timeout=5)
+                finally:
+                    writer.close()
+                return p.decode(line)
+
+            try:
+                return await call("status"), await call("gate")
+            finally:
+                server.request_stop()
+                await asyncio.wait_for(task, timeout=5)
+
+        status, gate = asyncio.run(scenario())
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["result"]["run"]["run_id"], paused.run_id)
+        self.assertEqual(gate["result"]["gate"]["options"], ["approve", "reject"])
+        self.assertIsNotNone(gate["result"]["gate"]["token"])
 
     def _tree(self) -> set[str]:
         return {

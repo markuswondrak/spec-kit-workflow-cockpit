@@ -12,6 +12,7 @@ from textual.widgets.option_list import Option
 
 from ...services.definition import InputSpec
 from ...services.registry import RegistryError
+from ...services.start_guard import StartGuard
 from ..palette import palette
 from ..theme import active_style
 from ..widgets import ResizeGuard
@@ -391,6 +392,14 @@ class LaunchScreen(LaunchRunsMixin, AdaptiveScreen):
         if self._definition is None:
             return
         if self.query_one("#start", Button).disabled:
+            return
+        refusal = StartGuard(self.session.project_root).check()
+        if refusal is not None:
+            # The only Textual behavior change in this issue (FR-030/031): refuse
+            # an accidental second run and name the adopt-or-abort alternatives.
+            self.query_one("#validation", Static).update(
+                Text.assemble((refusal.message, palette.fault))
+            )
             return
         values = self._collect_values()
         _resolved, errors = self.session.validate(values)

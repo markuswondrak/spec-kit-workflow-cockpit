@@ -44,6 +44,11 @@ class RunLogAggregator:
 A service that needs to notify the UI publishes a plain message the UI subscribes to; it never
 imports a widget or app.
 
+The same rule covers `workflow_cockpit/host/`: the protocol, the owner-view operations, the
+lifetime rules, the server, and the launcher are all importable and testable without a running app.
+The only Textual behavior change in issue 006 is the Launch screen's call to the shared
+`StartGuard`.
+
 ## Render-path isolation
 
 Blocking work runs in a Textual worker thread and hand results back through messages. The render
@@ -103,6 +108,13 @@ lines with an explicit truncation marker. `log.jsonl` remains the complete sourc
 for `state.json`, `workflow.yml`, and the `current_run` pointer, each read with a before/after
 signature check so an in-progress write is reported unusable rather than read torn. Discovery and
 adoption preparation run in a `@work(thread=True)` worker, never on the render path.
+
+The read command reuses the same bounds instead of redefining them: `MAX_STATE_BYTES` for
+`state.json`, the UI's 200 000-byte preview limit for a single Feature File, the log's 256 KiB
+window for timings, and a 64 KiB cap on each pointer file. Two further caps exist only for the
+envelope: the Feature Files index reports at most `MAX_FEATURE_FILES` (200) entries and a single
+file read is truncated at the preview limit. Every truncation is reported — `feature_files.truncated`,
+`file.truncated`, or a `partial` condition — never silent.
 
 ## Immutable snapshots
 
@@ -170,6 +182,27 @@ self._timings = {}
 Recoverable failures occupy one persistent error strip that states the failed operation,
 authoritative run state, and the next available action. Background read failures add a `STALE`
 marker rather than clearing good data.
+
+## Read envelope and pointer twin
+
+Two contracts let a frontend read Cockpit's view without the UI, and both are conservative on
+purpose.
+
+**The pointer pair is written in a fixed order.** `current_run.json` is committed first, then the
+Markdown `current_run` index as the commit marker. Two `os.replace` calls cannot be atomic across
+two files, so the Markdown file existing readers already use is the last thing to change. A reader
+compares the two run identities and reports `disagreement` — never a guess — when they differ or
+when only one exists. Writes never produce that state; a hand-edited or half-removed pair does. The
+JSON file is a pointer only (`schema_version`, `run_id`, `run_dir`, `workflow_id`), so it cannot
+drift from the run it names.
+
+**The envelope never infers.** Every source that is missing, stale, oversized, or only partially
+readable is reported in `conditions` as `{source, kind: missing|partial|stale|too_large, detail}`,
+and the fields derived from that source stay null. There is no fallback that reconstructs a status
+from the log, the directory name, or a sibling file: the persisted run files are the only state
+model, and "I could not read it" is always distinguishable from "it says this". `schema_version`
+is an integer that is bumped on any shape change, and a frontend compares it for equality with the
+version it supports.
 
 ## Theme and palette
 

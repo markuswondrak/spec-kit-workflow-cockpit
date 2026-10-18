@@ -19,17 +19,22 @@ flowchart TB
     cockpit -->|read state.json, inputs.json, log.jsonl, workflow.yml| runfiles[(.specify run files)]
     cockpit -->|read HEAD, branch, dirty| git[(Git worktree)]
     cockpit -->|SIGINT, TERM, KILL| group[owned engine process group]
-    cockpit -->|write current_run index| runfiles
+    cockpit -->|write current_run index and JSON twin| runfiles
     cockpit -->|write ownership claim| runfiles
     cockpit -->|suspend + restore| editor[$EDITOR]
+    frontend([Other frontend]) -->|context --json| cockpit
+    frontend -->|install| cockpit
+    frontend -->|line-delimited JSON over .workflow-cockpit.sock| cockpit
     agent([External coding agent]) -->|invoke cockpit-run-context| runfiles
     specify --> runfiles
 ```
 
 The engine is never modified. Cockpit's only writes inside `.specify/` are the stable context index
-at `.specify/workflows/runs/current_run`, which points at the authoritative sources instead of
-copying them, and the Cockpit-owned ownership claim `runs/<run_id>/.cockpit-owner.json`, held for
-every run Cockpit starts or adopts; lifecycle state changes only through `specify workflow resume`.
+at `.specify/workflows/runs/current_run` and its JSON twin `current_run.json`, which point at the
+authoritative sources instead of copying them, and the Cockpit-owned ownership claim
+`runs/<run_id>/.cockpit-owner.json`, held for every run Cockpit starts or adopts; lifecycle state
+changes only through `specify workflow resume`. The headless host adds one artifact outside
+`.specify/`: the gitignored socket `.workflow-cockpit.sock` at the worktree root.
 
 ## Technical context
 
@@ -44,14 +49,33 @@ every run Cockpit starts or adopts; lifecycle state changes only through `specif
 | Engine process group | signals only while the owned child is verified live | signal |
 | `$EDITOR` | suspend/restore Textual while paused at a gate | interactive |
 | External agent | `cockpit-run-context` skill reads the context index only | read |
+| Other frontends | `context --json` envelope, `install`, and the host socket | read/write |
+| Host socket | `.workflow-cockpit.sock` at the worktree root (gitignored) | read/write |
 
 ## External interfaces
 
-- **Launch:** `workflow-cockpit [--project PATH]`; discovers the nearest Spec Kit project root.
+- **Launch:** `workflow-cockpit [--project PATH]`; discovers the nearest Spec Kit project root. The
+  default surface is the Textual cockpit; `context`, `install`, and `serve` are subcommands of the
+  same entry point, sharing `--project`/`--specify`.
+- **Read command:** `workflow-cockpit context --json [--file RELATIVE_PATH]` prints exactly one
+  versioned JSON envelope (the file view) on stdout and nothing else; diagnostics go to stderr. It
+  exits 0 whenever an envelope is produced — including no run and any source condition — and 2 only
+  for no discoverable project or invalid arguments (a `--file` outside the Feature Files index or
+  escaping the project). It is read-only: no writes, no claim, no signals.
+- **Install command:** `workflow-cockpit install` installs every artifact registered for the
+  project's integration and prints one `<outcome> <relative-path> [reason]` line per artifact. It
+  exits 0 even when an individual artifact fails, and 2 only when no project is found. The TUI
+  start path runs the same installer, non-fatally.
+- **Host command:** `workflow-cockpit serve` detaches a headless host that owns one run over the
+  line-delimited JSON socket at the worktree root; a second host is refused with
+  `host_already_running`. `serve` is POSIX-only: Unix domain sockets and process groups are the
+  mechanism, so native Windows is out of scope for it (`context` and `install` stay portable).
 - **Compatibility:** one resolved `specify` executable in the tested range (`>=1.0,<2.0`); refused
   outside it with install guidance.
 - **Context index:** a Markdown index (not a snapshot) listing authoritative live sources for a
-  user-chosen external agent.
+  user-chosen external agent, plus the `current_run.json` pointer twin for programs. Both carry the
+  same run identity; a reader that finds them disagreeing reports the disagreement instead of
+  guessing.
 - **Skill:** `cockpit-run-context` consumes only the context-index path and never invokes workflow
   lifecycle commands. It stays inside the worktree: process liveness is read with `ps`, never
   `/proc`, so it triggers no out-of-project permission prompt.
@@ -82,7 +106,9 @@ workflow capability probe; every row is covered by a Cockpit test or a code refe
   live reader. Above it the run is reported "state.json too large" and never read unbounded; the
   log tail keeps its separate 256 KiB window. A composed run's `state.json` embeds one frozen
   definition per bound call and retains each step's output after completion, which is why the bound
-  is above the old 256 KiB discovery limit.
+  is above the old 256 KiB discovery limit. The read command reuses these bounds and reports each
+  truncation: the Feature Files index is capped at `MAX_FEATURE_FILES`, a single-file read is capped
+  at the UI's preview limit, and the pointer pair is capped at 64 KiB.
 - **Execution tree.** From `specify 1.1.3`, `state.json` also carries `execution` (version 2): the
   persisted tree of the root and called scopes, with a YAML `source` string zipped against a
   parallel `nodes` list of `phase`/`active`/`result`/`outcome` records, and one frozen definition
@@ -106,4 +132,5 @@ Out of scope: workflow authoring/installation, built-in multi-run history, multi
 automatic run cleanup or archiving, launching or editing workflow definitions, adopting `running`
 runs, taking over a run held by another live process, hosted services, launching or managing coding
 agents, notifications, localization, and native Windows. Deleting a stale run is an explicit,
-confirmed capability, not automatic history management.
+confirmed capability, not automatic history management. The headless host is POSIX-only (Unix
+domain sockets and process groups); the read and install commands stay portable.

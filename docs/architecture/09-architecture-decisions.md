@@ -27,6 +27,8 @@ section is the index; each ADR records context, the decision, consequences, and 
 | [0013](../decisions/0013-context-index-pointer-and-start-claim.md) | The context index is a pointer, and every Cockpit-owned run holds the claim. |
 | [0014](../decisions/0014-resume-failed-runs.md) | A failed run may be adopted and resumed once from its recorded step. |
 | [0015](../decisions/0015-read-the-persisted-execution-tree.md) | The persisted execution tree is read as a versioned structure, never guessed at. |
+| [0016](../decisions/0016-headless-host-and-json-protocol.md) | A headless host owns one run over a line-delimited JSON socket, reusing the session services. |
+| [0017](../decisions/0017-installer-policies-and-read-envelope.md) | One installer with artifact policies and version markers, plus a versioned read envelope and a JSON pointer twin. |
 
 ## How to add an ADR
 

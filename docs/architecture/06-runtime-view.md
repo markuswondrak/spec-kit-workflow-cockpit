@@ -15,22 +15,48 @@ sequenceDiagram
     participant R as run files
     U->>C: workflow-cockpit [--project PATH]
     C->>C: discover root, preflight, compatibility
-    C->>C: install run-context skill into the project integration
+    C->>C: install frontend artifacts (skill target, non-fatal)
     C->>C: list workflows, present inputs
     U->>C: Start
+    C->>C: refuse if the current-run pointer names a non-terminal run
     C->>C: generate run ID, verify run dir absent
     C->>S: workflow run <id> -i name=value (no shell)
-    C->>R: write current_run context index (pointer only)
+    C->>R: write current_run.json, then the Markdown index (pointer only)
     S->>R: create run dir, write state.json / inputs.json / log.jsonl
     C->>R: acquire ownership claim on first poll observing the run dir
 ```
 
 Skill installation happens only for a real TUI start, not `--check`. A dirty worktree warns but does
-not block Start. The run ID is allocated before spawn and passed through `SPECKIT_WORKFLOW_RUN_ID`;
-directory scanning never claims ownership during Start. The context index is a pointer to the
-authoritative sources, never a copy of them. Because the engine creates the run directory after
-spawn, the ownership claim is written on the first poll that observes it; a clean close releases it.
-Adoption is the explicit alternative: a bounded catalog plus a single-owner claim (below).
+not block Start. Start is refused when the current-run pointer names a running or paused run, with
+guidance to adopt or abort first; that refusal is the shared `StartGuard` the host also uses. The
+run ID is allocated before spawn and passed through `SPECKIT_WORKFLOW_RUN_ID`; directory scanning
+never claims ownership during Start. The context index is a pointer to the authoritative sources,
+never a copy of them, and its JSON twin is written first so the Markdown file stays the commit
+marker. Because the engine creates the run directory after spawn, the ownership claim is written on
+the first poll that observes it; a clean close releases it. Adoption is the explicit alternative: a
+bounded catalog plus a single-owner claim (below).
+
+### Read and install surfaces
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend or script
+    participant C as cockpit
+    participant R as run files
+    F->>C: context --json [--file PATH]
+    C->>R: read the pointer pair and the run files (bounded)
+    C-->>F: one versioned JSON envelope (exit 0, even with conditions)
+    F->>C: install
+    C->>C: read the project integration key
+    C-->>F: one outcome line per artifact (exit 0, even on a failure)
+```
+
+Both surfaces are stateless and safe to run with no host and no UI. `context --json` never writes,
+never takes the claim, and never signals; a missing, stale, oversized, or partially readable source
+is reported in `conditions` and the fields derived from it stay null, so a consumer can never
+mistake a guess for persisted evidence. `install` is the single install/update path: a
+`user_editable` artifact is never overwritten, a `managed` artifact is replaced atomically when its
+version marker differs, and one failure never stops the others.
 
 ## Discover and adopt
 
@@ -164,6 +190,37 @@ stateDiagram-v2
 The engine exposes no abort command, so Cockpit sends SIGINT to the recorded engine process group.
 A paused run whose command already exited is aborted locally with no signal. `SIGKILL`, host loss,
 and power loss carry no cleanup guarantee.
+
+## Headless host
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant P as serve (parent)
+    participant H as host (detached child)
+    participant S as CockpitSession
+    F->>P: workflow-cockpit serve
+    P->>P: probe the socket, refuse a second host, append .gitignore entry
+    P->>H: Popen(start_new_session=True)
+    H->>H: bind .workflow-cockpit.sock
+    F->>H: {"id","op":"status"}
+    H->>S: snapshot (worker thread)
+    H-->>F: {"id","ok",result,protocol_version}
+    F->>H: {"op":"decide","option","token"}
+    H->>S: submit_decision (serialised, write-once)
+    H-->>F: response and a gate_open/status_changed/terminal event fan-out
+    H->>H: run terminal, or paused with no client past the grace window
+    H->>S: release the claim; bounded best-effort abort if a group is live
+    H->>H: unlink the socket and exit
+```
+
+Every operation delegates to the same `CockpitSession`, gate coordinator, adopter, and supervisor
+the TUI uses, so the two surfaces cannot disagree about what a decision or an abort means. A
+connection is not a controller: a reconnecting frontend is the same controller, and events fan out
+to every connected client ordered by `seq`. Lifetime is run-scoped, never connection-scoped, so a
+reload or a disconnect never kills a step. Mutating operations serialise on one asyncio lock, and
+blocking session work runs in worker threads, so the loop that reads sockets and evaluates lifetime
+never stalls.
 
 ## Process and state reconciliation
 
