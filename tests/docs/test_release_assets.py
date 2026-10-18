@@ -84,10 +84,10 @@ class ReleaseAssetTests(unittest.TestCase):
         workflows = json.loads(read(catalog_dir / "workflow-catalog.json"))["workflows"]
         bundle = json.loads(read(catalog_dir / "bundle-catalog.json"))["bundles"]["spec-kit-extended-flow"]
 
-        self.assertEqual(extension["version"], "0.18.0")
-        self.assertEqual(set(presets), {"spec-kit-extended-flow", "sub-agent-delegation"})
-        self.assertTrue(all(item["version"] == "0.18.0" for item in presets.values()))
-        self.assertEqual(bundle["version"], "0.18.0")
+        self.assertEqual(extension["version"], "0.21.0")
+        self.assertEqual(set(presets), {"spec-kit-extended-flow", "sub-agent-delegation", "analysis-report"})
+        self.assertTrue(all(item["version"] == "0.21.0" for item in presets.values()))
+        self.assertEqual(bundle["version"], "0.21.0")
         self.assertEqual(set(workflows), {"spec-kit-extended-flow", "spec-kit-bugfix-flow", "spec-kit-quick-flow"})
         self.assertTrue(all(item["version"] for item in workflows.values()))
         self.assertTrue(all("spec-kit-extended-flow" in item.get("url", "") for item in workflows.values()))
