@@ -13,11 +13,19 @@ flowchart TB
         screens[Screens and widgets]
         viewmodel[CockpitViewModel]
     end
+    subgraph host[Headless host - no Textual]
+        socket[Unix-socket server]
+        ops[Owner-view operations]
+        lifetime[Run-scoped lifetime]
+    end
     subgraph coordination[Coordination]
         session[CockpitSession]
+        guard[StartGuard]
     end
     subgraph domain[Read model and domain services]
         services[Registry, resolver, graph, run state, review, git]
+        envelope[FileView read envelope]
+        installer[IntegrationInstaller]
     end
     subgraph boundary[Engine boundary]
         supervisor[EngineSupervisor]
@@ -25,17 +33,23 @@ flowchart TB
         deciders[VerdictInputDecider / InternalPtyDecider]
     end
     screens --> viewmodel --> session
+    screens --> guard
+    socket --> ops --> session
+    socket --> lifetime
+    ops --> guard
     session --> services
     session --> supervisor --> pty
     session --> deciders
+    envelope --> services
+    installer --> services
 ```
 
 ## Bootstrap and environment
 
 | Component | Responsibility |
 |---|---|
-| `cli` | `workflow-cockpit` entry point, argument parsing (`--project`), skill installation, app startup; no config file. |
-| `SkillInstaller` | Copy the bundled run-context skill into the project integration's skills directory at start; skip an existing directory; never fatal. |
+| `cli` | `workflow-cockpit` entry point and argument parsing (`--project`, `--specify`) for four surfaces: the default Textual cockpit, `context`, `install`, and `serve`; no config file. |
+| `IntegrationInstaller` | The single install/update path for frontend artifacts, keyed on the project integration; per-artifact `user_editable`/`managed` policies, version markers, atomic writes, and a never-fatal report. Replaces `SkillInstaller`. |
 | `ProjectDiscovery` | Locate the nearest Spec Kit project root from the current directory. |
 | `Preflight` | Validate platform, Git worktree with `HEAD`, project initialization, and prerequisites with actionable errors. |
 | `Compatibility` | Resolve and retain one `specify` executable; enforce `>=1.0,<2.0` and run non-mutating capability probes. |
@@ -73,6 +87,9 @@ flowchart TB
 | `GitService` | Read `HEAD`, branch, and dirty state of the project worktree. |
 | `FeatureReviewService` | Resolve the declared feature directory; list files; detect binary, large, and Markdown files; read current content. |
 | `ContextIndexWriter` | Write the stable `current_run` context index as a pointer to the authoritative sources, never a copy; a failure is reported but never interrupts the run. |
+| `CurrentRunPointerWriter`/`Reader` (`services/current_run_pointer.py`) | Write and read the pointer pair: `current_run.json` first, then the Markdown index as the commit marker; report a disagreement between the two instead of guessing. |
+| `FileView` (`services/file_view.py`) | Build the versioned, bounded, read-only read envelope from the existing readers: pointer state, run, composed-aware step, gate with declared options and ledger, UI projection, bounded Feature Files index, per-source conditions, and an optional bounded single-file read. |
+| `StartGuard` (`services/start_guard.py`) | Refuse Start when the current-run pointer names a non-terminal run, with a message naming the run and the adopt-or-abort alternatives; shared by the TUI and the host. |
 | `EditorLauncher` | Suspend and restore Textual around `$EDITOR` at a paused gate only. |
 
 ## Coordination
@@ -86,6 +103,16 @@ flowchart TB
 | `PollingLoop` | Publish an immutable `RunSnapshot` on a 250 ms monotonic schedule. |
 | `RunSnapshot` | Immutable view of status, graph projection, gate, review data, output tail, and outcome. |
 | `SignalHandler` | On catchable `SIGINT`, `SIGHUP`, `SIGTERM`, attempt bounded best-effort abort without confirmation. |
+
+## Headless host
+
+| Component | Responsibility |
+|---|---|
+| `host/protocol.py` | Line-delimited JSON framing (1 MiB line bound), request/response/event envelopes, `protocol_version`, correlation-id echo, and the structured error codes. Pure, so framing is testable without a socket. |
+| `host/operations.py` | The owner-view operations (`list`, `validate`, `start`, `status`, `gate`, `decide`, `abort`, `adopt`, `resume`) delegating to the existing session services; mutating operations serialise on one asyncio lock and every blocking call runs in a worker thread. |
+| `host/lifetime.py` | The run-scoped lifetime state machine (`starting -> serving -> releasing -> exited`) and the catchable-death abort hook that signals only a verified live group. |
+| `host/server.py` | The asyncio Unix-socket server: bind uniqueness (probe, stale-remnant unlink, path-length refusal), per-connection framing, ordered event fan-out, and lifetime evaluation on every poll. |
+| `host/launcher.py` | `serve` detach (`Popen(start_new_session=True)`), the `.gitignore` precheck, the parent's bounded status wait, and the foreground child that runs the server. |
 
 ## Presentation
 
@@ -102,6 +129,7 @@ flowchart TB
 | `EngineOutput` | Bounded, read-only `RichLog` fed from the supervisor. |
 | `CommandRail` | Actions valid in the current state, including the advertised gate decision shortcuts. |
 | `CockpitViewModel` | Map `RunSnapshot` to renderable state; preserve selection, focus, and scroll across refreshes. |
+| `LaunchScreen` start path | Consult the shared `StartGuard` before starting, so the TUI refuses a non-terminal current run with adopt-or-abort guidance (the only Textual behavior change in issue 006). |
 | `ThemeBridge` | Map the resolved styling template to a registered Textual `Theme`. |
 
 ## Styling and shipped artifact
@@ -110,9 +138,9 @@ flowchart TB
 |---|---|
 | `StylingTemplate` | Immutable validated set of ten required token roles plus optional accents. |
 | `TemplateRepository` | Data-only discovery of built-in and project-local templates; deterministic name/alias index. |
-| `IntegrationDescriptor` | Tolerant read of `.specify/integration.json` `default_integration`; never raises. |
+| `IntegrationDescriptor` | Tolerant read of `.specify/integration.json` `default_integration`, else the bare `integration` key; never raises. |
 | `StylingResolver` | Resolve override -> integration -> `cockpit` default, with a non-fatal fallback notice. |
-| `cockpit-skill` | Markdown skill for a user-chosen external agent; consumes only the context-index path; installed into the project integration at start. |
+| `cockpit-skill` | Markdown skill for a user-chosen external agent; consumes only the context-index path; installed into the project integration by the shared installer as a `user_editable` artifact. |
 
 Source lives in `workflow_cockpit/{bootstrap,engine,services,session,ui,styling,skills}/`. The visual
 prototype in `workflow_ui/prototype/` is not shipped.

@@ -112,6 +112,11 @@ class CockpitSession:
         return self._inspect_run_id if self._read_only else self._supervisor.run_id
 
     @property
+    def owner_id(self) -> str:
+        """The opaque owner identity this session writes into the run claim."""
+        return self._owner_id
+
+    @property
     def read_only(self) -> bool:
         """True when this session is inspecting an existing run read-only."""
         return self._read_only

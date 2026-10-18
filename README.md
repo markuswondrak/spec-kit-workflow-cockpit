@@ -146,7 +146,49 @@ The destination follows `.specify/integration.json`:
 An existing skill directory is left untouched, so local edits are never overwritten. `--check` does
 not install anything. The installed file is an ordinary worktree change; commit or ignore it as you
 prefer. The skill reads the stable index at `.specify/workflows/runs/current_run`, which Cockpit
-rewrites after each Start.
+rewrites after each Start. Cockpit also writes `current_run.json` next to it, a pointer-only JSON
+twin for programs; both always name the same run, and a reader that finds them disagreeing reports
+the disagreement instead of guessing.
+
+### Scripting and Other Frontends
+
+Three subcommands expose the same lifecycle core the TUI uses, so a script or another frontend can
+read and drive a run without the UI. All three accept the global `--project` and `--specify`
+options.
+
+```bash
+workflow-cockpit --project /path/to/project context --json
+workflow-cockpit --project /path/to/project context --json --file specs/007-x/spec.md
+workflow-cockpit --project /path/to/project install
+workflow-cockpit --project /path/to/project serve
+```
+
+**`context --json`** prints one versioned JSON object (the *file view*) describing the current run:
+run identity, workflow, branch, engine status, current step (including a composed run's inner
+scope), the open gate with exactly its declared options, the projection the UI renders, a bounded
+Feature Files index, and per-source conditions. `--file RELATIVE_PATH` adds one bounded file read
+and must name a file inside the declared Feature Files index. The command is read-only: it never
+writes, never takes the ownership claim, and never signals a process. Exit code `0` whenever an
+envelope is produced — including when there is no run or a source is missing — and `2` only for no
+discoverable project or invalid arguments.
+
+**`install`** is the single install/update path for frontend artifacts. It prints one line per
+artifact (`<outcome> <relative-path> [reason]`) and exits `0` even when an individual artifact
+fails; `2` means no project was found. An artifact is either user-editable (installed once, then
+never overwritten) or managed (replaced atomically when its packaged version differs).
+
+**`serve`** starts a detached host that owns the run over a Unix socket at
+`.workflow-cockpit.sock` (gitignored) and speaks line-delimited JSON: `list`, `validate`, `start`,
+`status`, `gate`, `decide`, `abort`, `adopt`, and `resume`. It holds the same ownership claim the
+TUI holds, outlives frontend disconnects, and exits when the run is terminal or paused with no
+client connected, releasing the claim. A second host in the same worktree is refused with
+`host_already_running`. `serve` is POSIX-only (Unix domain sockets and process groups); native
+Windows is out of scope for it, while `context` and `install` stay portable.
+
+A frontend that needs to detect an incompatible shape records the envelope's `schema_version` and
+the host's `protocol_version`, and on a mismatch runs `workflow-cockpit install` once, re-reads its
+managed artifact, and reports any residual incompatibility to the user. The contract is described in
+[ADR-0017](docs/decisions/0017-installer-policies-and-read-envelope.md).
 
 ### Try the Extended Flow
 
@@ -214,8 +256,15 @@ you launch them. Review your workflow and agent configuration before starting.
 
 Catchable `SIGINT`, `SIGHUP`, and `SIGTERM` delivered to the Cockpit process trigger a bounded
 best-effort abort and cleanup of its recorded engine process group without a confirmation prompt.
-There is **no cleanup guarantee** for `SIGKILL`, host loss, power loss, or interpreter failure:
-Cockpit cannot run cleanup it never receives, and the engine process group may be left running.
+The headless host applies the same rule on a catchable death and when it releases a terminal or
+unattended run, so it never abandons a live engine process. There is **no cleanup guarantee** for
+`SIGKILL`, host loss, power loss, or interpreter failure: Cockpit cannot run cleanup it never
+receives, and the engine process group may be left running.
+
+`context --json` is strictly read-only, and `serve` owns the same single claim the TUI owns: a
+second host in one worktree is refused rather than silently taking over. The host adds one file
+to your worktree, the gitignored `.workflow-cockpit.sock`; `serve` appends it to `.gitignore` when
+it is absent.
 
 ## Documentation and Requirements
 

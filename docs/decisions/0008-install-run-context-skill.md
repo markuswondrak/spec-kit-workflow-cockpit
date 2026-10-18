@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Supersedes: -
+- Amended by: [0017](0017-installer-policies-and-read-envelope.md)
 
 ## Context
 
@@ -12,7 +13,7 @@ missing in most projects.
 
 ## Decision
 
-At TUI start (not during `--check`), `SkillInstaller` copies the packaged `SKILL.md` into the
+At TUI start (not during `--check`), the skill installer copies the packaged `SKILL.md` into the
 project-local skills directory of the integration declared in `.specify/integration.json`:
 `.claude/skills`, `.github/skills`, or `.opencode/skills`; any other or undeclared integration uses
 the open-standard `.agents/skills`. The destination is outside `.specify/` and is not run state. An
@@ -26,6 +27,13 @@ fatal.
   Start may ask for confirmation. Users commit or ignore it as they choose.
 - A user edit is never overwritten, because an existing skill directory is skipped; a changed
   bundled skill is picked up only in a project that has not installed it yet.
+
+## Amended
+
+[ADR 0017](0017-installer-policies-and-read-envelope.md) generalises the one-purpose installer
+into `IntegrationInstaller`, whose shipped skill target keeps the decision above: the same
+destinations, skip-if-present for the user-editable skill, atomic write, never fatal. The name
+`SkillInstaller` no longer exists; the decision's intent is unchanged.
 
 ## Rejected alternatives
 

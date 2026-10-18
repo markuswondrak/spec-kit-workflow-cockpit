@@ -211,6 +211,7 @@ class FakeSession:
         self.abort_delay = 0.0
         self.run_id = "cockpit-abcdef123456"
         self.last_abort_result = None
+        self.closed = False
         self.branch = "main"
         self.stale = False
         self.branch_refreshes = 0
@@ -311,11 +312,17 @@ class FakeSession:
         return self.snapshot()
 
     def abort(self):
+        from workflow_cockpit.engine.supervisor import AbortResult
+
         self.aborted = True
         self.status = "aborted"
         if self.abort_delay:
             time.sleep(self.abort_delay)
+        self.last_abort_result = AbortResult(signalled=True, reaped=True, escalation="SIGINT")
         return self.snapshot()
+
+    def close(self) -> None:
+        self.closed = True
 
     def submit_decision(self, choice, token):
         if self.gate is None or self.gate.state is not GateState.READY:
@@ -393,7 +400,7 @@ class FakeSession:
                 detail_label=self.outcome_label,
             )
         return RunSnapshot(
-            run_id="cockpit-abcdef123456",
+            run_id=self.run_id,
             workflow_id="demo",
             workflow_name="Demo Workflow",
             status=self.status,

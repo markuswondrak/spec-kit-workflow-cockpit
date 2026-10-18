@@ -51,12 +51,15 @@ instead of working around it.
   that signals a process.
 - `RunStateReader`, `WorkflowRegistry`, `WorkflowDefinitionResolver`, and `RunCatalog` are the only
   readers of their persisted/catalog/definition/run-directory files. `RunCatalog` reads bounded and
-  imports no engine internals.
-- Inside `.specify/`, `ContextIndexWriter` (the `current_run` index), `RunClaimStore` (the
-  `.cockpit-owner.json` ownership claim), and `RunStore` (confirmed deletion of one run directory)
-  write. None writes engine lifecycle state; deletion removes a whole run directory only under the
-  explicit rules in [ADR 0011](../decisions/0011-delete-run-directories.md).
-- `SkillInstaller` may write the shipped skill into the project's integration skills directory; it
-  never writes run state.
+  imports no engine internals. `FileView` (the `context --json` read command) reads through these
+  same readers and never writes, claims, or signals.
+- Inside `.specify/`, `ContextIndexWriter` (the `current_run` index and its `current_run.json`
+  twin), `RunClaimStore` (the `.cockpit-owner.json` ownership claim), and `RunStore` (confirmed
+  deletion of one run directory) write. None writes engine lifecycle state; deletion removes a
+  whole run directory only under the explicit rules in
+  [ADR 0011](../decisions/0011-delete-run-directories.md).
+- `IntegrationInstaller` is the only component that writes frontend artifacts into the project's
+  integration directories; it never writes run state. The headless host adds no on-disk artifact
+  inside `.specify/`; its only file outside it is the gitignored `.workflow-cockpit.sock`.
 
 See [§8 Crosscutting Concepts](08-crosscutting-concepts.md) for how these are enforced.

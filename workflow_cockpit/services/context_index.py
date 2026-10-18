@@ -11,11 +11,10 @@ generation failure is reported, never fatal.
 
 from __future__ import annotations
 
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .current_run_pointer import CurrentRunPointerWriter
 from .definition import WorkflowDefinition
 
 #: Stable project-relative location of the context index.
@@ -152,7 +151,12 @@ class ContextIndexWriter:
         branch: str | None = None,
         executable: Path | str | None = None,
     ) -> ContextIndex:
-        """Atomically write the context index and return its path."""
+        """Write the pointer pair atomically and return the index path.
+
+        The Markdown index is the commit marker and the JSON twin is written
+        first (research R3), so a reader never sees one pointer without the
+        other naming the same run.
+        """
         content = self.render(
             run_id=run_id,
             definition=definition,
@@ -160,44 +164,24 @@ class ContextIndexWriter:
             executable=executable,
         )
         index_path = self.index_path
-        runs_dir = index_path.parent
         try:
-            runs_dir.mkdir(parents=True, exist_ok=True)
-            handle = tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=runs_dir,
-                prefix=".current_run-",
-                suffix=".tmp",
-                delete=False,
+            CurrentRunPointerWriter(self.project_root).write(
+                run_id=run_id,
+                markdown=content,
+                workflow_id=definition.id,
             )
-            temp_path = Path(handle.name)
-            try:
-                with handle:
-                    handle.write(content)
-                os.replace(temp_path, index_path)
-            except OSError:
-                temp_path.unlink(missing_ok=True)
-                raise
         except OSError as exc:
             raise ContextIndexError(f"Could not write the context index: {exc}") from exc
         return ContextIndex(path=index_path, relative=self.relative_path)
 
     def clear_if_current(self, run_id: str) -> bool:
-        """Remove the index when it names ``run_id``; return whether it was removed.
+        """Remove the pointer pair when it names ``run_id``; return whether it went.
 
         Used after a run directory is deleted so the stable index never points at
         a missing run. A missing or unreadable index is not an error.
         """
         try:
             run_id = _validate_run_id(run_id)
-            text = self.index_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError, ContextIndexError):
+        except ContextIndexError:
             return False
-        if f"- Run ID: `{run_id}`" not in text:
-            return False
-        try:
-            self.index_path.unlink()
-        except OSError:
-            return False
-        return True
+        return CurrentRunPointerWriter(self.project_root).clear_if_current(run_id)

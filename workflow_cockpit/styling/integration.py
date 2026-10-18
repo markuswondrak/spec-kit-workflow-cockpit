@@ -40,5 +40,9 @@ def read_default_integration(specify_dir: Path | str) -> IntegrationDescriptor:
         return IntegrationDescriptor(None, "malformed .specify/integration.json: not an object")
     value = data.get("default_integration")
     if not isinstance(value, str) or not value.strip():
+        # Spec Kit also records the bare ``integration`` key; it is the declared
+        # integration when no explicit default was written.
+        value = data.get("integration")
+    if not isinstance(value, str) or not value.strip():
         return IntegrationDescriptor(None, "no default_integration declared")
     return IntegrationDescriptor(value.strip())
