@@ -187,8 +187,8 @@ Windows is out of scope for it, while `context` and `install` stay portable.
 
 A frontend that needs to detect an incompatible shape records the envelope's `schema_version` and
 the host's `protocol_version`, and on a mismatch runs `workflow-cockpit install` once, re-reads its
-managed artifact, and reports any residual incompatibility to the user. The full procedure is in
-the [installer and self-update contract](specs/006-shared-frontend-foundation/contracts/installer-and-self-update.md).
+managed artifact, and reports any residual incompatibility to the user. The contract is described in
+[ADR-0017](docs/decisions/0017-installer-policies-and-read-envelope.md).
 
 ### Try the Extended Flow
 

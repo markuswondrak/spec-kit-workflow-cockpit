@@ -61,8 +61,7 @@ conditions); exit 2 only for no discoverable project or invalid arguments.
 **Self-update contract.** A frontend records the `schema_version` (read command) and
 `protocol_version` (host `status`) it supports. On mismatch it runs `workflow-cockpit install` once,
 re-reads its managed artifact, and reports residual incompatibility to the user. It never edits a
-user-editable artifact. Documented in
-[`contracts/installer-and-self-update.md`](../../specs/006-shared-frontend-foundation/contracts/installer-and-self-update.md).
+user-editable artifact.
 
 ## Consequences
 
